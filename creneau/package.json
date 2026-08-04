@@ -1,0 +1,27 @@
+{
+  "name": "creneau",
+  "version": "1.0.0",
+  "description": "Prise de rendez-vous en ligne, auto-hébergée. Page de réservation publique, moteur de disponibilités multi-fuseaux, export iCalendar (RFC 5545). Zéro dépendance.",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "demo": "node --no-warnings scripts/demo-seed.js",
+    "test": "node --no-warnings --test 'test/*.test.js'"
+  },
+  "keywords": [
+    "rendez-vous",
+    "planification",
+    "scheduling",
+    "calendly",
+    "icalendar",
+    "rfc5545",
+    "self-hosted",
+    "booking"
+  ],
+  "author": "Gabriel",
+  "license": "MIT"
+}
