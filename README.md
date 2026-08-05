@@ -8,14 +8,17 @@
                                 Voir creneau/README.md.
     • Vigie    (vigie/)       — supervision de disponibilité + page de statut.
                                 Voir vigie/README.md.
+    • Échiquier (echecs/)     — moteur d'échecs complet + interface web de jeu.
+                                Voir echecs/README.md.
 -->
 
 # Facturier
 
 > Premier des utilitaires d'**Oumno-Utile**, une collection d'outils
 > auto-hébergés sans aucune dépendance externe. Les autres :
-> **[Créneau](creneau/README.md)** (prise de rendez-vous en ligne, RFC 5545) et
-> **[Vigie](vigie/README.md)** (supervision de disponibilité + page de statut).
+> **[Créneau](creneau/README.md)** (prise de rendez-vous en ligne, RFC 5545),
+> **[Vigie](vigie/README.md)** (supervision de disponibilité + page de statut) et
+> **[Échiquier](echecs/README.md)** (moteur d'échecs complet + interface de jeu).
 
 Logiciel de **facturation pour indépendants et micro-entreprises**, auto-hébergé,
 sans aucune dépendance externe. Devis, factures et avoirs générés en **PDF/A-3
