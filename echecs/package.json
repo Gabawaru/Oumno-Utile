@@ -1,0 +1,27 @@
+{
+  "name": "echiquier",
+  "version": "1.0.0",
+  "description": "Moteur d'échecs complet (génération de coups perft-exacte, recherche alpha-bêta, table de transposition) et interface web pour jouer contre lui. Zéro dépendance.",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "test": "node --no-warnings --test test/*.test.js",
+    "perft": "node --no-warnings -e \"import('./src/board.js').then(async({Board})=>{const{perft}=await import('./src/perft.js');const t=Date.now();const n=perft(Board.startpos(),5);console.log('perft(5)=',n,'en',Date.now()-t,'ms')})\""
+  },
+  "keywords": [
+    "echecs",
+    "chess",
+    "engine",
+    "perft",
+    "alpha-beta",
+    "0x88",
+    "zobrist",
+    "self-hosted"
+  ],
+  "author": "Gabriel",
+  "license": "MIT"
+}

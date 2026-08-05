@@ -1,0 +1,27 @@
+{
+  "name": "facturier",
+  "version": "1.0.0",
+  "description": "Facturation pour indépendants — devis, factures, avoirs au format Factur-X (PDF/A-3 + XML EN 16931). Auto-hébergé, zéro dépendance.",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "demo": "node --no-warnings scripts/demo-seed.js",
+    "test": "node --no-warnings --test 'test/*.test.js'"
+  },
+  "keywords": [
+    "facturation",
+    "factur-x",
+    "en16931",
+    "devis",
+    "facture",
+    "micro-entrepreneur",
+    "pdf-a3",
+    "self-hosted"
+  ],
+  "author": "Gabriel",
+  "license": "MIT"
+}

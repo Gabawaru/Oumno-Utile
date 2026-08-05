@@ -1,0 +1,10 @@
+# Données locales (bases SQLite + WAL)
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Dépendances / artefacts éventuels
+node_modules/
+*.log
+.DS_Store

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Échiquier — Jouez contre le moteur</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6f4f'/%3E%3Ctext x='16' y='24' font-size='22' text-anchor='middle' fill='white'%3E%E2%99%9E%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <span class="brand">♞ Échiquier</span>
+      <span class="grow"></span>
+      <span class="small">Moteur d'échecs — zéro dépendance, exécuté dans votre navigateur</span>
+    </div>
+    <div class="layout">
+      <div class="board-wrap">
+        <div class="board" id="board"></div>
+      </div>
+      <div class="panel" id="panel"></div>
+    </div>
+  </div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
