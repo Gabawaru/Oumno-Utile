@@ -1,0 +1,25 @@
+{
+  "name": "vigie",
+  "version": "1.0.0",
+  "description": "Surveillance de disponibilité et page de statut, auto-hébergées. Sondes HTTP, historique de latence, incidents, uptime, graphiques SVG. Zéro dépendance.",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "demo": "node --no-warnings scripts/demo-seed.js",
+    "test": "node --no-warnings --test 'test/*.test.js'"
+  },
+  "keywords": [
+    "monitoring",
+    "uptime",
+    "status-page",
+    "supervision",
+    "self-hosted",
+    "healthcheck"
+  ],
+  "author": "Gabriel",
+  "license": "MIT"
+}

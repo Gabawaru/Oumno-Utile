@@ -6,13 +6,16 @@
     • Facturier (ce dossier)  — facturation Factur-X / EN 16931. Voir ci-dessous.
     • Créneau  (creneau/)     — prise de rendez-vous en ligne (iCalendar RFC 5545).
                                 Voir creneau/README.md.
+    • Vigie    (vigie/)       — supervision de disponibilité + page de statut.
+                                Voir vigie/README.md.
 -->
 
 # Facturier
 
-> Premier des utilitaires d'**Oumno-Utile**. Le second, **Créneau** (prise de
-> rendez-vous en ligne, RFC 5545), se trouve dans [`creneau/`](creneau/README.md).
-> Les deux partagent la même exigence : aucune dépendance externe.
+> Premier des utilitaires d'**Oumno-Utile**, une collection d'outils
+> auto-hébergés sans aucune dépendance externe. Les autres :
+> **[Créneau](creneau/README.md)** (prise de rendez-vous en ligne, RFC 5545) et
+> **[Vigie](vigie/README.md)** (supervision de disponibilité + page de statut).
 
 Logiciel de **facturation pour indépendants et micro-entreprises**, auto-hébergé,
 sans aucune dépendance externe. Devis, factures et avoirs générés en **PDF/A-3
