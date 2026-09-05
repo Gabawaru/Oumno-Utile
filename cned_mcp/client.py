@@ -139,7 +139,6 @@ class CNEDClient:
         """Récupère le texte brut d'une page CNED (chemin relatif ou URL complète)."""
         r = self._get(path)
         soup = BeautifulSoup(r.text, "html.parser")
-        # Supprimer scripts et styles
         for tag in soup(["script", "style", "nav", "footer", "header"]):
             tag.decompose()
         main = soup.find("main") or soup.find(id="content") or soup.body
