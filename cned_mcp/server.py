@@ -141,41 +141,83 @@ LOGIN_HTML = """<!doctype html>
         display:flex;align-items:center;justify-content:center;
         min-height:100vh;margin:0;padding:1rem}}
   .card{{background:#fff;border-radius:8px;padding:2rem;width:100%;
-         max-width:400px;box-shadow:0 2px 12px rgba(0,0,0,.12)}}
+         max-width:480px;box-shadow:0 2px 12px rgba(0,0,0,.12)}}
   .logo{{font-size:1.6rem;font-weight:800;color:#e8003d;letter-spacing:-1px;margin-bottom:1.5rem}}
   .logo span{{color:#000}}
   h1{{font-size:1.2rem;margin:0 0 .3rem;color:#222}}
-  .sub{{color:#666;font-size:.85rem;margin:0 0 1.5rem;line-height:1.4}}
+  .sub{{color:#666;font-size:.85rem;margin:0 0 1rem;line-height:1.4}}
   label{{display:block;font-size:.85rem;color:#444;margin-bottom:.3rem;font-weight:500}}
-  input[type=text],input[type=password]{{width:100%;padding:.7rem .9rem;
-    border:1px solid #ccc;border-radius:6px;font-size:1rem;margin-bottom:1rem;
-    background:#fafafa}}
-  input:focus{{outline:none;border-color:#e8003d;background:#fff}}
+  input[type=text],input[type=password],textarea{{width:100%;padding:.7rem .9rem;
+    border:1px solid #ccc;border-radius:6px;font-size:.9rem;margin-bottom:1rem;
+    background:#fafafa;font-family:inherit}}
+  input:focus,textarea:focus{{outline:none;border-color:#e8003d;background:#fff}}
   button{{width:100%;padding:.8rem;background:#3c3c3c;color:#fff;
           border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:500}}
   button:hover{{background:#222}}
   .msg{{margin-bottom:1rem;padding:.75rem 1rem;border-radius:6px;font-size:.9rem}}
   .err{{background:#fff0f0;color:#c0392b;border:1px solid #f5c6c6}}
   .ok{{background:#f0faf4;color:#1a7a3f;border:1px solid #b7e4c7}}
-  .hint{{font-size:.8rem;color:#888;margin-top:.4rem}}
+  .hint{{font-size:.8rem;color:#888;margin-top:-.6rem;margin-bottom:.8rem}}
+  .tabs{{display:flex;gap:.5rem;margin-bottom:1.5rem;border-bottom:2px solid #eee}}
+  .tab{{padding:.5rem 1rem;cursor:pointer;font-size:.9rem;color:#666;border-bottom:2px solid transparent;margin-bottom:-2px}}
+  .tab.active{{color:#e8003d;border-color:#e8003d;font-weight:600}}
+  .panel{{display:none}}.panel.active{{display:block}}
+  .steps{{background:#f8f8f8;border-radius:6px;padding:1rem;margin-bottom:1rem;font-size:.83rem;color:#444;line-height:1.7}}
+  .steps code{{background:#e8e8e8;padding:.1rem .3rem;border-radius:3px;font-family:monospace}}
+  textarea{{min-height:80px;resize:vertical}}
+  .sep{{text-align:center;color:#999;font-size:.85rem;margin:.5rem 0}}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="logo">CNED<span>.</span></div>
   <h1>Connexion à votre espace inscrit</h1>
-  <p class="sub">Pour vous connecter, utilisez le nom d'utilisateur et le mot de passe reçus par courrier électronique ou voie postale.</p>
   {message}
-  <form method="post" action="/login/submit">
-    <label>Nom d'utilisateur *</label>
-    <input type="text" name="username" placeholder="ex : GABRIEL.CARBUNARU"
-           value="{username}" required autocomplete="username">
-    <p class="hint">Format : PRENOM.NOM en majuscules</p>
-    <label>Mot de passe *</label>
-    <input type="password" name="password" required autocomplete="current-password">
-    <button type="submit">Se connecter</button>
-  </form>
+  <div class="tabs">
+    <div class="tab active" onclick="show('pwd')">Identifiants</div>
+    <div class="tab" onclick="show('cookie')">Via navigateur</div>
+  </div>
+
+  <div id="pwd" class="panel active">
+    <p class="sub">Utilisez les identifiants reçus par courrier (format PRENOM.NOM).</p>
+    <form method="post" action="/login/submit">
+      <input type="hidden" name="method" value="password">
+      <label>Nom d'utilisateur *</label>
+      <input type="text" name="username" placeholder="ex : GABRIEL.CARBUNARU"
+             value="{username}" required autocomplete="username">
+      <p class="hint">Format : PRENOM.NOM en majuscules</p>
+      <label>Mot de passe *</label>
+      <input type="password" name="password" required autocomplete="current-password">
+      <button type="submit">Se connecter</button>
+    </form>
+  </div>
+
+  <div id="cookie" class="panel">
+    <p class="sub">Si vous utilisez FranceConnect ou une autre méthode, connectez-vous d'abord sur le vrai site, puis importez vos cookies.</p>
+    <div class="steps">
+      <strong>Comment copier vos cookies :</strong><br>
+      1. Connectez-vous sur <a href="https://espaceinscrit.cned.fr" target="_blank">espaceinscrit.cned.fr</a><br>
+      2. Appuyez sur <strong>F12</strong> pour ouvrir les outils développeur<br>
+      3. Allez dans <strong>Application</strong> → <strong>Cookies</strong> → <code>espaceinscrit.cned.fr</code><br>
+      4. Dans la console, tapez : <code>document.cookie</code> et copiez le résultat<br>
+      <em>OU</em> dans l'onglet Réseau, copiez la valeur de l'en-tête <code>Cookie:</code> d'une requête.
+    </div>
+    <form method="post" action="/login/submit">
+      <input type="hidden" name="method" value="cookies">
+      <label>Valeur des cookies (format <code>nom=valeur; nom2=valeur2</code>)</label>
+      <textarea name="cookie_str" placeholder="ex: ARRAffinity=abc123; .ASPXAUTH=xyz..." required></textarea>
+      <p class="hint">Le domaine <code>espaceinscrit.cned.fr</code> est utilisé automatiquement.</p>
+      <button type="submit">Importer les cookies</button>
+    </form>
+  </div>
 </div>
+<script>
+function show(tab) {{
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['pwd','cookie'][i]===tab));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(tab).classList.add('active');
+}}
+</script>
 </body>
 </html>"""
 
@@ -190,9 +232,48 @@ async def login_get(request: Request) -> HTMLResponse:
 
 
 async def login_submit(request: Request) -> HTMLResponse:
-    """Soumet les identifiants au flux ADFS côté serveur et sauvegarde la session."""
+    """Soumet les identifiants ou importe les cookies selon la méthode choisie."""
     global _proxy_session
     form = await request.form()
+    method = str(form.get("method", "password"))
+
+    if method == "cookies":
+        return await _login_via_cookies(form)
+    return await _login_via_password(form)
+
+
+async def _login_via_cookies(form) -> HTMLResponse:
+    """Importe les cookies collés depuis le navigateur."""
+    cookie_str = str(form.get("cookie_str", "")).strip()
+    if not cookie_str:
+        msg = '<div class="msg err">❌ Collez vos cookies dans le champ.</div>'
+        return HTMLResponse(LOGIN_HTML.format(message=msg, username=""))
+    try:
+        cookies = []
+        for part in cookie_str.split(";"):
+            part = part.strip()
+            if "=" in part:
+                name, _, value = part.partition("=")
+                cookies.append({
+                    "name": name.strip(),
+                    "value": value.strip(),
+                    "domain": "espaceinscrit.cned.fr",
+                    "path": "/",
+                })
+        if not cookies:
+            raise ValueError("Format invalide — attendu : nom=valeur; nom2=valeur2")
+        from .auth import _save_session
+        _save_session(cookies)
+        _reset_client()
+        return HTMLResponse(_success_page())
+    except Exception as e:
+        msg = f'<div class="msg err">❌ {e}</div>'
+        return HTMLResponse(LOGIN_HTML.format(message=msg, username=""))
+
+
+async def _login_via_password(form) -> HTMLResponse:
+    """Soumet les identifiants au flux ADFS côté serveur."""
+    global _proxy_session
     username = str(form.get("username", "")).strip().upper()
     password = str(form.get("password", "")).strip()
 
@@ -249,13 +330,21 @@ async def login_submit(request: Request) -> HTMLResponse:
                 if n:
                     postback[n] = inp.get("value", "")
             postback_url = wresult_form.get("action", BASE_CNED)
-            _proxy_session.post(postback_url, data=postback, timeout=30)
+            r2 = _proxy_session.post(postback_url, data=postback, timeout=30)
+            if "sts.cned.fr" in r2.url:
+                raise ValueError(
+                    "Connexion refusée par ADFS. Essayez la méthode 'Via navigateur'."
+                )
 
         # Sauvegarder les cookies
         cookies = [
             {"name": c.name, "value": c.value, "domain": c.domain, "path": c.path}
             for c in _proxy_session.cookies
         ]
+        if not cookies:
+            raise ValueError(
+                "Aucun cookie reçu. Essayez la méthode 'Via navigateur'."
+            )
         from .auth import _save_session
         _save_session(cookies)
         _reset_client()
