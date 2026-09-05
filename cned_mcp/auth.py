@@ -10,7 +10,7 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-BASE_URL = "https://espaceinscrit.cned.fr"
+BASE_URL = "https://eformation.cned.fr"
 SESSION_FILE = Path.home() / ".cned_session.json"
 SESSION_TTL = 3600 * 4  # 4 heures
 
@@ -91,25 +91,28 @@ def login(username: str, password: str) -> list[dict]:
     if error_el and error_el.get_text(strip=True):
         raise ValueError(f"Erreur CNED : {error_el.get_text(strip=True)}")
 
-    # 4. Si le serveur retourne un formulaire avec wresult (token SAML),
-    #    le soumettre manuellement (JS auto-submit remplacé)
-    wresult_form = soup2.find("form")
-    if wresult_form and wresult_form.find("input", {"name": "wresult"}):
+    # 4. Soumettre le token de retour (SAMLResponse ou wresult) côté serveur
+    postback_form = soup2.find("form")
+    has_token = postback_form and (
+        postback_form.find("input", {"name": "SAMLResponse"})
+        or postback_form.find("input", {"name": "wresult"})
+    )
+    if has_token:
         postback: dict[str, str] = {}
-        for inp in wresult_form.find_all("input"):
+        for inp in postback_form.find_all("input"):
             n = inp.get("name")
             v = inp.get("value", "")
             if n:
                 postback[n] = v
-        postback_url = wresult_form.get("action", BASE_URL)
+        postback_url = postback_form.get("action", BASE_URL)
         r3 = s.post(postback_url, data=postback, timeout=30)
         r3.raise_for_status()
         final_url = r3.url
     else:
         final_url = r2.url
 
-    # 5. Vérifier qu'on est bien sur espaceinscrit
-    if "sts.cned.fr" in final_url and "loginForm" in (r2.text + ""):
+    # 5. Vérifier qu'on est bien sur le site cible
+    if "sts.cned.fr" in final_url:
         raise ValueError(
             "Connexion échouée — identifiants incorrects ou service indisponible."
         )

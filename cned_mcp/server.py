@@ -27,7 +27,7 @@ PORT = int(os.environ.get("PORT", "8000"))
 USERNAME = os.environ.get("CNED_USER", "")
 PASSWORD = os.environ.get("CNED_PASS", "")
 
-BASE_CNED = "https://espaceinscrit.cned.fr"
+BASE_CNED = "https://eformation.cned.fr"
 ADFS_HOST = "https://sts.cned.fr"
 
 HEADERS = {

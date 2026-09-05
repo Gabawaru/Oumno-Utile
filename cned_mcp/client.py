@@ -6,7 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 from .auth import get_session, clear_session, login
 
-BASE_URL = "https://espaceinscrit.cned.fr"
+BASE_URL = "https://eformation.cned.fr"
 
 
 class CNEDClient:
@@ -36,7 +36,7 @@ class CNEDClient:
     def _get(self, path: str, **kwargs) -> requests.Response:
         url = f"{BASE_URL}{path}" if path.startswith("/") else path
         r = self._session.get(url, timeout=20, **kwargs)
-        # Si on est redirigé vers ADFS, la session a expiré
+        # Si on est redirigé vers ADFS (SAML ou WS-Fed), la session a expiré
         if "sts.cned.fr" in r.url:
             clear_session()
             if self._username and self._password:
@@ -62,7 +62,7 @@ class CNEDClient:
             "url": r.url,
             "titre": title.get_text(strip=True) if title else "",
             "bienvenue": welcome.get_text(strip=True) if welcome else "",
-            "connecte": "sts.cned.fr" not in r.url,
+            "connecte": "sts.cned.fr" not in r.url and "eformation.cned.fr" in r.url,
         }
 
     def get_courses(self) -> list[dict]:
