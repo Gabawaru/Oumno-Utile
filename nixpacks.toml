@@ -2,4 +2,4 @@
 cmds = ["pip install -r requirements.txt"]
 
 [start]
-cmd = "TRANSPORT=streamable-http python -m cned_mcp.server"
+cmd = "python -m cned_mcp.server"
