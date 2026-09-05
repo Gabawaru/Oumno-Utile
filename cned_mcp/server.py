@@ -134,90 +134,64 @@ LOGIN_HTML = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Connexion — Espace inscrit CNED</title>
+<title>Session CNED — Mise à jour</title>
 <style>
   *{{box-sizing:border-box}}
   body{{font-family:system-ui,sans-serif;background:#f5f5f5;
         display:flex;align-items:center;justify-content:center;
         min-height:100vh;margin:0;padding:1rem}}
-  .card{{background:#fff;border-radius:8px;padding:2rem;width:100%;
-         max-width:480px;box-shadow:0 2px 12px rgba(0,0,0,.12)}}
-  .logo{{font-size:1.6rem;font-weight:800;color:#e8003d;letter-spacing:-1px;margin-bottom:1.5rem}}
+  .card{{background:#fff;border-radius:12px;padding:2rem;width:100%;
+         max-width:440px;box-shadow:0 2px 16px rgba(0,0,0,.1)}}
+  .logo{{font-size:1.5rem;font-weight:800;color:#e8003d;letter-spacing:-1px;margin-bottom:1.2rem}}
   .logo span{{color:#000}}
-  h1{{font-size:1.2rem;margin:0 0 .3rem;color:#222}}
-  .sub{{color:#666;font-size:.85rem;margin:0 0 1rem;line-height:1.4}}
+  h1{{font-size:1.1rem;margin:0 0 .2rem;color:#222}}
+  .sub{{color:#666;font-size:.85rem;margin:0 0 1.2rem;line-height:1.5}}
   label{{display:block;font-size:.85rem;color:#444;margin-bottom:.3rem;font-weight:500}}
-  input[type=text],input[type=password],textarea{{width:100%;padding:.7rem .9rem;
-    border:1px solid #ccc;border-radius:6px;font-size:.9rem;margin-bottom:1rem;
-    background:#fafafa;font-family:inherit}}
-  input:focus,textarea:focus{{outline:none;border-color:#e8003d;background:#fff}}
-  button{{width:100%;padding:.8rem;background:#3c3c3c;color:#fff;
-          border:none;border-radius:6px;font-size:1rem;cursor:pointer;font-weight:500}}
-  button:hover{{background:#222}}
-  .msg{{margin-bottom:1rem;padding:.75rem 1rem;border-radius:6px;font-size:.9rem}}
+  textarea{{width:100%;padding:.8rem;border:1px solid #ccc;border-radius:8px;
+    font-size:.85rem;margin-bottom:.8rem;background:#fafafa;font-family:monospace;
+    min-height:90px;resize:vertical}}
+  textarea:focus{{outline:none;border-color:#e8003d;background:#fff}}
+  button{{width:100%;padding:.85rem;background:#e8003d;color:#fff;
+          border:none;border-radius:8px;font-size:1rem;cursor:pointer;font-weight:600;
+          letter-spacing:.3px}}
+  button:hover{{background:#c0002f}}
+  .msg{{margin-bottom:1rem;padding:.75rem 1rem;border-radius:8px;font-size:.9rem}}
   .err{{background:#fff0f0;color:#c0392b;border:1px solid #f5c6c6}}
   .ok{{background:#f0faf4;color:#1a7a3f;border:1px solid #b7e4c7}}
-  .hint{{font-size:.8rem;color:#888;margin-top:-.6rem;margin-bottom:.8rem}}
-  .tabs{{display:flex;gap:.5rem;margin-bottom:1.5rem;border-bottom:2px solid #eee}}
-  .tab{{padding:.5rem 1rem;cursor:pointer;font-size:.9rem;color:#666;border-bottom:2px solid transparent;margin-bottom:-2px}}
-  .tab.active{{color:#e8003d;border-color:#e8003d;font-weight:600}}
-  .panel{{display:none}}.panel.active{{display:block}}
-  .steps{{background:#f8f8f8;border-radius:6px;padding:1rem;margin-bottom:1rem;font-size:.83rem;color:#444;line-height:1.7}}
-  .steps code{{background:#e8e8e8;padding:.1rem .3rem;border-radius:3px;font-family:monospace}}
-  textarea{{min-height:80px;resize:vertical}}
-  .sep{{text-align:center;color:#999;font-size:.85rem;margin:.5rem 0}}
+  .steps{{background:#f8f9fa;border-radius:8px;padding:1rem 1.1rem;
+          margin-bottom:1.2rem;font-size:.82rem;color:#444;line-height:1.9;border:1px solid #e9ecef}}
+  .steps strong{{color:#222}}
+  .steps code{{background:#e2e6ea;padding:.1rem .35rem;border-radius:4px;
+               font-size:.8rem;font-family:monospace}}
+  .steps a{{color:#e8003d;text-decoration:none;font-weight:500}}
+  .note{{font-size:.78rem;color:#999;margin-top:.5rem;text-align:center}}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="logo">CNED<span>.</span></div>
-  <h1>Connexion à votre espace inscrit</h1>
+  <h1>Mettre à jour la session</h1>
+  <p class="sub">Connecte-toi sur eformation.cned.fr, copie tes cookies, puis colle-les ici.</p>
   {message}
-  <div class="tabs">
-    <div class="tab active" onclick="show('pwd')">Identifiants</div>
-    <div class="tab" onclick="show('cookie')">Via navigateur</div>
+
+  <div class="steps">
+    <strong>Comment copier tes cookies :</strong><br>
+    1. Va sur <a href="https://eformation.cned.fr" target="_blank">eformation.cned.fr</a> et connecte-toi<br>
+    2. Dans la barre d'adresse, tape <code>javascript:prompt('',document.cookie)</code> et valide<br>
+    3. Copie tout ce qui apparaît dans la fenêtre<br>
+    4. Colle dans le champ ci-dessous et clique <strong>Enregistrer</strong>
   </div>
 
-  <div id="pwd" class="panel active">
-    <p class="sub">Utilisez les identifiants reçus par courrier (format PRENOM.NOM).</p>
-    <form method="post" action="/login/submit">
-      <input type="hidden" name="method" value="password">
-      <label>Nom d'utilisateur *</label>
-      <input type="text" name="username" placeholder="ex : GABRIEL.CARBUNARU"
-             value="{username}" required autocomplete="username">
-      <p class="hint">Format : PRENOM.NOM en majuscules</p>
-      <label>Mot de passe *</label>
-      <input type="password" name="password" required autocomplete="current-password">
-      <button type="submit">Se connecter</button>
-    </form>
-  </div>
-
-  <div id="cookie" class="panel">
-    <p class="sub">Si vous utilisez FranceConnect ou une autre méthode, connectez-vous d'abord sur le vrai site, puis importez vos cookies.</p>
-    <div class="steps">
-      <strong>Comment copier vos cookies :</strong><br>
-      1. Connectez-vous sur <a href="https://espaceinscrit.cned.fr" target="_blank">espaceinscrit.cned.fr</a><br>
-      2. Appuyez sur <strong>F12</strong> pour ouvrir les outils développeur<br>
-      3. Allez dans <strong>Application</strong> → <strong>Cookies</strong> → <code>espaceinscrit.cned.fr</code><br>
-      4. Dans la console, tapez : <code>document.cookie</code> et copiez le résultat<br>
-      <em>OU</em> dans l'onglet Réseau, copiez la valeur de l'en-tête <code>Cookie:</code> d'une requête.
-    </div>
-    <form method="post" action="/login/submit">
-      <input type="hidden" name="method" value="cookies">
-      <label>Valeur des cookies (format <code>nom=valeur; nom2=valeur2</code>)</label>
-      <textarea name="cookie_str" placeholder="ex: ARRAffinity=abc123; .ASPXAUTH=xyz..." required></textarea>
-      <p class="hint">Le domaine <code>espaceinscrit.cned.fr</code> est utilisé automatiquement.</p>
-      <button type="submit">Importer les cookies</button>
-    </form>
-  </div>
+  <form method="post" action="/login/submit">
+    <input type="hidden" name="method" value="cookies">
+    <label>Cookies (MoodleSession=... ; SERVERID=... ; ...)</label>
+    <textarea name="cookie_str"
+              placeholder="MoodleSession=abc123; SERVERID=918; ..."
+              required></textarea>
+    <button type="submit">Enregistrer la session</button>
+  </form>
+  <p class="note">Les cookies sont valables quelques heures. Reviens ici pour les renouveler.</p>
 </div>
-<script>
-function show(tab) {{
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['pwd','cookie'][i]===tab));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.getElementById(tab).classList.add('active');
-}}
-</script>
 </body>
 </html>"""
 
@@ -232,14 +206,9 @@ async def login_get(request: Request) -> HTMLResponse:
 
 
 async def login_submit(request: Request) -> HTMLResponse:
-    """Soumet les identifiants ou importe les cookies selon la méthode choisie."""
-    global _proxy_session
+    """Importe les cookies de session eformation.cned.fr."""
     form = await request.form()
-    method = str(form.get("method", "password"))
-
-    if method == "cookies":
-        return await _login_via_cookies(form)
-    return await _login_via_password(form)
+    return await _login_via_cookies(form)
 
 
 async def _login_via_cookies(form) -> HTMLResponse:
@@ -257,7 +226,7 @@ async def _login_via_cookies(form) -> HTMLResponse:
                 cookies.append({
                     "name": name.strip(),
                     "value": value.strip(),
-                    "domain": "espaceinscrit.cned.fr",
+                    "domain": "eformation.cned.fr",
                     "path": "/",
                 })
         if not cookies:
