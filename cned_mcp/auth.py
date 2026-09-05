@@ -1,17 +1,27 @@
 """
-Authentification CNED via Playwright.
-Gère le flux WS-Federation/ADFS (JavaScript auto-submit inclus).
+Authentification CNED via requests (flux WS-Federation/ADFS).
+Gère le POST des identifiants et le renvoi du token SAML (wresult).
 """
 
-import os
 import json
 import time
 from pathlib import Path
-from playwright.sync_api import sync_playwright, Page, BrowserContext
+
+import requests
+from bs4 import BeautifulSoup
 
 BASE_URL = "https://espaceinscrit.cned.fr"
 SESSION_FILE = Path.home() / ".cned_session.json"
 SESSION_TTL = 3600 * 4  # 4 heures
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "fr-FR,fr;q=0.9",
+}
 
 
 def _save_session(cookies: list[dict]) -> None:
@@ -29,65 +39,91 @@ def _load_session() -> list[dict] | None:
     return data["cookies"]
 
 
-def login(username: str, password: str, headless: bool = True) -> list[dict]:
+def login(username: str, password: str) -> list[dict]:
     """
-    Se connecte au CNED et retourne les cookies de session.
-    Utilise Playwright pour gérer le flux ADFS complet (y compris JS).
+    Se connecte au CNED via requests (ADFS/WS-Federation).
+    Retourne la liste des cookies de session.
     """
-    browsers_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "")
+    s = requests.Session()
+    s.headers.update(HEADERS)
 
-    with sync_playwright() as p:
-        launch_kwargs = {"headless": headless}
-        if browsers_path:
-            chromium_exe = Path(browsers_path) / "chromium" / "chrome-linux" / "chrome"
-            if not chromium_exe.exists():
-                # Chercher le bon chemin
-                for exe in Path(browsers_path).rglob("chrome"):
-                    chromium_exe = exe
-                    break
-            launch_kwargs["executable_path"] = str(chromium_exe)
+    # 1. Accès → redirection ADFS
+    r = s.get(BASE_URL, timeout=30)
+    r.raise_for_status()
+    login_url = r.url
 
-        browser = p.chromium.launch(**launch_kwargs)
-        context = browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            ),
-            locale="fr-FR",
+    # 2. Parser le formulaire de login
+    soup = BeautifulSoup(r.text, "html.parser")
+    form = soup.find("form", id="loginForm") or soup.find("form")
+    if not form:
+        raise ValueError("Formulaire de connexion ADFS introuvable.")
+
+    action = form.get("action", "")
+    from urllib.parse import urlparse
+    parsed = urlparse(login_url)
+    if action.startswith("/"):
+        submit_url = f"{parsed.scheme}://{parsed.netloc}{action}"
+    elif action.startswith("http"):
+        submit_url = action
+    else:
+        submit_url = login_url
+
+    # Collecter tous les champs du formulaire
+    fields: dict[str, str] = {}
+    for inp in form.find_all("input"):
+        name = inp.get("name")
+        value = inp.get("value", "")
+        if name:
+            fields[name] = value
+
+    fields["UserName"] = username
+    fields["Password"] = password
+    fields["AuthMethod"] = "FormsAuthentication"
+    fields["Kmsi"] = "true"
+
+    # 3. POST des identifiants
+    r2 = s.post(submit_url, data=fields, timeout=30)
+    r2.raise_for_status()
+
+    # Vérifier un message d'erreur explicite
+    soup2 = BeautifulSoup(r2.text, "html.parser")
+    error_el = soup2.find(id="errorText") or soup2.find(class_="errorText")
+    if error_el and error_el.get_text(strip=True):
+        raise ValueError(f"Erreur CNED : {error_el.get_text(strip=True)}")
+
+    # 4. Si le serveur retourne un formulaire avec wresult (token SAML),
+    #    le soumettre manuellement (JS auto-submit remplacé)
+    wresult_form = soup2.find("form")
+    if wresult_form and wresult_form.find("input", {"name": "wresult"}):
+        postback: dict[str, str] = {}
+        for inp in wresult_form.find_all("input"):
+            n = inp.get("name")
+            v = inp.get("value", "")
+            if n:
+                postback[n] = v
+        postback_url = wresult_form.get("action", BASE_URL)
+        r3 = s.post(postback_url, data=postback, timeout=30)
+        r3.raise_for_status()
+        final_url = r3.url
+    else:
+        final_url = r2.url
+
+    # 5. Vérifier qu'on est bien sur espaceinscrit
+    if "sts.cned.fr" in final_url and "loginForm" in (r2.text + ""):
+        raise ValueError(
+            "Connexion échouée — identifiants incorrects ou service indisponible."
         )
-        page = context.new_page()
 
-        # 1. Naviguer vers l'espace inscrit (redirection ADFS automatique)
-        page.goto(BASE_URL, wait_until="networkidle", timeout=30000)
-
-        # 2. Remplir et soumettre le formulaire ADFS
-        page.wait_for_selector("#loginForm", timeout=15000)
-        page.fill('input[name="UserName"]', username)
-        page.fill('input[name="Password"]', password)
-        page.click('input[type="submit"], button[type="submit"]', timeout=5000)
-
-        # 3. Attendre la redirection vers espaceinscrit.cned.fr
-        try:
-            page.wait_for_url(f"{BASE_URL}/**", timeout=20000)
-        except Exception:
-            # Vérifier si on a un message d'erreur
-            error_el = page.query_selector(".errorText, .error, #errorText")
-            if error_el:
-                raise ValueError(f"Erreur CNED : {error_el.inner_text().strip()}")
-            raise ValueError("La connexion a échoué — vérifiez vos identifiants.")
-
-        # 4. Collecter les cookies
-        cookies = context.cookies()
-        browser.close()
-
+    # 6. Sauvegarder les cookies sous forme sérialisable
+    cookies = [
+        {"name": c.name, "value": c.value, "domain": c.domain, "path": c.path}
+        for c in s.cookies
+    ]
     _save_session(cookies)
     return cookies
 
 
 def get_session(username: str | None = None, password: str | None = None) -> list[dict]:
-    """
-    Retourne une session valide (depuis le cache ou en se reconnectant).
-    """
     cached = _load_session()
     if cached:
         return cached
