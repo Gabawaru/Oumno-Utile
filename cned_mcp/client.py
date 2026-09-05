@@ -14,6 +14,10 @@ class CNEDClient:
         self._username = username
         self._password = password
         self._session = self._build_session()
+        if not self._session.cookies:
+            raise RuntimeError(
+                "Aucune session CNED active. Connectez-vous sur /login."
+            )
 
     def _build_session(self) -> requests.Session:
         cookies = get_session(self._username, self._password)
