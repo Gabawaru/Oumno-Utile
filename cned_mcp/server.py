@@ -1,22 +1,11 @@
 """
-Serveur MCP CNED — expose les outils CNED à Claude.
+Serveur MCP CNED — supporte stdio (local) et SSE/HTTP (Railway/cloud).
 
-Lancement :
+Lancement local :
     CNED_USER=xxx CNED_PASS=yyy python -m cned_mcp.server
 
-Configuration dans Claude Code (~/.claude/settings.json) :
-    {
-      "mcpServers": {
-        "cned": {
-          "command": "python",
-          "args": ["-m", "cned_mcp.server"],
-          "env": {
-            "CNED_USER": "ton_identifiant",
-            "CNED_PASS": "ton_mot_de_passe"
-          }
-        }
-      }
-    }
+Lancement cloud (Railway) :
+    TRANSPORT=sse PORT=8000 CNED_USER=xxx CNED_PASS=yyy python -m cned_mcp.server
 """
 
 import os
@@ -28,6 +17,8 @@ logging.basicConfig(level=logging.WARNING)
 
 USERNAME = os.environ.get("CNED_USER", "")
 PASSWORD = os.environ.get("CNED_PASS", "")
+TRANSPORT = os.environ.get("TRANSPORT", "stdio")
+PORT = int(os.environ.get("PORT", "8000"))
 
 mcp = MCPServer("cned")
 _client = None
@@ -98,7 +89,7 @@ def cned_mon_profil() -> str:
 def cned_page(chemin: str) -> str:
     """
     Lit le contenu texte d'une page de l'espace CNED.
-    Exemples de chemins : /mes-cours, /mes-devoirs, /mes-messages, /mon-profil
+    Exemples : /mes-cours, /mes-devoirs, /mes-messages, /mon-profil
     """
     return _get_client().get_page_raw(chemin)
 
@@ -118,4 +109,9 @@ def cned_deconnexion() -> str:
 # ------------------------------------------------------------------ #
 
 if __name__ == "__main__":
-    mcp.run()
+    if TRANSPORT == "sse":
+        mcp.run(transport="sse", host="0.0.0.0", port=PORT)
+    elif TRANSPORT == "streamable-http":
+        mcp.run(transport="streamable-http", host="0.0.0.0", port=PORT)
+    else:
+        mcp.run(transport="stdio")

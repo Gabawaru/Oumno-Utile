@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["chromium", "nss", "freetype", "freetype-dev", "harfbuzz", "ca-certificates", "ttf-opensans"]
+
+[phases.install]
+cmds = [
+  "pip install -r requirements.txt",
+  "PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 python -c 'print(\"playwright ready\")'"
+]
+
+[start]
+cmd = "TRANSPORT=sse python -m cned_mcp.server"
