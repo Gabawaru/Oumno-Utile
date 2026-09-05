@@ -53,58 +53,59 @@ class CNEDClient:
     # ------------------------------------------------------------------ #
 
     def get_home(self) -> dict:
-        """Récupère la page d'accueil et retourne les infos de base."""
-        r = self._get("/")
+        """Récupère le tableau de bord Moodle."""
+        r = self._get("/my/")
         soup = BeautifulSoup(r.text, "html.parser")
         title = soup.find("h1") or soup.find("title")
-        welcome = soup.find(class_=lambda c: c and "bienvenue" in c.lower()) if soup else None
         return {
             "url": r.url,
             "titre": title.get_text(strip=True) if title else "",
-            "bienvenue": welcome.get_text(strip=True) if welcome else "",
             "connecte": "sts.cned.fr" not in r.url and "eformation.cned.fr" in r.url,
         }
 
     def get_courses(self) -> list[dict]:
-        """Liste les formations/cours disponibles."""
-        r = self._get("/mes-cours")
+        """Liste les cours Moodle de l'utilisateur."""
+        r = self._get("/my/courses.php")
         soup = BeautifulSoup(r.text, "html.parser")
         courses = []
-        # Sélecteurs génériques — à affiner selon le HTML réel
-        for item in soup.select(".formation, .cours, .module, article, .card"):
-            titre_el = item.find(["h2", "h3", "h4", ".titre", ".title"])
+        for item in soup.select(".coursebox, .course-listitem, [data-courseid]"):
+            titre_el = item.find(["h3", "h4", ".coursename", ".multiline"])
             lien_el = item.find("a", href=True)
             if titre_el:
                 courses.append({
                     "titre": titre_el.get_text(strip=True),
                     "lien": lien_el["href"] if lien_el else "",
                 })
+        # Fallback : liens de cours dans la page
+        if not courses:
+            for a in soup.select("a[href*='/course/view.php']"):
+                txt = a.get_text(strip=True)
+                if txt:
+                    courses.append({"titre": txt, "lien": a["href"]})
         return courses
 
     def get_assignments(self) -> list[dict]:
-        """Liste les devoirs à rendre."""
-        r = self._get("/mes-devoirs")
+        """Liste les devoirs via le calendrier Moodle."""
+        r = self._get("/calendar/view.php?view=month")
         soup = BeautifulSoup(r.text, "html.parser")
         devoirs = []
-        for item in soup.select(".devoir, .assignment, .travail, article, .card"):
-            titre_el = item.find(["h2", "h3", "h4", ".titre"])
+        for item in soup.select(".event, [data-event-id]"):
+            titre_el = item.find(["a", ".referevent", "h3"])
             date_el = item.find(class_=lambda c: c and "date" in c.lower() if c else False)
-            statut_el = item.find(class_=lambda c: c and "statut" in c.lower() if c else False)
             if titre_el:
                 devoirs.append({
                     "titre": titre_el.get_text(strip=True),
-                    "date_limite": date_el.get_text(strip=True) if date_el else "",
-                    "statut": statut_el.get_text(strip=True) if statut_el else "",
+                    "date": date_el.get_text(strip=True) if date_el else "",
                 })
         return devoirs
 
     def get_messages(self) -> list[dict]:
-        """Liste les messages/notifications."""
-        r = self._get("/mes-messages")
+        """Liste les messages via la messagerie Moodle."""
+        r = self._get("/message/index.php")
         soup = BeautifulSoup(r.text, "html.parser")
         messages = []
-        for item in soup.select(".message, .notification, .msg, article"):
-            sujet_el = item.find(["h3", "h4", ".sujet", ".subject"])
+        for item in soup.select(".conversation, .message-body, [data-conversation-id]"):
+            sujet_el = item.find(["a", "h5", ".fullname"])
             date_el = item.find(class_=lambda c: c and "date" in c.lower() if c else False)
             if sujet_el:
                 messages.append({
@@ -114,21 +115,30 @@ class CNEDClient:
         return messages
 
     def get_profile(self) -> dict:
-        """Récupère les informations du profil."""
-        r = self._get("/mon-profil")
+        """Récupère le profil Moodle de l'utilisateur."""
+        r = self._get("/user/profile.php")
         soup = BeautifulSoup(r.text, "html.parser")
         infos = {}
-        for label in soup.select("label, .label, dt"):
-            val = label.find_next_sibling(["span", "dd", "input"])
-            if label.get_text(strip=True) and val:
-                infos[label.get_text(strip=True)] = val.get_text(strip=True)
+        for dl in soup.select("dl"):
+            dts = dl.find_all("dt")
+            dds = dl.find_all("dd")
+            for dt, dd in zip(dts, dds):
+                k = dt.get_text(strip=True)
+                v = dd.get_text(strip=True)
+                if k:
+                    infos[k] = v
+        if not infos:
+            for row in soup.select(".profile-node, .description"):
+                label = row.find(class_="profilefield")
+                val = row.find(class_="value")
+                if label and val:
+                    infos[label.get_text(strip=True)] = val.get_text(strip=True)
         return infos
 
     def get_page_raw(self, path: str) -> str:
         """Récupère le texte brut d'une page CNED (chemin relatif ou URL complète)."""
         r = self._get(path)
         soup = BeautifulSoup(r.text, "html.parser")
-        # Supprimer scripts et styles
         for tag in soup(["script", "style", "nav", "footer", "header"]):
             tag.decompose()
         main = soup.find("main") or soup.find(id="content") or soup.body
