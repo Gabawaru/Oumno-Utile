@@ -50,10 +50,10 @@ web/
 
 ## Base de données
 
-Tables `ciel_state`, `ciel_journal`, `ciel_subs` dans le projet Supabase existant.
+Projet Supabase dédié **« CNED link »** (`hnmeefndnckqkdjjbgwe`, région `eu-west-3`,
+Paris). Tables `ciel_state`, `ciel_journal`, `ciel_subs`.
 
-Le dépôt est public et la clé `anon` circule déjà côté navigateur pour un autre site
-du même projet Supabase : elle est donc traitée comme publique. Les droits sont
+Le dépôt étant public, la clé `anon` est traitée comme connue de tous. Les droits sont
 répartis en conséquence.
 
 | Rôle | Peut | Ne peut pas |
@@ -72,6 +72,10 @@ routes serveur, qui vérifient le cookie propriétaire puis utilisent
 cd web
 python3 -m http.server 8000   # sert index.html ; les routes /api ne répondent pas
 ```
+
+Le dépôt déclare le serveur MCP Supabase dans `.mcp.json` à la racine : ouvrir le
+projet avec Claude Code donne directement accès à la base (`/mcp` pour
+s'authentifier).
 
 Pour exercer les routes, `vercel dev` avec les variables ci-dessus renseignées
 dans un fichier `.env.local`.
