@@ -53,7 +53,14 @@ export function grille(debut, fin, capacites, evenements) {
 }
 
 /**
- * Répartit les heures restantes sur les jours libres.
+ * Répartit les heures restantes sur les jours disponibles.
+ *
+ * Le travail est ÉTALÉ sur toute la fenêtre de chaque étape, pas empilé au plus
+ * tôt : chaque étape verse ses heures à parts égales sur les jours de sa
+ * fenêtre, et quand un jour atteint sa capacité il cesse d'absorber pendant que
+ * les autres continuent. Une année qui tient largement laisse donc du temps
+ * libre chaque jour, au lieu de mois saturés suivis de mois vides.
+ *
  * `reports` permet de repousser volontairement l'échéance d'une étape.
  * Renvoie la grille remplie et la liste de ce qui ne rentre pas.
  */
@@ -72,25 +79,47 @@ export function planifier({ etapes, done, evenements, capacites, reports = {}, m
 
   const manques = [];
   for (const t of restantes) {
-    let reste = t.h;
-    // Une étape dont l'échéance est déjà passée n'a plus de fenêtre à respecter :
-    // elle se replace sur les premiers jours libres, c'est le rattrapage du retard.
+    // Une étape dont l'échéance est passée n'a plus de fenêtre à respecter :
+    // elle s'étale sur tout ce qui reste, c'est le rattrapage du retard.
     const enRetard = t.ech < maintenant;
-    for (const cle of cles) {
-      const j = jours.get(cle);
-      if (!enRetard && j.t > t.ech) break;
-      if (j.libre <= 0) continue;
-      const pris = Math.min(reste, j.libre);
-      j.libre -= pris;
-      j.taches.push({ etape: t.etape, h: pris, retard: enRetard });
-      reste -= pris;
-      if (reste <= 0.001) break;
-    }
-    if (reste > 0.001) {
+    const fenetre = cles.filter((c) => {
+      const j = jours.get(c);
+      return j.t >= minuit(Math.max(maintenant, t.etape.t0)) && (enRetard || j.t <= t.ech);
+    });
+    const reste = etaler(jours, fenetre, t.etape, t.h, enRetard);
+    if (reste > 0.01) {
       manques.push({ etape: t.etape, h: Math.round(reste * 10) / 10, ech: t.ech, enRetard });
     }
   }
   return { jours, manques };
+}
+
+/**
+ * Verse `heures` à parts égales sur `fenetre`, en repassant sur les jours
+ * encore ouverts tant qu'il reste à placer. Renvoie ce qui n'a pas tenu.
+ */
+function etaler(jours, fenetre, etape, heures, retard) {
+  let reste = heures;
+  let ouverts = fenetre.filter((c) => jours.get(c).libre > 0.001);
+  while (reste > 0.01 && ouverts.length) {
+    const part = reste / ouverts.length;
+    const suivants = [];
+    let place = 0;
+    for (const cle of ouverts) {
+      const j = jours.get(cle);
+      const pris = Math.min(part, j.libre);
+      if (pris > 0.001) {
+        j.libre -= pris;
+        j.taches.push({ etape, h: pris, retard });
+        place += pris;
+      }
+      if (j.libre > 0.001) suivants.push(cle);
+    }
+    reste -= place;
+    if (place < 0.001) break;
+    ouverts = suivants;
+  }
+  return reste;
 }
 
 /** Somme des heures qui ne rentrent pas. */
@@ -146,4 +175,51 @@ export function bilanJour(jours, cle) {
     libre: Math.round(j.libre * 10) / 10,
     occupe: Math.round(j.occupe * 10) / 10,
   };
+}
+
+/**
+ * Cherche les jours où l'on peut poser `heures` d'indisponibilité sans faire
+ * dérailler le planning. C'est la réponse à « quel jour est-ce qu'on peut se
+ * caler quelque chose ensemble ? ».
+ *
+ * Pour chaque jour de l'horizon on simule l'événement et on regarde si le
+ * total des heures qui ne rentrent plus augmente. Si non, le jour est libre.
+ */
+export function trouverCreneaux(base, heures, { horizon = 45, max = 12 } = {}) {
+  const reference = totalManque(planifier(base).manques);
+  const debut = minuit(base.maintenant);
+  const trouves = [];
+  for (let i = 0; i < horizon && trouves.length < max; i++) {
+    const t = debut + i * DAY;
+    if (t > base.fin) break;
+    const cle = iso(new Date(t));
+    const evenement = { id: "_essai", date: cle, h: heures };
+    const apres = planifier({ ...base, evenements: [...base.evenements, evenement] });
+    const cout = totalManque(apres.manques);
+    if (cout <= reference + 0.001) {
+      const j = apres.jours.get(cle);
+      trouves.push({ cle, t, resteApres: Math.round((j?.libre ?? 0) * 10) / 10 });
+    }
+  }
+  return { creneaux: trouves, reference };
+}
+
+/**
+ * Marge d'un jour : combien d'heures on peut lui retirer avant que le planning
+ * ne tienne plus. Recherche dichotomique sur une durée croissante.
+ */
+export function margeJour(base, cle, plafond = 12) {
+  const reference = totalManque(planifier(base).manques);
+  const tient = (h) => {
+    const apres = planifier({ ...base, evenements: [...base.evenements, { id: "_m", date: cle, h }] });
+    return totalManque(apres.manques) <= reference + 0.001;
+  };
+  if (!tient(0.5)) return 0;
+  let bas = 0.5, haut = plafond;
+  if (tient(plafond)) return plafond;
+  for (let i = 0; i < 6; i++) {
+    const mid = (bas + haut) / 2;
+    if (tient(mid)) bas = mid; else haut = mid;
+  }
+  return Math.round(bas * 2) / 2;
 }
