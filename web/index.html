@@ -381,6 +381,35 @@ label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--
 .aucun{font-size:.78rem;color:var(--late);background:color-mix(in srgb,var(--late) 8%,transparent);
   border-left:3px solid var(--late);padding:.6rem .75rem;line-height:1.5}
 .aucun b{color:var(--late)}
+.frise{display:flex;flex-direction:column;gap:2px;margin-top:.3rem}
+.ligne{display:flex;gap:.7rem;align-items:baseline;padding:.34rem .5rem;font-size:.76rem;
+  border-left:3px solid transparent;background:var(--sunk)}
+.ligne .hh{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ink3);
+  flex:none;min-width:108px;font-variant-numeric:tabular-nums}
+.ligne .quoi{flex:1;min-width:0;display:flex;gap:.45rem;align-items:baseline;flex-wrap:wrap;color:var(--ink2)}
+.ligne .quoi b{color:var(--ink);font-weight:600}
+.ligne .quoi em{font-style:normal;color:var(--ink3);font-size:.72rem}
+.ligne .part{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink3)}
+.ligne.libre{background:transparent;border-left-color:var(--rule2);color:var(--ink3)}
+.ligne.libre .quoi{color:var(--ok)}
+.ligne.trav{border-left-color:var(--c);cursor:pointer}
+.ligne.trav:hover{background:color-mix(in srgb,var(--c) 8%,var(--sunk))}
+.ligne.trav.retard{background:color-mix(in srgb,var(--late) 7%,var(--sunk))}
+.ligne.ev{border-left-color:var(--evt)}
+.ligne.urgent{border-left-color:var(--late);background:color-mix(in srgb,var(--late) 9%,var(--sunk))}
+.ligne.sys{border-left-color:var(--warn)}
+.urg{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;
+  background:var(--late);color:#fff;padding:.05rem .3rem;border-radius:2px}
+.btn.mini{padding:.1rem .3rem;font-size:.6rem}
+.urgcase{display:flex;align-items:center;gap:.35rem;font-size:.76rem;color:var(--ink2);
+  padding:.36rem 0;cursor:pointer}
+.urgcase input{accent-color:var(--late);width:15px;height:15px}
+.jourlibre .quand em{display:block;font-style:normal;font-size:.66rem;color:var(--ink3);font-weight:400}
+.jourlibre .detail b{color:var(--ok)}
+.dep{display:block;font-size:.7rem;color:var(--ink3);margin-top:.1rem}
+label.cap input[type=text]{width:auto;flex:1;min-width:150px;font-family:"IBM Plex Mono",monospace;
+  font-size:.72rem;text-align:left}
+label.cap{flex-wrap:wrap}
 .visi{display:grid;gap:.4rem;max-width:560px}
 .visi .opt{display:flex;gap:.55rem;align-items:flex-start;padding:.6rem .7rem;background:var(--sunk);
   border-left:3px solid transparent;cursor:pointer}
@@ -523,8 +552,11 @@ label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--
         <div><label class="fl" for="evH">De</label><input id="evH" type="time" value="14:00"></div>
         <div><label class="fl" for="evF">À</label><input id="evF" type="time" value="17:00"></div>
         <div style="display:flex;align-items:flex-end"><button class="btn pri" type="submit">Ajouter</button></div>
-        <div class="full"><label class="fl" for="evL">Lien (facultatif)</label>
-          <input id="evL" type="url" placeholder="https://eformation.cned.fr/…"></div>
+        <div class="full" style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:1 1 260px"><label class="fl" for="evL">Lien (facultatif)</label>
+            <input id="evL" type="url" placeholder="https://eformation.cned.fr/…"></div>
+          <label class="urgcase"><input type="checkbox" id="evU"><span>Urgent</span></label>
+        </div>
       </form>
       <div class="calbar">
         <button class="btn" id="prevM" aria-label="Mois précédent">◀</button>
