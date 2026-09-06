@@ -1,6 +1,6 @@
 // GET  : lecture publique du planning, du journal et du nombre d'abonnés.
 // POST : écriture réservée au propriétaire (cookie de session).
-import { db, isOwner, json, configured } from "./_lib.js";
+import { db, isOwner, json, configured, canWrite } from "./_lib.js";
 
 export default async function handler(req, res) {
   if (!configured()) return json(res, 503, { error: "Base non configurée" });
@@ -24,6 +24,7 @@ export default async function handler(req, res) {
 
   if (req.method === "POST") {
     if (!owner) return json(res, 403, { error: "Lecture seule" });
+    if (!canWrite()) return json(res, 503, { error: "SUPABASE_SERVICE_KEY absente : écriture désactivée" });
     try {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
       if (body.data && typeof body.data === "object") await db.putState(body.data);

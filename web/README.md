@@ -39,7 +39,8 @@ web/
 | Variable | Rôle | Obligatoire |
 |---|---|---|
 | `SUPABASE_URL` | URL du projet Supabase | oui |
-| `SUPABASE_KEY` | clé Supabase — **côté serveur uniquement**, jamais préfixée `NEXT_PUBLIC_` | oui |
+| `SUPABASE_KEY` | clé **anon** — lecture du planning et inscription à la lettre | oui |
+| `SUPABASE_SERVICE_KEY` | clé **service_role** — seule habilitée à écrire. Sans elle le site reste consultable mais rien ne peut être modifié | oui pour éditer |
 | `OWNER_PASSCODE` | code qui ouvre le mode édition | oui |
 | `AUTH_SECRET` | secret de signature du cookie de session (chaîne aléatoire longue) | oui |
 | `RESEND_API_KEY` | clé [Resend](https://resend.com) pour l'envoi de courriel | non — sans elle, le cron ne fait rien |
@@ -50,9 +51,20 @@ web/
 ## Base de données
 
 Tables `ciel_state`, `ciel_journal`, `ciel_subs` dans le projet Supabase existant.
-RLS activé : lecture publique du planning et du journal, inscription publique à la
-lettre d'information. Les écritures passent uniquement par les routes serveur, qui
-vérifient le cookie propriétaire — la clé Supabase n'atteint jamais le navigateur.
+
+Le dépôt est public et la clé `anon` circule déjà côté navigateur pour un autre site
+du même projet Supabase : elle est donc traitée comme publique. Les droits sont
+répartis en conséquence.
+
+| Rôle | Peut | Ne peut pas |
+|---|---|---|
+| `anon` | lire le planning et le journal, insérer une adresse d'abonné | écrire le planning, lire la liste des abonnés |
+| `service_role` | tout | — |
+
+Aucune policy `select` n'existe sur `ciel_subs` : les adresses ne sont pas
+moissonnables, même en connaissant la clé publique. Les écritures passent par les
+routes serveur, qui vérifient le cookie propriétaire puis utilisent
+`SUPABASE_SERVICE_KEY`. Aucune clé n'atteint le navigateur.
 
 ## Développement local
 

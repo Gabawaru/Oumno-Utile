@@ -3,19 +3,27 @@
 import crypto from "node:crypto";
 
 const URL = process.env.SUPABASE_URL;
-const KEY = process.env.SUPABASE_KEY;
+// Clé publique : lecture du planning et inscription à la lettre uniquement.
+const ANON = process.env.SUPABASE_KEY;
+// Clé de service : seule habilitée à écrire. Reste dans Vercel, jamais dans le dépôt.
+const SERVICE = process.env.SUPABASE_SERVICE_KEY;
 
 export function configured() {
-  return Boolean(URL && KEY);
+  return Boolean(URL && ANON);
+}
+export function canWrite() {
+  return Boolean(URL && SERVICE);
 }
 
-async function rest(path, init = {}) {
+async function rest(path, init = {}, write = false) {
   if (!configured()) throw new Error("Supabase non configuré");
+  if (write && !SERVICE) throw new Error("SUPABASE_SERVICE_KEY absente : écriture impossible");
+  const key = write ? SERVICE : ANON;
   const res = await fetch(`${URL}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: KEY,
-      Authorization: `Bearer ${KEY}`,
+      apikey: key,
+      Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
       ...(init.headers || {}),
     },
@@ -34,7 +42,7 @@ export const db = {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify([{ id: "main", data, updated_at: new Date().toISOString() }]),
-    });
+    }, true);
   },
   async journal(limit = 120) {
     return rest(`ciel_journal?select=id,ts,body&order=ts.desc&limit=${limit}`);
@@ -45,10 +53,10 @@ export const db = {
       method: "POST",
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify(lines.map((body) => ({ body }))),
-    });
+    }, true);
   },
   async pendingJournal() {
-    return rest("ciel_journal?select=id,ts,body&notified=is.false&order=ts.asc&limit=200");
+    return rest("ciel_journal?select=id,ts,body&notified=is.false&order=ts.asc&limit=200", {}, true);
   },
   async markNotified(ids) {
     if (!ids.length) return;
@@ -56,11 +64,14 @@ export const db = {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify({ notified: true }),
-    });
+    }, true);
   },
+  // Les adresses ne sont lisibles qu'avec la clé de service : pas de moissonnage.
   async subs() {
-    return rest("ciel_subs?select=email&active=is.true&order=created_at.asc");
-    },
+    if (!SERVICE) return [];
+    return rest("ciel_subs?select=email&active=is.true&order=created_at.asc", {}, true);
+  },
+  // Inscription publique : passe par la clé anon, seule insertion autorisée.
   async addSub(email) {
     await rest("ciel_subs?on_conflict=email", {
       method: "POST",
@@ -73,7 +84,7 @@ export const db = {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify({ active: false }),
-    });
+    }, true);
   },
 };
 
