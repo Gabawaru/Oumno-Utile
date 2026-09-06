@@ -3,13 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="Planning public du BTS CIEL 2e annee de Gabriel : avancement, calendrier, echeances et courbe de progression.">
+<meta name="description" content="Plannings de revision partages : avancement, calendrier, echeances et courbe de progression.">
 <meta name="theme-color" content="#c8102e">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AF%3C/text%3E%3C/svg%3E">
-<style>:root{color-scheme:light dark}html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <title>Pilote CIEL 2A</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>:root{color-scheme:light dark}html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <style>
+
 :root{
   --paper:#eef1f5; --card:#fff; --sunk:#e4e9ef; --ink:#0e141b; --ink2:#43505f;
   --ink3:#7a8797; --rule:#ccd5df; --rule2:#dde4ec; --sig:#c8102e;
@@ -290,23 +291,150 @@ svg.curve{display:block;width:100%;min-width:600px;height:auto}
 .pill button:hover{color:var(--late)}
 textarea.digest{min-height:150px;font-family:"IBM Plex Mono",monospace;font-size:.7rem;line-height:1.5}
 .foot{font-size:.65rem;color:var(--ink3);text-align:center;padding:.1rem 0 .3rem;line-height:1.6}
-</style>
 
+
+/* ── écrans d'accueil ───────────────────────────────── */
+.centre{max-width:460px;margin:6vh auto;display:flex;flex-direction:column;gap:.9rem}
+.marque{text-align:center;margin-bottom:.4rem}
+.marque .e{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--sig)}
+.marque h1{font-size:1.7rem;font-weight:700;letter-spacing:-.02em;margin-top:.2rem}
+.marque p{font-size:.82rem;color:var(--ink2);margin-top:.3rem}
+.onglets-auth{display:flex;gap:2px;background:var(--card);border:1px solid var(--rule);padding:3px}
+.onglets-auth button{flex:1;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.76rem;
+  font-weight:600;padding:.44rem;border:none;background:transparent;color:var(--ink3);cursor:pointer;
+  border-bottom:2px solid transparent}
+.onglets-auth button[aria-selected="true"]{color:var(--sig);border-bottom-color:var(--sig);background:var(--sunk)}
+form.carte{background:var(--card);border:1px solid var(--rule);padding:1rem 1.1rem 1.1rem;
+  display:flex;flex-direction:column;gap:.55rem}
+form.carte .champ{display:flex;flex-direction:column;gap:.18rem}
+form.carte button[type=submit]{margin-top:.3rem}
+.aide{font-size:.72rem;color:var(--ink3);line-height:1.45}
+.authmsg{font-size:.76rem;padding:.5rem .65rem;border-left:3px solid}
+.authmsg.err{background:color-mix(in srgb,var(--late) 8%,transparent);border-color:var(--late);color:var(--late)}
+.authmsg.ok{background:color-mix(in srgb,var(--ok) 8%,transparent);border-color:var(--ok);color:var(--ok)}
+.profils{display:flex;flex-direction:column;gap:.3rem}
+.profil{display:flex;align-items:center;gap:.6rem;padding:.55rem .65rem;background:var(--card);
+  border:1px solid var(--rule);text-decoration:none;color:inherit}
+.profil:hover{border-color:var(--sig);text-decoration:none}
+.profil .pav{width:32px;height:32px;flex:none;display:grid;place-content:center;background:var(--sunk);
+  font-family:"IBM Plex Mono",monospace;font-size:.72rem;font-weight:600;color:var(--sig)}
+.profil b{display:block;font-size:.82rem}
+.profil em{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink3);font-style:normal}
+.sep{display:flex;align-items:center;gap:.6rem;font-family:"IBM Plex Mono",monospace;font-size:.6rem;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin:.3rem 0}
+.sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--rule)}
+.quisuisje{margin-left:auto;display:flex;align-items:center;gap:.5rem}
+.quisuisje .moi{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink3)}
+
+/* ── charge des jours dans le calendrier ────────────── */
+.day.pleine{background:color-mix(in srgb,var(--warn) 7%,var(--card))}
+.day.deborde{background:color-mix(in srgb,var(--late) 9%,var(--card))}
+.charge{display:block;height:3px;background:var(--rule2);margin-top:auto;overflow:hidden}
+.charge i{display:block;height:100%;background:var(--ok)}
+.day.pleine .charge i{background:var(--warn)}
+.day.deborde .charge i{background:var(--late)}
+.hcount{font-family:"IBM Plex Mono",monospace;font-size:.55rem;color:var(--ink3)}
+
+/* ── zone de tâche ──────────────────────────────────── */
+.jauge{display:flex;height:12px;background:var(--sunk);position:relative;margin:.3rem 0 .4rem;overflow:hidden}
+.jauge i{position:absolute;top:0;bottom:0;display:block}
+.jauge .occ{left:0;background:var(--evt)}
+.jauge .trv{background:var(--ok)}
+.jlegende{display:flex;flex-wrap:wrap;gap:.2rem 1rem;font-size:.72rem;color:var(--ink2);margin-bottom:.7rem}
+.jlegende .occ-t{color:var(--evt)}.jlegende .trv-t{color:var(--ok)}
+.jlegende .lib-t{color:var(--ink3)}.jlegende .plein-t{color:var(--late)}
+.soustitre{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink3);margin:.7rem 0 .3rem;padding-bottom:.15rem;border-bottom:1px solid var(--rule2)}
+.impossible{font-size:.76rem;line-height:1.5;color:var(--late);background:color-mix(in srgb,var(--late) 8%,transparent);
+  border-left:3px solid var(--late);padding:.55rem .7rem;margin:.35rem 0}
+.impossible b{color:var(--late)}
+.ok-zone{font-size:.76rem;color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent);
+  border-left:3px solid var(--ok);padding:.5rem .7rem;margin:.35rem 0}
+.zbtn{margin-top:.45rem}
+.qitem.retard{box-shadow:inset 3px 0 0 var(--late)}
+
+/* ── réglages ───────────────────────────────────────── */
+.caps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.4rem}
+label.cap{display:flex;align-items:center;gap:.4rem;font-size:.76rem;color:var(--ink2);
+  background:var(--sunk);padding:.35rem .5rem}
+label.cap span{flex:1}
+label.cap input{width:62px;text-align:right;font-family:"IBM Plex Mono",monospace}
+label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ink3);font-style:normal}
+.captot{grid-column:1/-1;font-size:.76rem;color:var(--ink2);margin-top:.3rem}
+
+</style>
 </head>
 <body>
-<div class="wrap">
+<section id="ecranAuth" class="centre" hidden>
+  <div class="marque">
+    <div class="e">CNED · BTS CIEL 2<sup>e</sup> année</div>
+    <h1>Pilote de formation</h1>
+    <p>Suis ton avancement, cale ton planning, partage-le.</p>
+  </div>
+  <div class="onglets-auth" role="tablist">
+    <button role="tab" data-auth="connexion" aria-selected="true">Connexion</button>
+    <button role="tab" data-auth="inscription" aria-selected="false">Créer un compte</button>
+    <button role="tab" data-auth="oubli" aria-selected="false">Mot de passe oublié</button>
+  </div>
+  <div id="authMsg" class="authmsg" hidden></div>
+
+  <form class="carte" id="formConnexion">
+    <div class="champ"><label class="fl" for="conEmail">Adresse électronique</label>
+      <input id="conEmail" type="email" autocomplete="email" required></div>
+    <div class="champ"><label class="fl" for="conMdp">Mot de passe</label>
+      <input id="conMdp" type="password" autocomplete="current-password" required></div>
+    <button class="btn pri" type="submit">Se connecter</button>
+  </form>
+
+  <form class="carte" id="formInscription" hidden>
+    <div class="champ"><label class="fl" for="insNom">Nom affiché</label>
+      <input id="insNom" type="text" maxlength="40" placeholder="Gabriel"></div>
+    <div class="champ"><label class="fl" for="insEmail">Adresse électronique</label>
+      <input id="insEmail" type="email" autocomplete="email" required></div>
+    <div class="champ"><label class="fl" for="insMdp">Mot de passe</label>
+      <input id="insMdp" type="password" autocomplete="new-password" minlength="8" required></div>
+    <p class="aide">Au moins 8 caractères. Une seule inscription par adresse : si elle est déjà
+      utilisée, passe par « Connexion » ou « Mot de passe oublié ».</p>
+    <button class="btn pri" type="submit">Créer mon compte</button>
+  </form>
+
+  <form class="carte" id="formOubli" hidden>
+    <div class="champ"><label class="fl" for="oubEmail">Adresse électronique</label>
+      <input id="oubEmail" type="email" autocomplete="email" required></div>
+    <p class="aide">Tu recevras un lien pour choisir un nouveau mot de passe.</p>
+    <button class="btn pri" type="submit">Envoyer le lien</button>
+  </form>
+
+  <form class="carte" id="formNouveau" hidden>
+    <div class="champ"><label class="fl" for="nouMdp">Nouveau mot de passe</label>
+      <input id="nouMdp" type="password" autocomplete="new-password" minlength="8" required></div>
+    <button class="btn pri" type="submit">Enregistrer</button>
+  </form>
+
+  <div class="sep">ou consulter un planning</div>
+  <div class="profils" id="listeProfils"></div>
+</section>
+
+<section id="ecranProfils" class="centre" hidden>
+  <div class="marque">
+    <div class="e">Plannings publics</div>
+    <h1>Choisis un profil</h1>
+    <p>Ce profil n'existe pas ou n'est pas public.</p>
+  </div>
+  <div class="profils" id="listeProfils2"></div>
+  <a class="btn" href="?" style="text-align:center">Retour à la connexion</a>
+</section>
+
+<section id="appli" class="wrap" hidden>
 
   <div class="mast">
     <div>
       <div class="eyebrow">CNED · BTS CIEL 2<sup>e</sup> année · Session 2027</div>
-      <h1>Pilote de formation</h1>
+      <h1 id="titreProfil">Pilote de formation</h1>
     </div>
     <div class="cd"><div class="n" id="cdN">—</div><div class="k">jours avant la session</div></div>
-    <div class="auth" id="auth">
-      <form id="loginf"><input id="pass" type="password" placeholder="code perso"
-        autocomplete="current-password" aria-label="Code personnel"><button class="btn" type="submit">Entrer</button></form>
-      <button class="btn" id="logout" hidden>Quitter le mode édition</button>
-    </div>
+    <div class="quisuisje" id="quiSuisJe"></div>
     <div class="clock">
       <div class="d" id="cdate">—</div>
       <div class="t" id="ctime">—</div>
@@ -328,6 +456,7 @@ textarea.digest{min-height:150px;font-family:"IBM Plex Mono",monospace;font-size
     <button role="tab" data-tab="mx"    aria-selected="false">Matrice</button>
     <button role="tab" data-tab="notes" aria-selected="false">Notes</button>
     <button role="tab" data-tab="jrnl"  aria-selected="false">Journal<span class="n" id="tnJ"></span></button>
+    <button role="tab" data-tab="regl"  aria-selected="false">Réglages</button>
   </nav>
 
   <section data-panel="today" class="stack">
@@ -359,9 +488,8 @@ textarea.digest{min-height:150px;font-family:"IBM Plex Mono",monospace;font-size
         <div><label class="fl" for="evT">Titre de l'événement</label>
           <input id="evT" required maxlength="90" placeholder="Révision Stormshield, RDV tuteur…"></div>
         <div><label class="fl" for="evD">Date</label><input id="evD" type="date" required></div>
-        <div><label class="fl" for="evH">Heure</label><input id="evH" type="time" value="18:00"></div>
-        <div><label class="fl" for="evR">Durée (h)</label>
-          <input id="evR" type="number" min="0" max="24" step="0.5" value="2"></div>
+        <div><label class="fl" for="evH">De</label><input id="evH" type="time" value="14:00"></div>
+        <div><label class="fl" for="evF">À</label><input id="evF" type="time" value="17:00"></div>
         <div style="display:flex;align-items:flex-end"><button class="btn pri" type="submit">Ajouter</button></div>
         <div class="full"><label class="fl" for="evL">Lien (facultatif)</label>
           <input id="evL" type="url" placeholder="https://eformation.cned.fr/…"></div>
@@ -462,743 +590,24 @@ textarea.digest{min-height:150px;font-family:"IBM Plex Mono",monospace;font-size
     </div>
   </section>
 
+  <section data-panel="regl" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Heures de travail par jour</h2>
+        <div class="note">Le planning répartit tes étapes dans ces heures-là</div></div>
+      <div class="caps" id="caps"></div>
+      <p class="aide" style="margin-top:.8rem;max-width:64ch">
+        Quand tu poses un événement, les heures qu'il occupe sont retirées de la journée et
+        le travail prévu se redistribue sur les jours suivants. Une étape dont l'échéance est
+        déjà passée repart sur les premiers créneaux libres : le retard se rattrape tout seul.
+      </p>
+    </div>
+  </section>
+
   <div class="foot">
     Arborescence relevée sur <span class="mono">eformation.cned.fr</span> — 104 sections de cours.<br>
     L'espace « Dépôt des devoirs » n'est pas consulté par cette application.
   </div>
-</div>
-
-<script>
-/* ═════════ CONSTANTES ═════════ */
-const MONTHS=["Sept","Oct","Nov","Déc","Janv","Fév","Mars","Avr","Mai","Juin"];
-const MFULL=["janvier","février","mars","avril","mai","juin","juillet","août",
-             "septembre","octobre","novembre","décembre"];
-const DOW=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
-const DAY=864e5, TZ="Europe/Paris";
-const CNED="https://eformation.cned.fr/course/view.php?id=";
-const EXAM=new Date(2027,4,1);           // début estimé de la session 2027
-
-const m3=h=>[["m1","Mission 1",Math.round(h*.36)],["m2","Mission 2",Math.round(h*.34)],
-             ["m3","Mission 3",h-Math.round(h*.36)-Math.round(h*.34)]];
-const sp=(id,n,h,s,e,u)=>({id,n,s,e,u,steps:m3(h).map(([k,l,hh])=>({id:id+"."+k,n:l,h:hh}))});
-
-const GROUPS=[
- {id:"b1",name:"Bloc 1 — Étude et conception de réseaux",code:"3-0115",c:"var(--b1)",cid:21596,rows:[
-   {id:"b1.a1",n:"Activité 1 · Installation et qualification 2.0",s:6,e:9,u:3,steps:[
-     {id:"b1.a1.em",n:"Entrée en matière",h:2},{id:"b1.a1.sy",n:"Synthèse d'activité",h:4}]},
-   sp("b1.sp6","SP 6 · Évolution et sécurisation d'un SI",41,6,9,4),
-   sp("b1.sp7","SP 7 · Gestion d'une base de données",23,9,11,5),
-   sp("b1.sp8","SP 8 · Analyse de risque OléoProduct",26,11,13,6),
-   {id:"b1.a2",n:"Activité 2 · Accompagnement du client 2.0",s:13,e:17,u:8,steps:[
-     {id:"b1.a2.em",n:"Entrée en matière",h:2},{id:"b1.a2.sy",n:"Synthèse d'activité",h:4}]},
-   sp("b1.sp9","SP 9 · Projet borne de fluides",22,13,15,9),
-   sp("b1.sp10","SP 10 · Audit et sécurisation",26,15,17,10),
-   {id:"b1.ev",n:"Évaluations du bloc",s:11,e:18,u:23,steps:[
-     {id:"b1.ev.1",n:"Évaluation 1 — auto, 45 min",h:1,dev:1},
-     {id:"b1.ev.2",n:"Évaluation 2 — auto, 1 h 30",h:2,dev:1},
-     {id:"b1.ev.3",n:"Devoir 3 — personnalisé, 2 h",h:2,dev:1},
-     {id:"b1.ev.4",n:"Devoir 4 — personnalisé",h:2,dev:1},
-     {id:"b1.ev.5",n:"Évaluation 5 — auto, 45 min",h:1,dev:1},
-     {id:"b1.ev.6",n:"Évaluation 6 — auto, 1 h 30",h:2,dev:1},
-     {id:"b1.ev.7",n:"Devoir 7 — personnalisé",h:2,dev:1},
-     {id:"b1.ev.8",n:"Devoir 8 — personnalisé",h:2,dev:1}]},
- ]},
- {id:"phy",name:"Sciences physiques — Séquences 13 → 21",code:"3-0115",c:"var(--phy)",cid:21596,rows:[
-   {id:"phy.a",n:"Séq. 13–14 · Lignes de transmission, fibre",s:6,e:9,u:13,steps:[
-     {id:"phy.s13",n:"Séq. 13 · Les lignes de transmission",h:10},
-     {id:"phy.s14",n:"Séq. 14 · La fibre optique",h:10}]},
-   {id:"phy.b",n:"Séq. 15–16 · Mesure, système bouclé",s:9,e:12,u:15,steps:[
-     {id:"phy.s15",n:"Séq. 15 · Chaîne de mesure, actionneurs",h:10},
-     {id:"phy.s16",n:"Séq. 16 · Performance d'un système bouclé",h:10}]},
-   {id:"phy.c",n:"Séq. 17–18 · Traitement numérique",s:12,e:15,u:17,steps:[
-     {id:"phy.s17",n:"Séq. 17 · Traitement numérique",h:10},
-     {id:"phy.s18",n:"Séq. 18 · Chaîne de transmission",h:10}]},
-   {id:"phy.d",n:"Séq. 19–21 · Bande de base, porteuse, antennes",s:14,e:17,u:19,steps:[
-     {id:"phy.s19",n:"Séq. 19 · Transmission en bande de base",h:10},
-     {id:"phy.s20",n:"Séq. 20 · Transmission par fréquence porteuse",h:10},
-     {id:"phy.s21",n:"Séq. 21 · Les antennes",h:10}]},
- ]},
- {id:"b2",name:"Bloc 2 — Exploitation et maintenance",code:"3-0215",c:"var(--b2)",cid:21597,rows:[
-   {id:"b2.a1",n:"Activité 1 · Exploitation et MCO 2.0",s:0,e:2,u:3,steps:[
-     {id:"b2.a1.em",n:"Entrée en matière",h:2},{id:"b2.a1.sy",n:"Synthèse d'activité",h:4}]},
-   sp("b2.sp6","SP 6 · Objets connectés en entreprise",41,0,2,4),
-   sp("b2.sp7","SP 7 · Gestion des incidents",41,6,9,5),
-   sp("b2.sp8","SP 8 · Sécurité avancée avec Stormshield",41,9,12,6),
-   {id:"b2.a2",n:"Activité 2 · Gestion de projet et d'équipe",s:12,e:18,u:8,steps:[
-     {id:"b2.a2.em",n:"Entrée en matière",h:2},{id:"b2.a2.sy",n:"Synthèse d'activité",h:4}]},
-   sp("b2.sp9","SP 9 · Outils collaboratifs dans le Cloud",46,12,16,9),
-   sp("b2.sp10","SP 10 · Gestion de projet, tests unitaires",41,16,18,10),
-   {id:"b2.ev",n:"Évaluations du bloc",s:9,e:18,u:13,steps:[
-     {id:"b2.ev.1",n:"Évaluation 1 — auto, 45 min",h:1,dev:1},
-     {id:"b2.ev.2",n:"Devoir 2 — personnalisé, 4 h",h:4,dev:1},
-     {id:"b2.ev.3",n:"Évaluation 3 — auto, 1 h",h:1,dev:1},
-     {id:"b2.ev.4",n:"Devoir 4 — ouvert le 15/11",h:4,dev:1,date:"15/11"}]},
- ]},
- {id:"b3",name:"Bloc 3 — Valorisation donnée & cybersécurité",code:"3-0315",c:"var(--b3)",cid:21598,rows:[
-   {id:"b3.a1",n:"Activité 1 · Valorisation de la donnée 2.0",s:0,e:2,u:3,steps:[
-     {id:"b3.a1.em",n:"Entrée en matière",h:2},{id:"b3.a1.sy",n:"Synthèse d'activité",h:4}]},
-   sp("b3.sp6","SP 6 · Superviser une infrastructure Cloud",51,0,2,4),
-   {id:"b3.a2",n:"Activité 2 · Développement de solutions logicielles",s:6,e:13,u:6,steps:[
-     {id:"b3.a2.em",n:"Entrée en matière",h:2},{id:"b3.a2.sy",n:"Synthèse d'activité",h:4}]},
-   sp("b3.sp7","SP 7 · Score gaming platform",40,6,9,7),
-   sp("b3.sp8","SP 8 · Smart city, zones de chaleur",42,9,13,8),
-   {id:"b3.a3",n:"Activité 3 · Conduite de projet",s:12,e:17,u:10,steps:[
-     {id:"b3.a3.em",n:"Entrée en matière",h:2},{id:"b3.a3.sy",n:"Synthèse d'activité",h:4}]},
-   sp("b3.sp9","SP 9 · Contrôle d'accès à un local industriel",80,12,17,11),
-   {id:"b3.ev",n:"Évaluations du bloc",s:9,e:18,u:14,steps:[
-     {id:"b3.ev.1",n:"Évaluation 1 — auto, 45 min",h:1,dev:1},
-     {id:"b3.ev.2",n:"Devoir 2 — personnalisé, 2 h",h:2,dev:1,date:"30/11"},
-     {id:"b3.ev.3",n:"Évaluation 3 — auto, 1 h",h:1,dev:1},
-     {id:"b3.ev.4",n:"Devoir 4 — personnalisé, 3 h",h:3,dev:1,date:"30/11"}]},
- ]},
- {id:"gen",name:"Enseignement général",code:"",c:"var(--gen)",rows:[
-   {id:"gen.ma",n:"Mathématiques · M8 → M13",s:0,e:12,code:"3-1215",cid:21599,u:3,steps:[
-     {id:"ma.em",n:"Entrée en matière",h:2},
-     {id:"ma.m8",n:"M8 · Équations différentielles du 1er ordre",h:10},
-     {id:"ma.m9",n:"M9 · Suites numériques",h:9},
-     {id:"ma.m10",n:"M10 · Transformation en Z",h:10},
-     {id:"ma.m11",n:"M11 · Transformée de Fourier discrète",h:10},
-     {id:"ma.m12",n:"M12 · Probabilités 2",h:9},
-     {id:"ma.m13",n:"M13 · Logiciels de traitement de données",h:10},
-     {id:"ma.ev1",n:"Évaluation 1 — auto, 2 h 15",h:2,dev:1},
-     {id:"ma.ev3",n:"Évaluation 3 — auto, 1 h 40",h:2,dev:1},
-     {id:"ma.ev5",n:"Devoir 5 — oral, RDV professeur",h:3,dev:1}]},
-   {id:"gen.cg",n:"Culture G · « Le vrai du faux »",s:0,e:16,code:"3-0187",cid:557,u:3,steps:[
-     {id:"cg.q",n:"Quiz d'entrée sur le thème",h:1},
-     {id:"cg.t1",n:"Thème · Activités 1 à 4",h:22},
-     {id:"cg.e1",n:"L'épreuve en question · Activités 1 et 2",h:12},
-     {id:"cg.t2",n:"Thème · Activités 5 à 7",h:20},
-     {id:"cg.e2",n:"L'épreuve en question · Activité 3",h:12},
-     {id:"cg.ev2",n:"Évaluation 2 — écrite",h:3,dev:1},
-     {id:"cg.ev4",n:"Évaluation 4 — écrite, entraînement",h:4,dev:1}]},
-   {id:"gen.an",n:"Anglais · devoirs 1 et 2",s:6,e:14,code:"3-AN85",cid:3273,u:2,steps:[
-     {id:"an.c",n:"Parcourir la rubrique Cours",h:12},
-     {id:"an.e",n:"Entraînements en autocorrection",h:14},
-     {id:"an.d1",n:"Devoir 1 — écrit + audio (exige le stage)",h:6,dev:1},
-     {id:"an.rdv",n:"Réserver le créneau correcteur du devoir 2",h:1,dev:1},
-     {id:"an.d2",n:"Devoir 2 — oral par téléphone",h:7,dev:1}]},
- ]},
- {id:"stg",name:"Expérience en milieu professionnel",code:"3-ST14",c:"var(--stg)",cid:19099,rows:[
-   {id:"stg.r",n:"Recherche et validation du stage",s:0,e:2,u:5,steps:[
-     {id:"stg.fr",n:"Lire la feuille de route",h:1},
-     {id:"stg.e1",n:"Étape 1 · Trouver son stage",h:14},
-     {id:"stg.e2",n:"Étape 2 · Faire valider son départ",h:3}]},
-   {id:"stg.f",n:"Stage en entreprise · 6 à 8 semaines",s:2,e:6,u:7,steps:[
-     {id:"stg.e3",n:"Étape 3 · Réaliser son stage",h:6},
-     {id:"stg.e4",n:"Étape 4 · Faire attester la fin de stage",h:2},
-     {id:"stg.val",n:"Valoriser son expérience (notes pour E6)",h:6}]},
- ]},
- {id:"exa",name:"Préparation aux épreuves",code:"",c:"var(--exa)",rows:[
-   {id:"exa.e6",n:"E6 · Valorisation du stage — oral 1 h",s:10,e:17,code:"3-E615",cid:21602,u:2,steps:[
-     {id:"e6.d",n:"Le dossier à construire",h:16},
-     {id:"e6.p",n:"Posture et techniques",h:6},
-     {id:"e6.pr",n:"Entraînement à la présentation",h:9},
-     {id:"e6.q",n:"Entraînement au questionnement du jury",h:9}]},
-   {id:"exa.e4",n:"E4 · Étude d'un système — écrit 6 h",s:15,e:19,code:"3-E415",cid:21600,u:2,steps:[
-     {id:"e4.s",n:"Stratégie pour réussir",h:3},
-     {id:"e4.ai",n:"Annale informatique 2025 + corrigé",h:8},
-     {id:"e4.ap",n:"Annale sciences physiques 2025 + corrigé",h:5},
-     {id:"e4.d1",n:"Devoir n°1 — Domaine professionnel",h:8,dev:1},
-     {id:"e4.d2",n:"Devoir n°2 — Sciences physiques",h:6,dev:1}]},
-   {id:"exa.e5",n:"E5 · Analyse de dossier — oral",s:16,e:19,code:"3-E515",cid:21601,u:2,steps:[
-     {id:"e5.p",n:"Préparation à l'épreuve orale",h:8},
-     {id:"e5.d",n:"Analyse du dossier — production 4 h",h:8,dev:1},
-     {id:"e5.rdv",n:"Prendre RDV et déposer 5 j avant",h:1,dev:1}]},
- ]},
-];
-
-const Y0=2026,M0=8;
-const qStart=q=>new Date(Y0,M0+Math.floor(q/2),q%2?16:1);
-const qEnd  =q=>q%2?new Date(Y0,M0+Math.floor(q/2)+1,1):new Date(Y0,M0+Math.floor(q/2),16);
-const T0=qStart(0).getTime(),T1=qEnd(19).getTime();
-
-const ALL=[],DEVS=[];
-GROUPS.forEach(g=>g.rows.forEach(r=>{
-  r.g=g; r.h=r.steps.reduce((a,s)=>a+s.h,0);
-  r.cid=r.cid||g.cid;
-  r.url=r.cid?CNED+r.cid+(r.u?"&section="+r.u:""):null;
-  const a=qStart(r.s).getTime(),b=qEnd(r.e-1).getTime(),span=b-a;
-  let cum=0;
-  r.steps.forEach(s=>{
-    s.row=r;s.g=g;s.t0=a+span*(cum/r.h);cum+=s.h;s.t1=a+span*(cum/r.h);
-    ALL.push(s); if(s.dev) DEVS.push(s);
-  });
-}));
-GROUPS.forEach(g=>{g.h=g.rows.reduce((a,r)=>a+r.h,0);
-  g.s=Math.min(...g.rows.map(r=>r.s));g.e=Math.max(...g.rows.map(r=>r.e));});
-const TOTAL_H=GROUPS.reduce((a,g)=>a+g.h,0);
-const byId={}; ALL.forEach(s=>byId[s.id]=s);
-
-function planned(t){let v=0;for(const s of ALL){
-  if(t>=s.t1)v+=s.h; else if(t>s.t0)v+=s.h*(t-s.t0)/(s.t1-s.t0);}return v;}
-function plannedDate(h){if(h<=0)return T0;let lo=T0,hi=T1;
-  for(let i=0;i<48;i++){const m=(lo+hi)/2;planned(m)<h?lo=m:hi=m;}return (lo+hi)/2;}
-
-/* ═════════ HORLOGE DE PARIS ═════════
-   NOW est l'instant de Paris réécrit dans le calendrier local du navigateur :
-   toutes les comparaisons se font donc sur l'heure de Paris, où que soit le lecteur. */
-let NOW=Date.now();
-const PF=new Intl.DateTimeFormat("fr-FR",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit",
-  hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});
-function parisNow(){
-  const p={}; PF.formatToParts(new Date()).forEach(x=>p[x.type]=x.value);
-  return new Date(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second).getTime();
-}
-const fmtD =t=>new Date(t).toLocaleDateString("fr-FR",{day:"numeric",month:"short"});
-const fmtDL=t=>new Date(t).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
-const hhmm =t=>new Date(t).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
-const iso  =d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-const sameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
-const plural=(n,w)=>n+" "+w+(Math.abs(n)>1?"s":"");
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
-function tickClock(){
-  NOW=parisNow(); const d=new Date(NOW);
-  document.getElementById("cdate").textContent=
-    d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-  document.getElementById("ctime").textContent=hhmm(NOW)+" Paris";
-  document.getElementById("cdN").textContent=Math.max(0,Math.ceil((EXAM-NOW)/DAY));
-}
-const nowQ=()=>{const d=new Date(NOW);
-  return Math.max(0,Math.min(19,(d.getFullYear()-Y0)*24+(d.getMonth()-M0)*2+(d.getDate()>15?1:0)));};
-
-/* ═════════ ÉTAT ═════════ */
-let done=Object.create(null), events=[], journal=[], subs=[], grades={};
-let canEdit=false, db=null;
-const R={};                    // refs db
-const LS="ciel2a.v3";
-let tmr={};
-function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({done,events,grades}));}catch(e){}}
-function loadLocal(){try{const r=JSON.parse(localStorage.getItem(LS)||"{}");
-  done=r.done||{};events=r.events||[];grades=r.grades||{};}catch(e){}}
-function setSync(k,t){document.getElementById("sdot").className="dot"+(k?" "+k:"");
-  document.getElementById("stxt").textContent=t;}
-
-let pendingLog=[], subCount=0;
-function log(text){
-  pendingLog.push(text);
-  journal.unshift({ts:new Date(NOW).toISOString(),text});
-  journal=journal.slice(0,150);
-}
-function saveState(){
-  saveLocal();
-  if(!canEdit) return;
-  clearTimeout(tmr.s); setSync("warn","enregistrement");
-  tmr.s=setTimeout(async()=>{
-    const lines=pendingLog.splice(0);
-    try{
-      const r=await fetch("/api/state",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({data:{done,events,grades},log:lines})});
-      if(r.status===403){canEdit=false;applyMode();setSync("warn","lecture seule");return;}
-      if(!r.ok) throw new Error(r.status);
-      setSync("ok","enregistré");
-      pull();
-    }catch(e){ pendingLog.unshift(...lines); setSync("warn","hors ligne — gardé en local"); }
-  },550);
-}
-const saveProgress=saveState, saveEvents=saveState, saveGrades=saveState;
-function saveSubs(){}
-
-async function pull(){
-  try{
-    const r=await fetch("/api/state",{cache:"no-store"});
-    if(!r.ok) throw new Error(r.status);
-    const j=await r.json();
-    canEdit=!!j.owner;
-    if(j.data&&typeof j.data==="object"){
-      done=j.data.done||{}; events=j.data.events||[]; grades=j.data.grades||{};
-      Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
-      saveLocal();
-    }
-    journal=Array.isArray(j.journal)?j.journal:[];
-    subs=Array.isArray(j.subs)?j.subs:[];
-    subCount=j.subCount||0;
-    setSync("ok",canEdit?"mode édition":"lecture publique");
-  }catch(e){ setSync("warn","hors ligne — données locales"); }
-  renderAll();
-}
-
-/* ═════════ CALCULS ═════════ */
-const doneH=r=>r.steps.reduce((a,s)=>a+(done[s.id]?s.h:0),0);
-const actualH=()=>ALL.reduce((a,s)=>a+(done[s.id]?s.h:0),0);
-const isLate=s=>!done[s.id]&&NOW>s.t1;
-const lateDays=s=>Math.floor((NOW-s.t1)/DAY);
-function pace(){
-  const ts=Object.values(done).map(v=>Date.parse(v)).filter(v=>v>0);
-  if(!ts.length) return 0;
-  const el=Math.max(NOW-Math.min(...ts),14*DAY), win=Math.min(28*DAY,el), since=NOW-win;
-  let h=0; for(const s of ALL){const t=Date.parse(done[s.id]); if(t>0&&t>=since)h+=s.h;}
-  return h/(win/(7*DAY));
-}
-function status(){
-  const act=actualH(),exp=planned(NOW),eq=plannedDate(act);
-  const days=Math.round((eq-NOW)/DAY), late=ALL.filter(isLate);
-  let kind,word,detail;
-  if(days>=3){kind="ahead";word="En avance";detail=`de ${plural(days,"jour")}`;}
-  else if(days<=-3){kind="late";word="En retard";detail=`de ${plural(-days,"jour")}`;}
-  else{kind="ontime";word="Dans les temps";detail="";}
-  return{act,exp,days,kind,word,detail,late,eq,gap:Math.round(act-exp),
-    pct:act/TOTAL_H*100,expPct:exp/TOTAL_H*100};
-}
-const COL={ahead:"var(--ahead)",ontime:"var(--ok)",late:"var(--late)"};
-const short=g=>g.name.split("—")[0].trim()
-  .replace("Enseignement général","Général").replace("Expérience en milieu professionnel","Stage")
-  .replace("Sciences physiques","Physique").replace("Préparation aux épreuves","Épreuves");
-
-/* ═════════ AUJOURD'HUI ═════════ */
-function renderToday(){
-  const st=status(),p=pace(),proj=p>0?Math.ceil((TOTAL_H-st.act)/p):null;
-  const hero=document.getElementById("hero");
-  hero.style.setProperty("--hc",COL[st.kind]);
-  document.getElementById("hbig").textContent=st.word+(st.detail?" "+st.detail:"");
-  document.getElementById("hsub").innerHTML= st.kind==="ontime"
-    ? `Tu es au niveau prévu pour aujourd'hui — <b>${Math.round(st.act)} h</b> validées sur les <b>${Math.round(st.exp)} h</b> attendues.`
-    : st.kind==="ahead"
-      ? `Le plan n'atteint ton niveau que le <b>${fmtDL(st.eq)}</b>. Tu as <b>${st.gap} h</b> d'avance.`
-      : `Le plan prévoyait ce niveau le <b>${fmtDL(st.eq)}</b>. Il te manque <b>${-st.gap} h</b> pour revenir sur la courbe.`;
-  document.getElementById("gfill").style.width=st.pct+"%";
-  const gm=document.getElementById("gmark");
-  gm.style.left=`calc(${st.expPct}% - 1px)`; gm.title=`Attendu aujourd'hui : ${Math.round(st.exp)} h`;
-  document.getElementById("hnums").innerHTML=`
-   <div class="hn"><div class="k">Validé</div><div class="v">${Math.round(st.act)} h</div></div>
-   <div class="hn"><div class="k">Attendu</div><div class="v">${Math.round(st.exp)} h</div></div>
-   <div class="hn"><div class="k">Écart</div><div class="v ${st.gap<0?"late":"ok"}">${st.gap>0?"+":""}${st.gap} h</div></div>
-   <div class="hn"><div class="k">Avancement</div><div class="v">${Math.round(st.pct)} %</div></div>
-   <div class="hn"><div class="k">En retard</div><div class="v ${st.late.length?"late":"ok"}">${st.late.length}</div></div>
-   <div class="hn"><div class="k">Rythme</div><div class="v">${p?p.toFixed(1):"—"} h/sem</div></div>
-   <div class="hn"><div class="k">Reste</div><div class="v">${Math.round(TOTAL_H-st.act)} h</div></div>
-   <div class="hn"><div class="k">Fin projetée</div><div class="v">${proj?plural(proj,"sem"):"—"}</div></div>`;
-
-  const pend=ALL.filter(s=>!done[s.id]&&s.t0<=NOW+30*DAY).sort((a,b)=>(a.t1-b.t1)||(b.h-a.h)).slice(0,7);
-  document.getElementById("queue").innerHTML=pend.length
-    ? pend.map((s,i)=>qRow(s,i+1)).join("") : `<div class="empty">✓ Rien d'ouvert dans les 30 prochains jours</div>`;
-  const lates=st.late.sort((a,b)=>a.t1-b.t1);
-  document.getElementById("lateq").innerHTML=lates.length
-    ? lates.slice(0,10).map(s=>qRow(s,null)).join("")+
-      (lates.length>10?`<div class="empty muted">+ ${lates.length-10} autres</div>`:"")
-    : `<div class="empty">✓ Aucune étape en retard</div>`;
-  document.getElementById("lateNote").textContent=
-    lates.length?`${lates.length} étape${lates.length>1?"s":""} dont l'échéance est passée`:"";
-}
-function qRow(s,rank){
-  const lt=isLate(s),soon=!lt&&s.t1-NOW<7*DAY;
-  const dis=canEdit?"":" disabled";
-  return `<label class="qitem" style="--c:${s.g.c}">
-    ${rank?`<span class="rank">${rank}</span>`:""}
-    <input type="checkbox" class="cb" data-cb="${s.id}"${dis}>
-    <span class="qbody"><span class="qtitle">${esc(s.row.n)} · ${esc(s.n)}</span>
-    <span class="qmeta"><span class="grp">${short(s.g)}</span><span>${s.h} h</span>
-      <span>échéance ${fmtD(s.t1)}</span>
-      ${lt?`<span class="lt">retard ${plural(lateDays(s),"jour")}</span>`:""}
-      ${soon?`<span class="so">bientôt</span>`:""}
-      ${s.date?`<span class="lt">ouvre le ${s.date}</span>`:""}
-      ${s.row.url?`<a href="${s.row.url}" target="_blank" rel="noopener">cours ↗</a>`:""}
-    </span></span></label>`;
-}
-
-/* ═════════ CALENDRIER ═════════ */
-let calCur=null,calSel=null;
-
-/* Rappels automatiques : le 1er de chaque mois, revérifier l'espace CNED.
-   De nouveaux devoirs, corrigés ou sections peuvent y être publiés en cours d'année. */
-const SCAN=(()=>{const out=[];
-  for(let m=1;m<=9;m++){const d=new Date(Y0,M0+m,1);
-    out.push({id:"scan"+m,system:true,date:iso(d),time:"09:00",dur:0.5,
-      title:"Rafraîchir le scan CNED",
-      note:"nouveaux devoirs, corrigés ou sections depuis le dernier relevé"});}
-  return out;})();
-const allEvents=()=>events.concat(SCAN);
-function evOn(t,tEnd){return allEvents().filter(e=>{const d=new Date(e.date+"T00:00").getTime();
-  return d>=t&&d<tEnd;});}
-function renderCal(){
-  const today=new Date(NOW);
-  if(!calCur) calCur=new Date(today.getFullYear(),today.getMonth(),1);
-  document.getElementById("calM").textContent=MFULL[calCur.getMonth()]+" "+calCur.getFullYear();
-  const first=new Date(calCur.getFullYear(),calCur.getMonth(),1);
-  const start=new Date(first); start.setDate(1-((first.getDay()+6)%7));
-  let h=DOW.map(d=>`<div class="dow">${d}</div>`).join("");
-  for(let i=0;i<42;i++){
-    const d=new Date(start);d.setDate(start.getDate()+i);
-    const t=d.getTime(),tE=t+DAY;
-    const due=ALL.filter(s=>s.t1>=t&&s.t1<tE);
-    const evs=evOn(t,tE);
-    const act=ALL.filter(s=>s.t0<tE&&s.t1>=t&&!done[s.id]);
-    const grps=[...new Set(act.map(s=>s.g.c))];
-    const chips=evs.map(e=>`<span class="chip ev${e.system?" sys":""}">${esc(e.title)}</span>`)
-      .concat(due.map(s=>`<span class="chip${done[s.id]?" done":""}${isLate(s)?" late":""}" style="--c:${s.g.c}">${esc(s.n)}</span>`));
-    h+=`<div class="day${d.getMonth()!==calCur.getMonth()?" out":""}${sameDay(d,today)?" today":""}${calSel&&sameDay(d,calSel)?" sel":""}" data-d="${t}">
-      <span class="num">${d.getDate()}</span>${chips.slice(0,2).join("")}
-      ${chips.length>2?`<span class="more">+${chips.length-2}</span>`:""}
-      <span class="dots">${grps.map(c=>`<i style="--c:${c}"></i>`).join("")}</span></div>`;
-  }
-  document.getElementById("cal").innerHTML=h;
-  document.querySelectorAll(".day").forEach(el=>el.onclick=()=>{
-    calSel=new Date(+el.dataset.d);
-    const di=document.getElementById("evD"); if(di) di.value=iso(calSel);
-    renderCal();});
-  renderDayPanel();
-}
-function renderDayPanel(){
-  const d=calSel||new Date(NOW),t=d.getTime(),tE=t+DAY;
-  const act=ALL.filter(s=>s.t0<tE&&s.t1>=t), evs=evOn(t,tE);
-  let h=`<div class="dph">${fmtDL(t)}${sameDay(d,new Date(NOW))?" — aujourd'hui":""}</div>`;
-  if(evs.length) h+=`<div class="queue" style="margin-bottom:.5rem">`+evs.map(e=>`
-    <div class="qitem" style="--c:${e.system?"var(--warn)":"var(--evt)"}"><span class="qbody">
-      <span class="qtitle">${esc(e.title)}</span>
-      <span class="qmeta"><span class="grp">${e.system?"rappel automatique":"mon événement"}</span>
-        ${e.time?`<span>${esc(e.time)}</span>`:""}${e.dur?`<span>${e.dur} h</span>`:""}
-        ${e.note?`<span>${esc(e.note)}</span>`:""}
-        ${e.link?`<a href="${esc(e.link)}" target="_blank" rel="noopener">ouvrir ↗</a>`:""}
-        ${e.system?`<a href="https://eformation.cned.fr/my/courses.php" target="_blank" rel="noopener">ouvrir le CNED ↗</a>`:""}
-      </span></span>
-      ${canEdit&&!e.system?`<button class="btn" data-del="${e.id}" title="Supprimer">✕</button>`:""}
-    </div>`).join("")+`</div>`;
-  h+= act.length? `<div class="queue">${act.map(s=>qRow(s,null)).join("")}</div>`
-                : (evs.length?"":`<div class="empty muted">Aucune étape planifiée ce jour</div>`);
-  document.getElementById("daypanel").innerHTML=h;
-}
-
-/* ═════════ GANTT ═════════ */
-const col=v=>v+2;
-function buildGantt(){
-  const g=document.getElementById("gantt"),NQ=nowQ();
-  let h='<div class="corner"></div>';
-  MONTHS.forEach((m,i)=>h+=`<div class="mcell${Math.floor(NQ/2)===i?" now":""}">${m}</div>`);
-  GROUPS.forEach((grp,gi)=>{
-    if(gi)h+='<div class="spacer"></div>';
-    h+=`<div class="glabel grp">${grp.name}${grp.code?`<span class="code">${grp.code}</span>`:""}<span class="code">${grp.h} h</span></div>
-      <div class="lane grp"><div class="bar grp" data-g="${grp.id}" style="--c:${grp.c};grid-column:${col(grp.s)}/${col(grp.e)}"><div class="fill"></div></div></div>`;
-    grp.rows.forEach(r=>{
-      h+=`<div class="glabel sub" data-lab="${r.id}" title="${esc(r.n)}">${r.url?`<a href="${r.url}" target="_blank" rel="noopener" style="color:inherit">${esc(r.n)}</a>`:esc(r.n)}${r.code?`<span class="code">${r.code}</span>`:""}</div>
-        <div class="lane"><div class="bar" data-r="${r.id}" style="--c:${grp.c};grid-column:${col(r.s)}/${col(r.e)}">
-          <div class="fill"></div><span class="blab"></span></div></div>`;
-    });
-  });
-  g.innerHTML=h;
-  document.getElementById("legend").innerHTML=
-    GROUPS.map(gp=>`<span class="li"><span class="sw" style="background:${gp.c}"></span>${short(gp)} — ${gp.h} h</span>`).join("")+
-    `<span class="li" style="margin-left:auto" class="muted">Clique le nom d'un lot pour ouvrir le cours sur eformation.cned.fr</span>`;
-}
-function paintGantt(){
-  GROUPS.forEach(g=>{
-    let gd=0;
-    g.rows.forEach(r=>{
-      const d=doneH(r);gd+=d;const pc=r.h?d/r.h*100:0,late=r.steps.some(isLate);
-      const bar=document.querySelector(`[data-r="${r.id}"]`);
-      if(bar){bar.querySelector(".fill").style.width=pc+"%";
-        bar.querySelector(".blab").textContent=`${d}/${r.h} h`;
-        bar.classList.toggle("done",pc>=99.5);bar.classList.toggle("lt",late&&pc<99.5);}
-      const lab=document.querySelector(`[data-lab="${r.id}"]`);
-      if(lab){lab.classList.toggle("full",pc>=99.5);lab.classList.toggle("lt",late&&pc<99.5);}
-      const rh=document.querySelector(`[data-rh="${r.id}"]`);if(rh)rh.textContent=`${d}/${r.h} h`;
-    });
-    const gp=g.h?gd/g.h*100:0;
-    const f=document.querySelector(`[data-g="${g.id}"] .fill`);if(f)f.style.width=gp+"%";
-    const mi=document.querySelector(`[data-mini="${g.id}"]`);if(mi)mi.style.width=gp+"%";
-    const ct=document.querySelector(`[data-ct="${g.id}"]`);if(ct)ct.textContent=`${gd}/${g.h} h`;
-  });
-}
-
-/* ═════════ ÉTAPES ═════════ */
-function buildAcc(){
-  document.getElementById("acc").innerHTML=GROUPS.map(g=>`
-   <div class="grpblk" style="--c:${g.c}">
-     <div class="grphd" role="button" tabindex="0" aria-expanded="false">
-       <span class="car">▶</span><span class="nm">${g.name}</span>
-       <span class="mini"><i data-mini="${g.id}"></i></span>
-       <span class="ct" data-ct="${g.id}">0/${g.h} h</span></div>
-     <div class="grpbody">${g.rows.map(r=>`
-       <div><div class="rowhd">${r.url?`<a href="${r.url}" target="_blank" rel="noopener">${esc(r.n)} ↗</a>`:esc(r.n)}
-         <span class="rh" data-rh="${r.id}">0/${r.h} h</span></div>
-       <div class="steps">${r.steps.map(s=>`
-         <label class="step" data-step="${s.id}">
-           <input type="checkbox" class="cb" data-cb="${s.id}">
-           <span class="lbl">${esc(s.n)}${s.date?` <b class="mono" style="color:var(--sig)">${s.date}</b>`:""}</span>
-           <span class="hh">${s.h} h</span></label>`).join("")}</div></div>`).join("")}</div>
-   </div>`).join("");
-  document.querySelectorAll(".grphd").forEach(hd=>{
-    const t=()=>{const b=hd.parentElement;b.classList.toggle("open");
-      hd.setAttribute("aria-expanded",b.classList.contains("open"));};
-    hd.onclick=t; hd.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();t();}};
-  });
-  document.getElementById("expandAll").onclick=()=>document.querySelectorAll(".grpblk").forEach(b=>b.classList.add("open"));
-  document.getElementById("collapseAll").onclick=()=>document.querySelectorAll(".grpblk").forEach(b=>b.classList.remove("open"));
-}
-
-/* ═════════ COURBE ═════════ */
-function renderCurve(){
-  const W=900,H=330,L=52,Rr=14,Tp=16,B=34,iw=W-L-Rr,ih=H-Tp-B;
-  const x=t=>L+iw*(t-T0)/(T1-T0), y=v=>Tp+ih*(1-v/TOTAL_H);
-  let plan="";for(let i=0;i<=120;i++){const t=T0+(T1-T0)*i/120;
-    plan+=(i?"L":"M")+x(t).toFixed(1)+" "+y(planned(t)).toFixed(1);}
-  const ev=ALL.filter(s=>done[s.id]).map(s=>({t:Date.parse(done[s.id])||T0,h:s.h})).sort((a,b)=>a.t-b.t);
-  let real="M"+x(T0).toFixed(1)+" "+y(0).toFixed(1),cum=0,lastT=T0;
-  ev.forEach(e=>{real+="L"+x(e.t).toFixed(1)+" "+y(cum).toFixed(1);cum+=e.h;
-    real+="L"+x(e.t).toFixed(1)+" "+y(cum).toFixed(1);lastT=e.t;});
-  real+="L"+x(Math.max(NOW,lastT)).toFixed(1)+" "+y(cum).toFixed(1);
-  const p=pace();let proj="";
-  if(p>0&&cum<TOTAL_H){const end=Math.min(NOW+(TOTAL_H-cum)/p*7*DAY,T1);
-    proj=`M${x(NOW).toFixed(1)} ${y(cum).toFixed(1)}L${x(end).toFixed(1)} ${y(Math.min(cum+p*(end-NOW)/(7*DAY),TOTAL_H)).toFixed(1)}`;}
-  let grid="",lbl="";
-  for(let v=0;v<=TOTAL_H;v+=200){
-    grid+=`<line x1="${L}" y1="${y(v)}" x2="${W-Rr}" y2="${y(v)}" stroke="var(--rule2)" stroke-width="1" fill="none"/>`;
-    lbl+=`<text x="${L-7}" y="${y(v)+3.5}" text-anchor="end" font-size="10" fill="var(--ink3)" font-family="IBM Plex Mono,monospace">${v}</text>`;}
-  for(let m=0;m<10;m++){const t=new Date(Y0,M0+m,1).getTime();
-    lbl+=`<text x="${x(t)}" y="${H-13}" text-anchor="middle" font-size="10" fill="var(--ink3)" font-family="IBM Plex Mono,monospace">${MONTHS[m]}</text>`;}
-  document.getElementById("chartbox").innerHTML=`
-   <svg class="curve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Heures cumulées : plan prévu contre progression réelle">
-     ${grid}${lbl}
-     <line x1="${x(NOW)}" y1="${Tp}" x2="${x(NOW)}" y2="${Tp+ih}" stroke="var(--sig)" stroke-width="1.5" fill="none"/>
-     <text x="${x(NOW)+4}" y="${Tp+11}" font-size="10" fill="var(--sig)" font-family="IBM Plex Mono,monospace">aujourd'hui</text>
-     <path d="${plan}" fill="none" stroke="var(--ink3)" stroke-width="2" stroke-dasharray="6 4"/>
-     ${proj?`<path d="${proj}" fill="none" stroke="var(--ahead)" stroke-width="2" stroke-dasharray="2 3"/>`:""}
-     <path d="${real}" fill="none" stroke="var(--ok)" stroke-width="2.5" stroke-linejoin="round"/>
-     <circle cx="${x(Math.max(NOW,lastT))}" cy="${y(cum)}" r="4" fill="var(--ok)"/>
-     <text x="${L}" y="${Tp-4}" font-size="10" fill="var(--ink3)" font-family="IBM Plex Mono,monospace">heures cumulées — objectif ${TOTAL_H} h</text>
-   </svg>`;
-  const st=status();
-  document.getElementById("curveNote").innerHTML=
-    `Rythme réel <b class="mono">${p?p.toFixed(1):"0"} h/sem</b> · plan <b class="mono">${(TOTAL_H/43).toFixed(1)} h/sem</b>`+
-    (st.kind!=="ontime"?` · <b style="color:${COL[st.kind]}">${st.word} ${st.detail}</b>`:"");
-}
-
-/* ═════════ MATRICE ═════════ */
-function classify(s){
-  const urgent=s.t0<=NOW+14*DAY||isLate(s)||!!s.date;
-  const important=s.h>=8||!!s.dev||s.g.id==="b3";
-  return urgent?(important?1:3):(important?2:4);
-}
-function mlabel(s){
-  const ctx=/^(Mission|Entrée en matière|Synthèse)/.test(s.n)
-    ? s.row.n.replace(/^(SP \d+|Activité \d+) · /,"$1 ")+" · ":"";
-  return `<b>${short(s.g)}</b> ${ctx}${esc(s.n)} — <span class="h">${s.h} h</span>`+
-    (isLate(s)?` <b class="mono" style="color:var(--late)">retard ${lateDays(s)} j</b>`:"");
-}
-const STATIC4=["Refaire les quiz d'entrée déjà réussis",
- "Parcourir la « Boîte à outils » sans objectif précis",
- "Remettre au propre des prises de notes déjà lisibles",
- "Forum entre élèves hors question bloquante — le tuteur répond sous 48 h"];
-function renderMx(){
-  const b={1:[],2:[],3:[],4:[]};
-  ALL.filter(s=>!done[s.id]).forEach(s=>b[classify(s)].push(s));
-  [1,2,3,4].forEach(k=>b[k].sort((x,y)=>(x.t1-y.t1)||(y.h-x.h)));
-  [1,2,3].forEach(k=>{
-    const l=b[k],sh=l.slice(0,6),ex=l.length-sh.length;
-    document.getElementById("n"+k).textContent=l.length;
-    document.getElementById("q"+k).innerHTML=l.length
-      ? sh.map(s=>`<li>${mlabel(s)}</li>`).join("")+(ex>0?`<li class="muted">+ ${ex} autre${ex>1?"s":""}</li>`:"")
-      : `<div class="empty">✓ Rien en attente ici</div>`;});
-  const q4=b[4];
-  document.getElementById("n4").textContent=q4.length+STATIC4.length;
-  document.getElementById("q4").innerHTML=STATIC4.map(t=>`<li>${t}</li>`).join("")+
-    q4.slice(0,3).map(s=>`<li>${mlabel(s)}</li>`).join("")+
-    (q4.length>3?`<li class="muted">+ ${q4.length-3} étapes non prioritaires</li>`:"");
-  const nb=ALL.filter(s=>done[s.id]).length;
-  document.getElementById("mxnote").innerHTML=
-    `Recalculée à l'heure de Paris · <b class="mono" style="color:var(--ok)">${nb}</b> sortie${nb>1?"s":""} de la matrice`;
-}
-
-/* ═════════ NOTES ═════════ */
-function renderGrades(){
-  const vals=DEVS.map(s=>({s,v:grades[s.id]})).filter(x=>typeof x.v==="number"&&!isNaN(x.v));
-  const avg=vals.length?vals.reduce((a,x)=>a+x.v,0)/vals.length:null;
-  const best=vals.length?Math.max(...vals.map(x=>x.v)):null;
-  const worst=vals.length?Math.min(...vals.map(x=>x.v)):null;
-  document.getElementById("gsum").innerHTML=`
-    <div class="hn"><div class="k">Moyenne générale</div><div class="avg">${avg!==null?avg.toFixed(2):"—"}<span style="font-size:.8rem;color:var(--ink3)"> /20</span></div></div>
-    <div class="hn"><div class="k">Notes saisies</div><div class="v">${vals.length} / ${DEVS.length}</div></div>
-    <div class="hn"><div class="k">Meilleure</div><div class="v ok">${best!==null?best.toFixed(1):"—"}</div></div>
-    <div class="hn"><div class="k">Plus basse</div><div class="v ${worst!==null&&worst<10?"late":""}">${worst!==null?worst.toFixed(1):"—"}</div></div>`;
-  let h=`<thead><tr><th>Devoir ou évaluation</th><th>Matière</th><th style="text-align:right">Note /20</th></tr></thead><tbody>`;
-  DEVS.forEach(s=>{
-    const v=grades[s.id];
-    h+=`<tr><td>${esc(s.n)}</td><td style="color:var(--ink3)">${short(s.g)}</td>
-      <td class="num"><input type="number" min="0" max="20" step="0.25" data-gr="${s.id}"
-        value="${typeof v==="number"?v:""}" placeholder="—"${canEdit?"":" disabled"}></td></tr>`;});
-  document.getElementById("gtab").innerHTML=h+"</tbody>";
-}
-
-/* ═════════ JOURNAL ═════════ */
-function renderJournal(){
-  document.getElementById("tnJ").textContent=journal.length||"";
-  document.getElementById("jNote").textContent=
-    journal.length?`${journal.length} entrée${journal.length>1?"s":""} — la plus récente en haut`:"";
-  document.getElementById("jlist").innerHTML=journal.length
-    ? journal.slice(0,80).map(j=>`<div class="jrow" style="--c:var(--evt)">
-        <span class="jt">${new Date(j.ts).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})} ${hhmm(Date.parse(j.ts))}</span>
-        <span>${esc(j.text)}</span></div>`).join("")
-    : `<div class="empty muted">Rien encore. Chaque action de Gabriel s'inscrira ici.</div>`;
-  document.getElementById("subs").innerHTML= canEdit
-    ? (subs.length
-        ? subs.map((e,i)=>`<span class="pill">${esc(e)}<button data-sub="${i}" title="Retirer">✕</button></span>`).join("")
-        : `<span class="muted" style="font-size:.73rem">Aucun abonné pour l'instant.</span>`)
-    : `<span class="muted" style="font-size:.73rem">${subCount} personne${subCount>1?"s":""} ${subCount>1?"suivent":"suit"} ce planning.</span>`;
-}
-function makeDigest(){
-  const st=status();
-  const since=NOW-7*DAY;
-  const recent=journal.filter(j=>Date.parse(j.ts)>=since);
-  const L=[];
-  L.push(`Point hebdomadaire — BTS CIEL 2A (Gabriel)`);
-  L.push(new Date(NOW).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}));
-  L.push("");
-  L.push(`Statut : ${st.word}${st.detail?" "+st.detail:""}`);
-  L.push(`Avancement : ${Math.round(st.act)} h sur ${TOTAL_H} h (${Math.round(st.pct)} %)`);
-  L.push(`Rythme : ${pace().toFixed(1)} h par semaine`);
-  L.push(`Étapes en retard : ${st.late.length}`);
-  L.push(`Jours avant la session 2027 : ${Math.max(0,Math.ceil((EXAM-NOW)/DAY))}`);
-  L.push("");
-  L.push(recent.length?`Changements des 7 derniers jours (${recent.length}) :`:"Aucun changement cette semaine.");
-  recent.slice(0,25).forEach(j=>L.push("  · "+new Date(j.ts).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})+" — "+j.text));
-  const next=ALL.filter(s=>!done[s.id]&&s.t0<=NOW+14*DAY).sort((a,b)=>a.t1-b.t1).slice(0,5);
-  if(next.length){L.push("");L.push("À venir :");
-    next.forEach(s=>L.push(`  · ${s.row.n} · ${s.n} — ${s.h} h, échéance ${fmtD(s.t1)}`));}
-  return L.join("\n");
-}
-
-/* ═════════ ORCHESTRATION ═════════ */
-function applyMode(){
-  document.getElementById("robar").hidden=canEdit;
-  document.getElementById("evf").hidden=!canEdit;
-  document.getElementById("loginf").hidden=canEdit;
-  document.getElementById("logout").hidden=!canEdit;
-  document.querySelectorAll("input[data-cb],input[data-gr]").forEach(i=>i.disabled=!canEdit);
-}
-function syncChecks(){
-  document.querySelectorAll("input[data-cb]").forEach(cb=>{
-    const on=!!done[cb.dataset.cb];cb.checked=on;
-    const st=cb.closest(".step");
-    if(st){st.classList.toggle("on",on);st.classList.toggle("lt",isLate(byId[cb.dataset.cb]));}
-    cb.disabled=!canEdit;});
-}
-let painting=false;
-function renderAll(){
-  painting=true;
-  renderToday();paintGantt();renderMx();renderGrades();renderJournal();
-  if(!document.querySelector('[data-panel="cal"]').hidden) renderCal();
-  if(!document.querySelector('[data-panel="curve"]').hidden) renderCurve();
-  syncChecks();applyMode();
-  const nd=ALL.filter(s=>done[s.id]).length;
-  document.getElementById("tnTodo").textContent=ALL.length-nd;
-  painting=false;
-}
-document.addEventListener("change",e=>{
-  if(painting) return;
-  const cb=e.target.closest("input[data-cb]");
-  if(cb){
-    if(!canEdit){cb.checked=!cb.checked;return;}
-    const s=byId[cb.dataset.cb],on=cb.checked;
-    const item=cb.closest(".qitem");
-    const apply=()=>{
-      if(on) done[s.id]=new Date(NOW).toISOString(); else delete done[s.id];
-      log(`${on?"a terminé":"a rouvert"} : ${s.row.n} · ${s.n} (${s.h} h)`);
-      saveProgress();renderAll();};
-    if(item&&on){item.classList.add("going");setTimeout(apply,260);} else apply();
-    return;
-  }
-  const gr=e.target.closest("input[data-gr]");
-  if(gr&&canEdit){
-    const v=parseFloat(gr.value);
-    const s=byId[gr.dataset.gr];
-    if(isNaN(v)) delete grades[gr.dataset.gr]; else grades[gr.dataset.gr]=Math.max(0,Math.min(20,v));
-    log(isNaN(v)?`a effacé la note de ${s.n}`:`a saisi ${grades[gr.dataset.gr]}/20 en ${short(s.g)} — ${s.n}`);
-    saveGrades();renderGrades();
-  }
-});
-document.getElementById("tabs").addEventListener("click",e=>{
-  const b=e.target.closest("button[data-tab]"); if(!b) return;
-  document.querySelectorAll("#tabs button").forEach(x=>x.setAttribute("aria-selected",x===b));
-  document.querySelectorAll("section[data-panel]").forEach(s=>s.hidden=s.dataset.panel!==b.dataset.tab);
-  if(b.dataset.tab==="cal") renderCal();
-  if(b.dataset.tab==="curve") renderCurve();
-});
-document.getElementById("prevM").onclick=()=>{calCur.setMonth(calCur.getMonth()-1);renderCal();};
-document.getElementById("nextM").onclick=()=>{calCur.setMonth(calCur.getMonth()+1);renderCal();};
-document.getElementById("todayM").onclick=()=>{const d=new Date(NOW);
-  calCur=new Date(d.getFullYear(),d.getMonth(),1);calSel=d;renderCal();};
-
-document.getElementById("evf").addEventListener("submit",e=>{
-  e.preventDefault(); if(!canEdit) return;
-  const t=document.getElementById("evT").value.trim(), d=document.getElementById("evD").value;
-  if(!t||!d) return;
-  const ev={id:"e"+Date.now().toString(36),title:t,date:d,
-    time:document.getElementById("evH").value,
-    dur:parseFloat(document.getElementById("evR").value)||0,
-    link:document.getElementById("evL").value.trim()};
-  events.push(ev); events.sort((a,b)=>a.date.localeCompare(b.date));
-  log(`a ajouté un événement : « ${t} » le ${new Date(d+"T00:00").toLocaleDateString("fr-FR",{day:"numeric",month:"long"})}`);
-  saveEvents();
-  document.getElementById("evT").value="";document.getElementById("evL").value="";
-  renderCal();renderJournal();
-});
-document.addEventListener("click",e=>{
-  const del=e.target.closest("[data-del]");
-  if(del&&canEdit){const ev=events.find(x=>x.id===del.dataset.del);
-    events=events.filter(x=>x.id!==del.dataset.del);
-    if(ev) log(`a supprimé l'événement « ${ev.title} »`);
-    saveEvents();renderCal();renderJournal();return;}
-  const sb=e.target.closest("[data-sub]");
-  if(sb&&canEdit){const em=subs[+sb.dataset.sub];
-    fetch("/api/subscribe",{method:"DELETE",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({email:em})}).then(pull);}
-});
-document.getElementById("subf").addEventListener("submit",async e=>{
-  e.preventDefault();
-  const inp=document.getElementById("subE"), v=inp.value.trim().toLowerCase();
-  if(!v) return;
-  const btn=e.target.querySelector("button"); btn.disabled=true; btn.textContent="…";
-  try{
-    const r=await fetch("/api/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({email:v})});
-    btn.textContent=r.ok?"Inscrit ✓":"Refusé";
-    if(r.ok){ inp.value=""; await pull(); }
-  }catch(err){ btn.textContent="Échec"; }
-  setTimeout(()=>{btn.disabled=false;btn.textContent="M'abonner";},1800);
-});
-document.getElementById("mkDigest").onclick=()=>{
-  const txt=makeDigest();
-  document.getElementById("digest").value=txt;
-  document.getElementById("mailDigest").href=
-    "mailto:?bcc="+encodeURIComponent(subs.join(","))+
-    "&subject="+encodeURIComponent("Point hebdomadaire — BTS CIEL 2A")+
-    "&body="+encodeURIComponent(txt);
-};
-document.getElementById("cpDigest").onclick=async()=>{
-  const ta=document.getElementById("digest");
-  if(!ta.value) ta.value=makeDigest();
-  try{await navigator.clipboard.writeText(ta.value);
-    document.getElementById("cpDigest").textContent="Copié ✓";
-    setTimeout(()=>document.getElementById("cpDigest").textContent="Copier",1600);}
-  catch(err){ta.select();}
-};
-
-/* démarrage */
-loadLocal();
-Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
-tickClock(); buildGantt(); buildAcc();
-document.getElementById("evD").value=iso(new Date(NOW));
-renderAll(); setSync("","local");
-setInterval(()=>{tickClock();renderAll();},60000);
-document.addEventListener("visibilitychange",()=>{if(!document.hidden){tickClock();renderAll();}});
-
-document.getElementById("loginf").addEventListener("submit",async e=>{
-  e.preventDefault();
-  const inp=document.getElementById("pass"), code=inp.value;
-  if(!code) return;
-  setSync("warn","vérification");
-  try{
-    const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({code})});
-    if(r.ok){ inp.value=""; await pull(); }
-    else { const j=await r.json().catch(()=>({})); setSync("warn",j.error||"code incorrect"); }
-  }catch(err){ setSync("warn","connexion impossible"); }
-});
-document.getElementById("logout").addEventListener("click",async()=>{
-  await fetch("/api/login",{method:"DELETE"}); await pull();
-});
-
-pull();
-setInterval(pull,120000);
-</script>
+</section>
+<script type="module" src="app.js"></script>
 </body>
 </html>
