@@ -1,0 +1,7 @@
+{
+  "name": "pilote-ciel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pilote de formation BTS CIEL 2A — planning public, edition privee, lettre d'information",
+  "engines": { "node": ">=20" }
+}
