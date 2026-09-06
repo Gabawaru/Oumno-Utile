@@ -1,7 +1,8 @@
 import { creerClient } from "./supa.js";
 import { MONTHS, MFULL, DOW, DAY, TZ, CNED, EXAM, GROUPS } from "./planning.js";
 import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree,
-         trouverCreneaux, iso as isoJour } from "./planificateur.js";
+         trouverCreneaux, creneauxTexte, plusLongCreneau, normaliserCapacites,
+         hhmm as enHeure, min as enMin, iso as isoJour } from "./planificateur.js";
 
 const SUPABASE_URL = "https://hnmeefndnckqkdjjbgwe.supabase.co";
 const SUPABASE_KEY = "sb_publishable_ciLHalsy_YvWIUbEbCnN2g_TZfT4aPU";
@@ -93,7 +94,7 @@ function appliquerEtat(d){
   done      = d.done      || {};
   events    = d.evenements|| d.events || [];
   grades    = d.notes     || d.grades || {};
-  capacites = Object.assign({0:2,1:5,2:5,3:5,4:5,5:5,6:3}, d.capacites||{});
+  capacites = normaliserCapacites(d.capacites);
   reports   = d.reports   || {};
   Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
 }
@@ -524,76 +525,75 @@ const minuitLocal = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); retu
 /* ═════════ ZONE DE TÂCHE D'UN JOUR ═════════ */
 function renderZone() {
   const d = calSel || new Date(NOW);
-  const t = minuitLocal(d.getTime()), tE = t + DAY, cle = isoJour(d);
+  const t = minuitLocal(d.getTime()), cle = isoJour(d);
   const b = bilanJour(plan.jours, cle);
-  const evs = evOn(t, tE), scans = scanOn(t, tE);
   const auj = sameDay(d, new Date(NOW));
+  const scans = scanOn(t, t + DAY);
 
   let h = `<div class="dph">${fmtDL(t)}${auj ? " — aujourd'hui" : ""}</div>`;
 
   if (b) {
-    const pc = (v) => Math.min(100, (v / Math.max(b.cap, 0.5)) * 100);
-    h += `<div class="jauge" title="Capacité ${b.cap} h">
-      <i class="occ" style="width:${pc(b.occupe)}%"></i>
-      <i class="trv" style="left:${pc(b.occupe)}%;width:${pc(b.travail)}%"></i>
-    </div>
-    <div class="jlegende">
-      <span><b class="mono">${b.cap} h</b> de capacité</span>
-      <span class="occ-t"><b class="mono">${b.occupe} h</b> pris par tes événements</span>
-      <span class="trv-t"><b class="mono">${b.travail} h</b> de travail placé</span>
-      <span class="${b.libre > 0 ? "lib-t" : "plein-t"}"><b class="mono">${b.libre} h</b> ${b.libre > 0 ? "libre" : "— journée pleine"}</span>
-      ${b.surcharge > 0 ? `<span class="plein-t"><b class="mono">${b.surcharge.toFixed(1)} h</b> au-delà de ta capacité</span>` : ""}
+    const libres = creneauxTexte(b);
+    h += `<div class="jlegende">
+      <span><b class="mono">${b.travail} h</b> de travail placé</span>
+      ${b.occupe > 0 ? `<span class="occ-t"><b class="mono">${b.occupe} h</b> d'événements</span>` : ""}
+      ${b.perdu > 0 ? `<span class="plein-t">${b.perdu} h de travail déplacées ailleurs</span>` : ""}
+      <span class="lib-t">Libre : ${libres.length ? libres.join(" · ") : "rien"}</span>
     </div>`;
   }
 
   h += `<div id="alerte"></div>`;
 
-  if (scans.length) {
-    h += `<div class="queue"><div class="qitem" style="--c:var(--warn)"><span class="qbody">
-      <span class="qtitle">Rafraîchir le scan CNED</span>
-      <span class="qmeta"><span class="grp">rappel automatique</span>
-        <span>de nouveaux devoirs ont pu être publiés</span>
-        <a href="https://eformation.cned.fr/my/courses.php" target="_blank" rel="noopener">ouvrir le CNED ↗</a>
-      </span></span></div></div>`;
-  }
+  // Frise de la journée : événements, travail, temps libre, dans l'ordre.
+  if (b) {
+    const items = [
+      ...b.evenements.map((e) => ({ d: e.plage[0], f: e.plage[1], type: e.urgent ? "urgent" : "ev", ev: e })),
+      ...b.blocs.map((x) => ({ d: x.debut, f: x.fin, type: "trav", bloc: x })),
+      ...(b.creneaux || []).filter((s2) => s2[1] - s2[0] >= 30).map((s2) => ({ d: s2[0], f: s2[1], type: "libre" })),
+    ].sort((x, y) => x.d - y.d);
 
-  if (evs.length) {
-    h += `<div class="soustitre">Tes événements</div><div class="queue">` + evs.map((e) => `
-      <div class="qitem" style="--c:var(--evt)"><span class="qbody">
-        <span class="qtitle">${esc(e.titre || e.title)}</span>
-        <span class="qmeta"><span class="grp">${e.debut ? `${e.debut} → ${e.fin}` : "toute la journée"}</span>
-          <span>${duree(e).toFixed(1)} h</span>
+    h += `<div class="soustitre">La journée, heure par heure</div><div class="frise">`;
+    if (scans.length) {
+      h += `<div class="ligne sys"><span class="hh">09:00</span>
+        <span class="quoi"><b>Rafraîchir le scan CNED</b>
+        <a href="https://eformation.cned.fr/my/courses.php" target="_blank" rel="noopener">ouvrir ↗</a></span></div>`;
+    }
+    h += items.map((x) => {
+      const plage = `${enHeure(x.d)} – ${enHeure(x.f)}`;
+      const dur = ((x.f - x.d) / 60).toFixed(1).replace(".0", "");
+      if (x.type === "libre") {
+        return `<div class="ligne libre"><span class="hh">${plage}</span>
+          <span class="quoi">Libre · ${dur} h</span></div>`;
+      }
+      if (x.type === "trav") {
+        const e = x.bloc.etape;
+        const part = Math.round(((x.f - x.d) / 60 / e.h) * 100);
+        return `<label class="ligne trav${x.bloc.retard ? " retard" : ""}" style="--c:${e.g.c}">
+          <span class="hh">${plage}</span>
+          <span class="quoi"><input type="checkbox" class="cb" data-cb="${e.id}"${canEdit ? "" : " disabled"}>
+            <b>${esc(e.n)}</b> <em>${esc(e.row.n)}</em>
+            <span class="part">${dur} h sur ${e.h} h${part < 100 ? ` · ${part} % de l'étape` : ""}</span>
+            ${x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
+            ${e.row.url ? `<a href="${e.row.url}" target="_blank" rel="noopener">cours ↗</a>` : ""}
+          </span></label>`;
+      }
+      const e = x.ev;
+      return `<div class="ligne ${x.type}"><span class="hh">${plage}</span>
+        <span class="quoi"><b>${esc(e.titre || e.title)}</b>
+          ${e.urgent ? `<span class="urg">urgent</span>` : ""}
           ${e.lien ? `<a href="${esc(e.lien)}" target="_blank" rel="noopener">ouvrir ↗</a>` : ""}
-        </span></span>
-        ${canEdit ? `<button class="btn" data-del="${e.id}" title="Supprimer">✕</button>` : ""}
-      </div>`).join("") + `</div>`;
-  }
-
-  const taches = b ? b.taches : [];
-  h += `<div class="soustitre">Travail placé ce jour${taches.length ? "" : " — rien"}</div>`;
-  if (taches.length) {
-    h += `<div class="queue">` + taches.map((x) => {
-      const s = x.etape;
-      return `<label class="qitem${x.retard ? " retard" : ""}" style="--c:${s.g.c}">
-        <input type="checkbox" class="cb" data-cb="${s.id}"${canEdit ? "" : " disabled"}>
-        <span class="qbody"><span class="qtitle">${esc(s.row.n)} · ${esc(s.n)}</span>
-        <span class="qmeta"><span class="grp">${short(s.g)}</span>
-          <span><b class="mono">${x.h.toFixed(1)} h</b> ce jour</span>
-          <span>sur ${s.h} h au total</span>
-          ${x.retard ? `<span class="lt">rattrapage de retard</span>` : `<span>échéance ${fmtD(s.t1)}</span>`}
-          ${s.row.url ? `<a href="${s.row.url}" target="_blank" rel="noopener">cours ↗</a>` : ""}
-        </span></span></label>`;
-    }).join("") + `</div>`;
+          ${canEdit ? `<button class="btn mini" data-del="${e.id}">✕</button>` : ""}
+        </span></div>`;
+    }).join("");
+    h += `</div>`;
   }
 
   if (plan.manques.length) {
     const tot = totalManque(plan.manques);
     h += `<div class="soustitre">Ne rentre pas dans le planning</div>
-      <div class="impossible">
-        <b>${tot} h</b> réparties sur ${plan.manques.length} étape${plan.manques.length > 1 ? "s" : ""}
-        ne trouvent pas de place avant leur échéance, avec ta capacité actuelle.
-      </div>
-      <div class="queue">` + plan.manques.slice(0, 6).map((m) => `
+      <div class="impossible"><b>${tot} h</b> sur ${plan.manques.length} étape${plan.manques.length > 1 ? "s" : ""}
+        ne trouvent pas de place avant leur échéance.</div>
+      <div class="queue">` + plan.manques.slice(0, 5).map((m) => `
         <div class="qitem" style="--c:var(--late)"><span class="qbody">
           <span class="qtitle">${esc(m.etape.row.n)} · ${esc(m.etape.n)}</span>
           <span class="qmeta"><span class="lt">${m.h} h sans créneau</span>
@@ -614,6 +614,7 @@ function nouvelEvenement() {
     debut: $("evH").value,
     fin: $("evF").value,
     lien: $("evL").value.trim(),
+    urgent: $("evU").checked,
   };
 }
 function baseplan() {
@@ -630,15 +631,13 @@ function verifier() {
   }
   const t = testerAjout(baseplan(), ev);
   zone.innerHTML = t.possible
-    ? `<div class="ok-zone">Ça rentre : <b>${d.toFixed(1)} h</b> occupées,
-        il te restera <b>${Math.max(0, t.libreAvant - d).toFixed(1)} h</b> de travail possible ce jour.</div>`
+    ? `<div class="ok-zone">Ça rentre. ${t.deplace > 0
+        ? `<b>${t.deplace} h</b> de travail se reportent sur les jours suivants, sans faire sauter d'échéance.`
+        : `Ce créneau ne croise aucun travail prévu.`}</div>`
     : `<div class="impossible">
-        <b>Impossible sans décaler du travail.</b>
-        Ce jour offre <b>${t.libreAvant.toFixed(1)} h</b> libres et tu en demandes <b>${d.toFixed(1)} h</b>.
-        ${t.supplement > 0
-          ? `Résultat : <b>${t.supplement} h</b> de travail en plus ne trouveraient plus de place avant échéance
-             (${t.manqueApres} h au total).`
-          : `Le dépassement retombe sur les jours suivants, qui deviennent plus chargés.`}
+        <b>Ça ne rentre pas.</b> ${t.deplace > 0 ? `<b>${t.deplace} h</b> de travail seraient chassées de ce jour, ` : ""}
+        et <b>${t.supplement} h</b> ne retrouveraient de place nulle part avant leur échéance
+        (${t.manqueApres} h au total).
         <div class="zbtn"><button class="btn" id="forcer">Ajouter quand même et décaler</button></div>
       </div>`;
   const f = $("forcer");
@@ -665,12 +664,28 @@ function ajouter(force) {
 function renderCapacites() {
   const box = $("caps"); if (!box) return;
   const noms = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-  const total = [0, 1, 2, 3, 4, 5, 6].reduce((a, j) => a + Number(capacites[j] || 0), 0);
-  box.innerHTML = [1, 2, 3, 4, 5, 6, 0].map((j) => `
-    <label class="cap"><span>${noms[j]}</span>
-      <input type="number" min="0" max="16" step="0.5" data-cap="${j}"
-        value="${capacites[j] ?? 0}"${canEdit ? "" : " disabled"}> <em>h</em></label>`).join("") +
-    `<div class="captot">Soit <b class="mono">${total} h</b> par semaine</div>`;
+  const total = [0,1,2,3,4,5,6].reduce((a, j) =>
+    a + (capacites[j] || []).reduce((x, s2) => x + (enMin(s2[1]) - enMin(s2[0])) / 60, 0), 0);
+  box.innerHTML = [1,2,3,4,5,6,0].map((j) => {
+    const txt = (capacites[j] || []).map((s2) => `${s2[0]}-${s2[1]}`).join(", ");
+    const h = (capacites[j] || []).reduce((x, s2) => x + (enMin(s2[1]) - enMin(s2[0])) / 60, 0);
+    return `<label class="cap"><span>${noms[j]}</span>
+      <input type="text" data-cap="${j}" value="${txt}" placeholder="09:00-12:00, 14:00-18:00"
+        ${canEdit ? "" : "disabled"}> <em>${h ? h.toFixed(1).replace(".0","") + " h" : "—"}</em></label>`;
+  }).join("") +
+    `<div class="captot">Soit <b class="mono">${total.toFixed(1).replace(".0","")} h</b> de travail par semaine.
+      Le reste de la journée (${"08:00"}–${"22:00"}) apparaît comme temps libre pour ton entourage.</div>`;
+}
+
+/** « 09:00-12:00, 14:00-18:00 » → plages. Ignore ce qui n'est pas lisible. */
+function lirePlages(txt) {
+  return String(txt).split(/[,;]/).map((p2) => {
+    const m = p2.trim().match(/^(\d{1,2})[:h]?(\d{2})?\s*[-–à]\s*(\d{1,2})[:h]?(\d{2})?$/);
+    if (!m) return null;
+    const a = `${String(m[1]).padStart(2,"0")}:${m[2] || "00"}`;
+    const b = `${String(m[3]).padStart(2,"0")}:${m[4] || "00"}`;
+    return enMin(b) > enMin(a) ? [a, b] : null;
+  }).filter(Boolean);
 }
 
 /* ═════════ DISPONIBILITÉS ═════════ */
@@ -682,7 +697,7 @@ function densite(n) {
   for (const j of plan.jours.values()) {
     if (i++ >= n) break;
     cap += j.cap;
-    trav += j.taches.reduce((a, t) => a + t.h, 0);
+    trav += j.travailPose || 0;
   }
   return { cap, trav, libre: Math.max(0, cap - trav), pc: cap ? Math.round((trav / cap) * 100) : 0 };
 }
@@ -754,10 +769,13 @@ function renderDispo() {
     boxC.innerHTML = creneaux.length
       ? creneaux.map((c) => {
           const d = Math.round((c.t - minuitLocal(NOW)) / DAY);
+          const quand = d === 0 ? "aujourd'hui" : d === 1 ? "demain" : `dans ${d} jours`;
           return `<div class="jourlibre">
-            <span class="quand">${joliJour(c.t)}</span>
-            <span class="detail">${d === 0 ? "aujourd'hui" : d === 1 ? "demain" : `dans ${d} jours`}
-              · il resterait <span class="mono">${c.resteApres} h</span> de travail ce jour-là</span>
+            <span class="quand">${joliJour(c.t)}<em>${quand}</em></span>
+            <span class="detail">Libre&nbsp;: ${c.plages.map((x) => `<b class="mono">${x}</b>`).join(" · ")}
+              ${c.deplace > 0
+                ? `<span class="dep">${c.deplace} h de travail se décaleraient sur les jours suivants</span>`
+                : `<span class="dep">sans rien décaler</span>`}</span>
           </div>`;
         }).join("")
       : `<div class="aucun">
@@ -982,8 +1000,12 @@ $("evf").addEventListener("submit", (e) => { e.preventDefault(); ajouter(false);
 document.addEventListener("input", (e) => {
   const c = e.target.closest("input[data-cap]");
   if (c && canEdit) {
-    capacites[c.dataset.cap] = Math.max(0, Math.min(16, Number(c.value) || 0));
-    saveState(); renderCapacites(); renderCal(); renderToday();
+    clearTimeout(tmr.cap);
+    tmr.cap = setTimeout(() => {
+      capacites[c.dataset.cap] = lirePlages(c.value);
+      log(`a modifié ses heures de travail du ${["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"][c.dataset.cap]}`);
+      saveState(); renderAll();
+    }, 700);
   }
 });
 document.addEventListener("click", (e) => {
