@@ -1,7 +1,7 @@
 import { creerClient } from "./supa.js";
 import { MONTHS, MFULL, DOW, DAY, TZ, CNED, EXAM, GROUPS } from "./planning.js";
-import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree, iso as isoJour }
-  from "./planificateur.js";
+import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree,
+         trouverCreneaux, iso as isoJour } from "./planificateur.js";
 
 const SUPABASE_URL = "https://hnmeefndnckqkdjjbgwe.supabase.co";
 const SUPABASE_KEY = "sb_publishable_ciLHalsy_YvWIUbEbCnN2g_TZfT4aPU";
@@ -423,7 +423,9 @@ function syncChecks(){
 let painting=false;
 function renderAll(){
   painting=true;
+  replanifier();
   renderToday();paintGantt();renderMx();renderGrades();renderJournal();
+  renderCapacites();renderProfil();
   if(!document.querySelector('[data-panel="cal"]').hidden) renderCal();
   if(!document.querySelector('[data-panel="curve"]').hidden) renderCurve();
   syncChecks();applyMode();
@@ -671,6 +673,155 @@ function renderCapacites() {
     `<div class="captot">Soit <b class="mono">${total} h</b> par semaine</div>`;
 }
 
+/* ═════════ DISPONIBILITÉS ═════════ */
+let dureeCherchee = 3;
+
+/** Densité du planning sur les `n` prochains jours. */
+function densite(n) {
+  let cap = 0, trav = 0, i = 0;
+  for (const j of plan.jours.values()) {
+    if (i++ >= n) break;
+    cap += j.cap;
+    trav += j.taches.reduce((a, t) => a + t.h, 0);
+  }
+  return { cap, trav, libre: Math.max(0, cap - trav), pc: cap ? Math.round((trav / cap) * 100) : 0 };
+}
+
+const joliJour = (t) => {
+  const s = new Date(t).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
+
+function renderDispo() {
+  const boxR = $("resume"), boxC = $("creneaux");
+  if (!boxR || !boxC || !plan) return;
+  boxC.innerHTML = `<p class="aide" style="padding:.6rem 0">Recherche des créneaux…</p>`;
+  // on laisse le navigateur peindre : la recherche prend quelques centaines de ms
+  setTimeout(() => {
+    const { creneaux } = trouverCreneaux(baseplan(), dureeCherchee, { horizon: 45, max: 10 });
+    const proche = densite(14), large = densite(56);
+    const premier = creneaux[0];
+    const dansJours = premier ? Math.round((premier.t - minuitLocal(NOW)) / DAY) : null;
+
+    // Le titre répond à la question posée : quand peut-on caler quelque chose.
+    let titre, couleur, phrase;
+    if (!premier) {
+      titre = "Aucun créneau"; couleur = "var(--late)";
+      phrase = `Impossible de dégager <b>${dureeCherchee} h</b> dans les 45 prochains jours sans
+        repousser une échéance.`;
+    } else if (dansJours <= 2) {
+      titre = dansJours === 0 ? "Aujourd'hui" : dansJours === 1 ? "Demain" : "Après-demain";
+      couleur = "var(--ok)";
+      phrase = `Il y a de la place tout de suite pour <b>${dureeCherchee} h</b>.`;
+    } else {
+      titre = joliJour(premier.t); couleur = dansJours > 14 ? "var(--warn)" : "var(--ok)";
+      phrase = `Le premier créneau de <b>${dureeCherchee} h</b> tombe dans <b>${dansJours} jours</b>.`;
+    }
+
+    // Explique la forme du planning, pas seulement une moyenne.
+    if (proche.pc >= 95) {
+      phrase += ` Les <b>deux prochaines semaines sont pleines</b> : chaque heure déclarée est
+        déjà prise. Ça se desserre ensuite — il reste <b>${Math.round(large.libre)} h</b> de marge
+        sur huit semaines.`;
+    } else if (proche.pc >= 80) {
+      phrase += ` Les deux prochaines semaines sont <b>chargées à ${proche.pc} %</b>, avec
+        <b>${Math.round(proche.libre)} h</b> de marge.`;
+    } else {
+      phrase += ` Les deux prochaines semaines sont <b>chargées à ${proche.pc} %</b> :
+        <b>${Math.round(proche.libre)} h</b> de libre, il y a de quoi improviser.`;
+    }
+
+    const st = status();
+    if (st.kind === "ahead") {
+      phrase += ` Tu as <b>${st.days} jours d'avance</b>, et cette avance allège d'autant les
+        jours qui viennent.`;
+    } else if (st.kind === "late") {
+      phrase += ` Tu as <b>${-st.days} jours de retard</b> : le rattrapage se répartit sur les
+        jours à venir et les charge d'autant. Rattraper le retard libérera du temps.`;
+    }
+
+    boxR.innerHTML = `<div class="resume" style="--c:${couleur}">
+      <div class="r" style="min-width:210px">
+        <div class="k">Prochain créneau de ${dureeCherchee} h</div>
+        <div class="v" style="color:${couleur};font-size:1.15rem">${titre}</div></div>
+      <div class="r"><div class="k">14 prochains jours</div>
+        <div class="v">${proche.pc} % pris</div></div>
+      <div class="r"><div class="k">Marge · 8 sem.</div>
+        <div class="v">${Math.round(large.libre)} h</div></div>
+      <div class="phrase">${phrase}</div>
+    </div>`;
+
+    boxC.innerHTML = creneaux.length
+      ? creneaux.map((c) => {
+          const d = Math.round((c.t - minuitLocal(NOW)) / DAY);
+          return `<div class="jourlibre">
+            <span class="quand">${joliJour(c.t)}</span>
+            <span class="detail">${d === 0 ? "aujourd'hui" : d === 1 ? "demain" : `dans ${d} jours`}
+              · il resterait <span class="mono">${c.resteApres} h</span> de travail ce jour-là</span>
+          </div>`;
+        }).join("")
+      : `<div class="aucun">
+          Rien de libre pour <b>${dureeCherchee} h</b> d'ici 45 jours. Trois leviers :
+          <b>prendre de l'avance</b> sur les étapes — chaque validation libère ses heures —,
+          <b>augmenter la capacité</b> dans Réglages, ou <b>repousser une échéance</b> depuis
+          la zone de tâche du calendrier.
+        </div>`;
+  }, 30);
+}
+
+/* ═════════ PROFIL : NOM ET VISIBILITÉ ═════════ */
+function renderProfil() {
+  const box = $("profilBox");
+  if (!box || !vue) return;
+  const url = location.origin + "?profil=" + vue.slug;
+  if (!canEdit) {
+    box.innerHTML = `<p class="aide">Tu consultes le planning de <b>${esc(vue.nom)}</b>
+      (<span class="mono">@${esc(vue.slug)}</span>), partagé publiquement.</p>`;
+    return;
+  }
+  box.innerHTML = `
+    <div class="champ" style="max-width:320px;margin-bottom:.6rem">
+      <label class="fl" for="pfNom">Nom affiché</label>
+      <input id="pfNom" type="text" maxlength="40" value="${esc(vue.nom)}">
+    </div>
+    <div class="visi">
+      <label class="opt${vue.public ? " on" : ""}">
+        <input type="radio" name="visi" value="public"${vue.public ? " checked" : ""}>
+        <span><b>Public</b><em>N'importe qui peut consulter ton planning, sans compte.
+          Ton profil apparaît sur la page d'accueil.</em></span></label>
+      <label class="opt${vue.public ? "" : " on"}">
+        <input type="radio" name="visi" value="prive"${vue.public ? "" : " checked"}>
+        <span><b>Privé</b><em>Toi seul y as accès. Le profil disparaît de la page
+          d'accueil et le lien direct ne montre plus rien.</em></span></label>
+    </div>
+    ${vue.public ? `<div class="lienpartage">
+      <span class="fl">Lien à partager</span>
+      <div class="lp"><code>${esc(url)}</code>
+        <button class="btn" id="copierLien">Copier</button></div>
+    </div>` : ""}`;
+
+  $("pfNom").onchange = async (e) => {
+    const nom = e.target.value.trim().slice(0, 40);
+    if (!nom || nom === vue.nom) return;
+    const { error } = await sb.from("ciel_profiles").update({ nom }).eq("id", vue.id);
+    if (!error) { vue.nom = nom; $("titreProfil").textContent = "Mon planning"; renderProfil(); }
+  };
+  box.querySelectorAll('input[name="visi"]').forEach((r) => (r.onchange = async () => {
+    const pub = r.value === "public";
+    const { error } = await sb.from("ciel_profiles").update({ public: pub }).eq("id", vue.id);
+    if (error) return setSync("warn", "changement refusé");
+    vue.public = pub;
+    log(pub ? "a rendu son planning public" : "a rendu son planning privé");
+    saveState(); renderProfil();
+  }));
+  const cp = $("copierLien");
+  if (cp) cp.onclick = async () => {
+    try { await navigator.clipboard.writeText(url); cp.textContent = "Copié ✓"; }
+    catch { cp.textContent = "Échec"; }
+    setTimeout(() => (cp.textContent = "Copier"), 1600);
+  };
+}
+
 /* ═════════ AUTHENTIFICATION ═════════ */
 function montrer(ecran) {
   ["ecranAuth", "ecranProfils", "appli"].forEach((k) => { const e = $(k); if (e) e.hidden = k !== ecran; });
@@ -871,6 +1022,12 @@ $("subf").addEventListener("submit", async (e) => {
   setTimeout(() => { btn.disabled = false; btn.textContent = "M'abonner"; }, 1900);
 });
 
+$("durees").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-h]"); if (!b) return;
+  dureeCherchee = Number(b.dataset.h);
+  document.querySelectorAll("#durees button").forEach((x) => x.classList.toggle("pri", x === b));
+  renderDispo();
+});
 $("prevM").onclick = () => { calCur.setMonth(calCur.getMonth() - 1); renderCal(); };
 $("nextM").onclick = () => { calCur.setMonth(calCur.getMonth() + 1); renderCal(); };
 $("todayM").onclick = () => {
@@ -883,7 +1040,8 @@ $("tabs").addEventListener("click", (e) => {
   document.querySelectorAll("section[data-panel]").forEach((s) => (s.hidden = s.dataset.panel !== b.dataset.tab));
   if (b.dataset.tab === "cal") renderCal();
   if (b.dataset.tab === "curve") renderCurve();
-  if (b.dataset.tab === "regl") renderCapacites();
+  if (b.dataset.tab === "regl") { renderCapacites(); renderProfil(); }
+  if (b.dataset.tab === "dispo") renderDispo();
 });
 document.addEventListener("change", (e) => {
   if (painting) return;

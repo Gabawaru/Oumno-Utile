@@ -361,6 +361,37 @@ label.cap{display:flex;align-items:center;gap:.4rem;font-size:.76rem;color:var(-
 label.cap span{flex:1}
 label.cap input{width:62px;text-align:right;font-family:"IBM Plex Mono",monospace}
 label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ink3);font-style:normal}
+.chercheur{margin:.9rem 0 .7rem}
+.durees{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem}
+.durees .btn{font-size:.72rem;text-transform:none;letter-spacing:0;padding:.35rem .7rem}
+.resume{display:flex;flex-wrap:wrap;gap:.5rem 1.6rem;background:var(--sunk);padding:.7rem .8rem;
+  border-left:3px solid var(--c,var(--ink3))}
+.resume .r{min-width:96px}
+.resume .k{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink3)}
+.resume .v{font-family:"IBM Plex Mono",monospace;font-size:1.05rem;font-weight:600;color:var(--ink)}
+.resume .phrase{flex:1 1 100%;font-size:.79rem;color:var(--ink2);line-height:1.5;margin-top:.2rem}
+.resume .phrase b{color:var(--ink)}
+.jourlibre{display:flex;align-items:center;gap:.6rem;padding:.5rem .65rem;background:var(--sunk);
+  border-left:3px solid var(--ok);margin-bottom:.25rem}
+.jourlibre .quand{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:.82rem;
+  min-width:190px}
+.jourlibre .detail{font-size:.74rem;color:var(--ink3);flex:1}
+.jourlibre .mono{color:var(--ok);font-weight:600}
+.aucun{font-size:.78rem;color:var(--late);background:color-mix(in srgb,var(--late) 8%,transparent);
+  border-left:3px solid var(--late);padding:.6rem .75rem;line-height:1.5}
+.aucun b{color:var(--late)}
+.visi{display:grid;gap:.4rem;max-width:560px}
+.visi .opt{display:flex;gap:.55rem;align-items:flex-start;padding:.6rem .7rem;background:var(--sunk);
+  border-left:3px solid transparent;cursor:pointer}
+.visi .opt.on{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 7%,var(--sunk))}
+.visi .opt input{margin-top:.2rem;accent-color:var(--ok)}
+.visi .opt b{display:block;font-size:.79rem;color:var(--ink)}
+.visi .opt em{display:block;font-size:.73rem;color:var(--ink3);font-style:normal;line-height:1.4;margin-top:.1rem}
+.lienpartage{margin-top:.8rem;max-width:560px}
+.lp{display:flex;gap:.4rem;align-items:center;background:var(--sunk);padding:.4rem .5rem}
+.lp code{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink2);flex:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .captot{grid-column:1/-1;font-size:.76rem;color:var(--ink2);margin-top:.3rem}
 
 </style>
@@ -450,6 +481,7 @@ label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--
   <nav class="tabs" role="tablist" id="tabs">
     <button role="tab" data-tab="today" aria-selected="true">Aujourd'hui</button>
     <button role="tab" data-tab="cal"   aria-selected="false">Calendrier</button>
+    <button role="tab" data-tab="dispo" aria-selected="false">Disponibilités</button>
     <button role="tab" data-tab="gantt" aria-selected="false">Gantt</button>
     <button role="tab" data-tab="todo"  aria-selected="false">Étapes<span class="n" id="tnTodo"></span></button>
     <button role="tab" data-tab="curve" aria-selected="false">Courbe</button>
@@ -502,6 +534,25 @@ label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--
       </div>
       <div class="cal" id="cal"></div>
       <div class="daypanel" id="daypanel"></div>
+    </div>
+  </section>
+
+  <section data-panel="dispo" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Quand suis-je disponible&nbsp;?</h2>
+        <div class="note">Les jours où l'on peut caler quelque chose sans faire dérailler le planning</div></div>
+      <div id="resume"></div>
+      <div class="chercheur">
+        <span class="fl">Je cherche un créneau de</span>
+        <div class="durees" id="durees">
+          <button class="btn" data-h="1">1 h</button>
+          <button class="btn" data-h="2">2 h</button>
+          <button class="btn pri" data-h="3">3 h</button>
+          <button class="btn" data-h="4">une après-midi</button>
+          <button class="btn" data-h="8">une journée</button>
+        </div>
+      </div>
+      <div id="creneaux"></div>
     </div>
   </section>
 
@@ -592,6 +643,11 @@ label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--
 
   <section data-panel="regl" hidden>
     <div class="panel">
+      <div class="phead"><h2>Mon profil</h2>
+        <div class="note">Qui peut consulter ton planning</div></div>
+      <div id="profilBox"></div>
+    </div>
+    <div class="panel" style="margin-top:.85rem">
       <div class="phead"><h2>Heures de travail par jour</h2>
         <div class="note">Le planning répartit tes étapes dans ces heures-là</div></div>
       <div class="caps" id="caps"></div>

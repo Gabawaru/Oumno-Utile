@@ -126,7 +126,9 @@ export function creerClient(url, cle) {
         return p.then(res, rej);
       },
       async insert(corps) { return ecrire("POST", corps); },
-      async update(corps) { q._maj = corps; return q; },
+      // Volontairement synchrone : il faut pouvoir enchaîner .eq() derrière,
+      // l'écriture ne part qu'au moment où la requête est attendue.
+      update(corps) { q._maj = corps; return q; },
     };
     async function executer() {
       const parts = [`select=${colonnes}`, ...f, tri, limite].filter(Boolean);
