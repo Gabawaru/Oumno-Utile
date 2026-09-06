@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Plannings de revision partages : avancement, calendrier, echeances et courbe de progression.">
+<meta name="theme-color" content="#c8102e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AF%3C/text%3E%3C/svg%3E">
+<title>Pilote CIEL 2A</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>:root{color-scheme:light dark}html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>
+
+:root{
+  --paper:#eef1f5; --card:#fff; --sunk:#e4e9ef; --ink:#0e141b; --ink2:#43505f;
+  --ink3:#7a8797; --rule:#ccd5df; --rule2:#dde4ec; --sig:#c8102e;
+  --b1:#1f6feb; --phy:#0d7d8c; --b2:#7d4bd1; --b3:#c8102e;
+  --gen:#a8730a; --stg:#1a7f5a; --exa:#3b4657; --evt:#0a7ea4;
+  --ok:#1a7f5a; --late:#c8102e; --warn:#b26a00; --ahead:#1f6feb;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0c1116; --card:#141b23; --sunk:#1b242e; --ink:#e9eef4; --ink2:#a8b5c4;
+  --ink3:#71808f; --rule:#2a3642; --rule2:#222c37; --sig:#ff4d68;
+  --b1:#5a9bff; --phy:#2fb4c6; --b2:#a884ee; --b3:#ff4d68;
+  --gen:#d6a63c; --stg:#3cb98a; --exa:#8d9cae; --evt:#3ab5d9;
+  --ok:#3cb98a; --late:#ff4d68; --warn:#d6a63c; --ahead:#5a9bff;
+}}
+:root[data-theme="dark"]{
+  --paper:#0c1116; --card:#141b23; --sunk:#1b242e; --ink:#e9eef4; --ink2:#a8b5c4;
+  --ink3:#71808f; --rule:#2a3642; --rule2:#222c37; --sig:#ff4d68;
+  --b1:#5a9bff; --phy:#2fb4c6; --b2:#a884ee; --b3:#ff4d68;
+  --gen:#d6a63c; --stg:#3cb98a; --exa:#8d9cae; --evt:#3ab5d9;
+  --ok:#3cb98a; --late:#ff4d68; --warn:#d6a63c; --ahead:#5a9bff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:14px;line-height:1.5;padding:clamp(.7rem,2vw,1.5rem)}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:.85rem}
+h1,h2,h3,.cond{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+a{color:var(--sig);text-decoration:none}
+a:hover{text-decoration:underline}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
+  outline:2px solid var(--sig);outline-offset:2px}
+
+.mast{background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--sig);
+  padding:.8rem 1.05rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.3rem}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.61rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--sig);margin-bottom:.18rem}
+.mast h1{font-size:clamp(1.1rem,2.5vw,1.55rem);font-weight:700;letter-spacing:-.015em;line-height:1.1}
+.clock{margin-left:auto;text-align:right;font-family:"IBM Plex Mono",monospace;
+  font-variant-numeric:tabular-nums;line-height:1.25}
+.clock .d{font-size:.78rem;color:var(--ink2);font-weight:500}
+.clock .t{font-size:1.2rem;font-weight:600}
+.clock .s{font-size:.57rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);
+  display:flex;align-items:center;gap:.28rem;justify-content:flex-end;margin-top:.08rem}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex:none}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}
+.cd{font-family:"IBM Plex Mono",monospace;text-align:right;line-height:1.15}
+.cd .n{font-size:1.2rem;font-weight:600;color:var(--sig)}
+.cd .k{font-size:.57rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)}
+
+.auth{display:flex;gap:.35rem;align-items:center}
+.auth form{display:flex;gap:.3rem}
+.auth input{width:118px;font-size:.72rem;padding:.28rem .4rem}
+.ro{background:var(--sunk);border:1px solid var(--rule);border-left:3px solid var(--ink3);
+  padding:.5rem .75rem;font-size:.76rem;color:var(--ink2);display:flex;gap:.5rem;align-items:baseline}
+.ro b{color:var(--ink)}
+
+.tabs{display:flex;gap:2px;overflow-x:auto;background:var(--card);border:1px solid var(--rule);padding:3px}
+.tabs button{flex:1 0 auto;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.77rem;
+  font-weight:600;padding:.48rem .72rem;border:none;background:transparent;color:var(--ink3);
+  cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
+.tabs button:hover{color:var(--ink2);background:var(--sunk)}
+.tabs button[aria-selected="true"]{color:var(--sig);border-bottom-color:var(--sig);background:var(--sunk)}
+.tabs .n{font-family:"IBM Plex Mono",monospace;font-size:.61rem;opacity:.75;margin-left:.28rem}
+
+.panel{background:var(--card);border:1px solid var(--rule);padding:.9rem 1rem 1.05rem}
+.phead{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.8rem;padding-bottom:.4rem;
+  border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.phead h2{font-size:.88rem;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+.phead .note{font-size:.7rem;color:var(--ink3);margin-left:auto;text-align:right;line-height:1.35}
+.stack{display:flex;flex-direction:column;gap:.85rem}
+
+.hero{background:var(--card);border:1px solid var(--rule);border-left:5px solid var(--hc,var(--ink3));
+  padding:.95rem 1.1rem;display:grid;grid-template-columns:1fr;gap:.8rem}
+@media(min-width:780px){.hero{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
+.hlab{font-family:"IBM Plex Mono",monospace;font-size:.59rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink3);margin-bottom:.22rem}
+.hbig{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:clamp(1.45rem,4vw,2.2rem);
+  font-weight:700;line-height:1.05;color:var(--hc,var(--ink));letter-spacing:-.02em}
+.hsub{font-size:.79rem;color:var(--ink2);margin-top:.28rem;line-height:1.45}
+.hsub b{color:var(--ink)}
+.hnums{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:.45rem .85rem;align-content:start}
+.hn .k{font-family:"IBM Plex Mono",monospace;font-size:.57rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink3)}
+.hn .v{font-family:"IBM Plex Mono",monospace;font-size:1rem;font-weight:600;
+  font-variant-numeric:tabular-nums;color:var(--ink)}
+.hn .v.late{color:var(--late)}.hn .v.ok{color:var(--ok)}
+.gtrack{height:8px;background:var(--sunk);border-radius:2px;overflow:hidden;margin-top:.5rem;position:relative}
+.gfill{height:100%;background:var(--ok);width:0;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.gmark{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:.55}
+
+.queue{display:flex;flex-direction:column;gap:.26rem}
+.qitem{display:flex;align-items:flex-start;gap:.55rem;padding:.46rem .58rem;background:var(--sunk);
+  border-left:3px solid var(--c,var(--ink3));transition:opacity .28s,transform .28s,background .15s}
+label.qitem{cursor:pointer}
+label.qitem:hover{background:color-mix(in srgb,var(--c) 9%,var(--sunk))}
+.qitem.going{opacity:0;transform:translateX(14px)}
+.qitem .rank{font-family:"IBM Plex Mono",monospace;font-size:.61rem;color:var(--ink3);
+  min-width:14px;padding-top:.12rem}
+.qbody{flex:1;min-width:0}
+.qtitle{font-size:.78rem;font-weight:500;color:var(--ink);line-height:1.3}
+.qmeta{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--ink3);margin-top:.14rem;
+  display:flex;flex-wrap:wrap;gap:.12rem .55rem;align-items:baseline}
+.qmeta .lt{color:var(--late);font-weight:600}
+.qmeta .so{color:var(--warn);font-weight:600}
+.qmeta .grp{color:var(--c)}
+.qmeta a{font-size:.62rem}
+.cb{appearance:none;width:16px;height:16px;flex:none;margin-top:.1rem;border:1.5px solid var(--rule);
+  border-radius:3px;background:var(--card);cursor:pointer;display:grid;place-content:center;transition:.14s}
+.cb:checked{background:var(--ok);border-color:var(--ok)}
+.cb:checked::after{content:"";width:8px;height:4px;border-left:2px solid #fff;
+  border-bottom:2px solid #fff;transform:rotate(-45deg) translate(0,-1px)}
+.cb:disabled{opacity:.4;cursor:not-allowed}
+.empty{font-size:.75rem;color:var(--ok);font-style:italic;padding:.45rem .2rem}
+.muted{color:var(--ink3)!important;font-style:italic}
+
+.calbar{display:flex;align-items:center;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap}
+.calbar .m{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:1rem;min-width:145px}
+.btn{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;
+  padding:.3rem .55rem;background:var(--card);color:var(--ink2);border:1px solid var(--rule);
+  border-radius:3px;cursor:pointer}
+.btn:hover{border-color:var(--sig);color:var(--sig)}
+.btn.pri{background:var(--sig);color:#fff;border-color:var(--sig)}
+.btn.pri:hover{opacity:.88;color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:var(--rule2);border:1px solid var(--rule2)}
+.dow{background:var(--card);font-family:"IBM Plex Mono",monospace;font-size:.57rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink3);text-align:center;padding:.28rem 0}
+.day{background:var(--card);min-height:72px;padding:.26rem .28rem;cursor:pointer;position:relative;
+  display:flex;flex-direction:column;gap:.14rem;overflow:hidden}
+.day:hover{background:var(--sunk)}
+.day.out{opacity:.35}
+.day.today{outline:2px solid var(--sig);outline-offset:-2px}
+.day.sel{background:var(--sunk);box-shadow:inset 0 0 0 1px var(--rule)}
+.day .num{font-family:"IBM Plex Mono",monospace;font-size:.65rem;color:var(--ink3);font-weight:500}
+.day.today .num{color:var(--sig);font-weight:700}
+.chip{font-size:.57rem;line-height:1.25;padding:.07rem .22rem;border-radius:2px;color:#fff;
+  background:var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.done{background:transparent;color:var(--ink3);text-decoration:line-through;
+  box-shadow:inset 0 0 0 1px var(--rule)}
+.chip.late{outline:1.5px solid var(--late);outline-offset:-1.5px}
+.chip.ev{background:transparent;color:var(--evt);box-shadow:inset 0 0 0 1px var(--evt);font-weight:600}
+.chip.ev.sys{color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn)}
+.day .more{font-family:"IBM Plex Mono",monospace;font-size:.55rem;color:var(--ink3)}
+.dots{display:flex;gap:2px;flex-wrap:wrap;margin-top:auto}
+.dots i{width:5px;height:5px;border-radius:50%;background:var(--c);display:block;opacity:.8}
+.daypanel{margin-top:.7rem;border-top:1px solid var(--rule);padding-top:.6rem}
+.dph{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:.81rem;
+  margin-bottom:.42rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+
+form.evf{display:grid;grid-template-columns:1fr;gap:.4rem;background:var(--sunk);padding:.65rem .7rem;
+  margin-bottom:.7rem;border-left:3px solid var(--evt)}
+@media(min-width:700px){form.evf{grid-template-columns:2fr 1fr 1fr 1fr auto}}
+form.evf .full{grid-column:1/-1}
+input,select,textarea{font-family:inherit;font-size:.78rem;padding:.36rem .45rem;background:var(--card);
+  color:var(--ink);border:1px solid var(--rule);border-radius:3px;width:100%}
+input::placeholder,textarea::placeholder{color:var(--ink3)}
+label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:.12rem}
+
+.scroll{overflow-x:auto;padding-bottom:.25rem}
+.grid{min-width:800px;display:grid;grid-template-columns:236px repeat(20,minmax(22px,1fr))}
+.mcell{grid-column:span 2;font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink3);text-align:center;padding:.1rem 0 .25rem;
+  border-left:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.mcell.now{color:var(--sig);font-weight:700}
+.corner{border-bottom:1px solid var(--rule)}
+.glabel{grid-column:1;font-size:.73rem;color:var(--ink2);padding:.13rem .55rem .13rem 0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid var(--rule)}
+.glabel.grp{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:.75rem;
+  color:var(--ink);padding-top:.36rem}
+.glabel .code{font-family:"IBM Plex Mono",monospace;font-size:.6rem;color:var(--ink3);margin-left:.26rem}
+.glabel.sub{padding-left:.72rem;position:relative}
+.glabel.sub::before{content:"";position:absolute;left:.25rem;top:0;bottom:0;width:2px;background:var(--rule2)}
+.glabel.sub.full{color:var(--ink3);text-decoration:line-through;text-decoration-color:var(--ok)}
+.glabel.sub.lt{color:var(--late)}
+.lane{grid-column:2 / -1;display:grid;grid-template-columns:repeat(20,1fr);height:18px;align-items:center;
+  background:repeating-linear-gradient(to right,transparent 0,transparent calc(10% - 1px),
+    var(--rule2) calc(10% - 1px),var(--rule2) 10%)}
+.lane.grp{height:8px}
+.bar{height:12px;border-radius:2px;position:relative;overflow:hidden;
+  background:color-mix(in srgb,var(--c) 20%,transparent);
+  border:1px solid color-mix(in srgb,var(--c) 45%,transparent)}
+.bar.grp{height:5px}
+.bar.lt{border-color:var(--late)}
+.fill{position:absolute;inset:0 auto 0 0;background:var(--c);width:0;transition:width .5s cubic-bezier(.4,0,.2,1)}
+.blab{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;
+  padding-right:.28rem;font-family:"IBM Plex Mono",monospace;font-size:.56rem;font-weight:600;color:var(--ink2)}
+.bar.done .blab{color:#fff}
+.spacer{grid-column:1 / -1;height:.36rem}
+.legend{display:flex;flex-wrap:wrap;gap:.3rem .85rem;margin-top:.7rem;padding-top:.55rem;
+  border-top:1px solid var(--rule2);font-size:.68rem;color:var(--ink2)}
+.li{display:flex;align-items:center;gap:.3rem}
+.sw{width:15px;height:8px;border-radius:1px;flex:none}
+
+.acc{display:flex;flex-direction:column;gap:.3rem}
+.grpblk{border:1px solid var(--rule2);background:var(--sunk)}
+.grphd{display:flex;align-items:center;gap:.48rem;padding:.45rem .58rem;cursor:pointer;user-select:none;
+  border-left:3px solid var(--c)}
+.grphd:hover{background:color-mix(in srgb,var(--c) 7%,transparent)}
+.grphd .nm{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:.77rem;flex:1;
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grphd .mini{width:50px;height:5px;background:var(--rule2);border-radius:2px;overflow:hidden;flex:none}
+.grphd .mini i{display:block;height:100%;background:var(--c);width:0;transition:width .4s}
+.grphd .ct{font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--ink3);flex:none;
+  min-width:48px;text-align:right}
+.grphd .car{font-size:.57rem;color:var(--ink3);transition:transform .2s;flex:none}
+.grpblk.open .car{transform:rotate(90deg)}
+.grpbody{display:none;padding:0 .58rem .5rem;background:var(--card)}
+.grpblk.open .grpbody{display:block}
+.rowhd{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--ink3);padding:.48rem 0 .26rem;border-bottom:1px solid var(--rule2);margin-bottom:.26rem;
+  display:flex;gap:.5rem;align-items:baseline}
+.rowhd .rh{margin-left:auto}
+.steps{display:grid;grid-template-columns:1fr;gap:.06rem}
+@media(min-width:760px){.steps{grid-template-columns:1fr 1fr}}
+.step{display:flex;align-items:flex-start;gap:.45rem;padding:.22rem .3rem;border-radius:3px;
+  cursor:pointer;font-size:.745rem;color:var(--ink2);line-height:1.32}
+.step:hover{background:var(--sunk)}
+.step.on .lbl{text-decoration:line-through;color:var(--ink3)}
+.step.lt .lbl{color:var(--late)}
+.step .lbl{flex:1;min-width:0}
+.step .hh{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--ink3);flex:none}
+
+.dlist{display:flex;flex-direction:column;gap:.2rem}
+.drow{display:flex;align-items:baseline;gap:.55rem;padding:.32rem .48rem;background:var(--sunk);
+  border-left:3px solid var(--c);font-size:.755rem}
+.drow .dt{font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--ink3);flex:none;min-width:52px}
+.drow .nmm{flex:1;min-width:0;color:var(--ink2)}
+.drow .hh{font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--ok);flex:none}
+.dday{font-family:"IBM Plex Mono",monospace;font-size:.59rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink3);margin:.5rem 0 .16rem;padding-bottom:.14rem;border-bottom:1px solid var(--rule2)}
+
+.chartbox{width:100%;overflow-x:auto}
+svg.curve{display:block;width:100%;min-width:600px;height:auto}
+.ckey{display:flex;flex-wrap:wrap;gap:.3rem 1.05rem;margin-top:.55rem;font-size:.7rem;color:var(--ink2)}
+.ckey i{width:16px;height:0;border-top-width:2.5px;border-top-style:solid;display:inline-block;
+  vertical-align:middle;margin-right:.33rem}
+
+.mx{display:grid;grid-template-columns:14px 1fr;gap:.4rem}
+.ylab{writing-mode:vertical-rl;transform:rotate(180deg);font-family:"IBM Plex Mono",monospace;
+  font-size:.57rem;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3);
+  text-align:center;align-self:center}
+.mxr{display:flex;flex-direction:column;gap:.4rem;min-width:0}
+.xlab{display:grid;grid-template-columns:1fr 1fr;gap:.4rem;font-family:"IBM Plex Mono",monospace;
+  font-size:.57rem;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3);text-align:center}
+.quads{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+@media(max-width:600px){.quads,.xlab{grid-template-columns:1fr}.mx{grid-template-columns:1fr}
+  .ylab{writing-mode:horizontal-tb;transform:none;text-align:left}}
+.q{background:var(--sunk);border-left:3px solid var(--qc);padding:.52rem .62rem .62rem;min-width:0}
+.q h3{font-size:.69rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--qc);
+  margin-bottom:.38rem;display:flex;align-items:baseline;gap:.4rem}
+.q h3 .n{font-family:"IBM Plex Mono",monospace;font-size:.59rem;opacity:.7;margin-left:auto}
+.q ul{list-style:none;display:flex;flex-direction:column;gap:.22rem}
+.q li{font-size:.72rem;line-height:1.33;color:var(--ink2);padding-left:.56rem;position:relative}
+.q li::before{content:"";position:absolute;left:0;top:.5em;width:3px;height:3px;border-radius:50%;
+  background:var(--qc);opacity:.55}
+.q li b{color:var(--ink);font-weight:600}
+.q li .h{font-family:"IBM Plex Mono",monospace;font-size:.65rem;color:var(--qc);font-weight:600}
+
+/* notes */
+.gtab{width:100%;border-collapse:collapse;font-size:.75rem}
+.gtab th{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink3);text-align:left;padding:.25rem .4rem .3rem 0;border-bottom:1px solid var(--rule)}
+.gtab td{padding:.28rem .4rem .28rem 0;border-bottom:1px solid var(--rule2);color:var(--ink2)}
+.gtab td.num{font-family:"IBM Plex Mono",monospace;text-align:right;width:76px}
+.gtab input{width:64px;text-align:right;font-family:"IBM Plex Mono",monospace}
+.avg{font-family:"IBM Plex Mono",monospace;font-size:1.5rem;font-weight:600;color:var(--ok)}
+
+/* journal */
+.jrow{display:flex;gap:.55rem;align-items:baseline;padding:.3rem .45rem;border-left:3px solid var(--c);
+  background:var(--sunk);font-size:.75rem;margin-bottom:.2rem}
+.jrow .jt{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--ink3);flex:none;min-width:86px}
+.subs{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.5rem}
+.pill{font-family:"IBM Plex Mono",monospace;font-size:.65rem;background:var(--sunk);color:var(--ink2);
+  padding:.18rem .45rem;border-radius:11px;border:1px solid var(--rule2);display:flex;gap:.35rem;align-items:center}
+.pill button{border:none;background:none;color:var(--ink3);cursor:pointer;font-size:.8rem;line-height:1;padding:0}
+.pill button:hover{color:var(--late)}
+textarea.digest{min-height:150px;font-family:"IBM Plex Mono",monospace;font-size:.7rem;line-height:1.5}
+.foot{font-size:.65rem;color:var(--ink3);text-align:center;padding:.1rem 0 .3rem;line-height:1.6}
+
+
+/* ── écrans d'accueil ───────────────────────────────── */
+.centre{max-width:460px;margin:6vh auto;display:flex;flex-direction:column;gap:.9rem}
+.marque{text-align:center;margin-bottom:.4rem}
+.marque .e{font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--sig)}
+.marque h1{font-size:1.7rem;font-weight:700;letter-spacing:-.02em;margin-top:.2rem}
+.marque p{font-size:.82rem;color:var(--ink2);margin-top:.3rem}
+.onglets-auth{display:flex;gap:2px;background:var(--card);border:1px solid var(--rule);padding:3px}
+.onglets-auth button{flex:1;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.76rem;
+  font-weight:600;padding:.44rem;border:none;background:transparent;color:var(--ink3);cursor:pointer;
+  border-bottom:2px solid transparent}
+.onglets-auth button[aria-selected="true"]{color:var(--sig);border-bottom-color:var(--sig);background:var(--sunk)}
+form.carte{background:var(--card);border:1px solid var(--rule);padding:1rem 1.1rem 1.1rem;
+  display:flex;flex-direction:column;gap:.55rem}
+form.carte .champ{display:flex;flex-direction:column;gap:.18rem}
+form.carte button[type=submit]{margin-top:.3rem}
+.aide{font-size:.72rem;color:var(--ink3);line-height:1.45}
+.authmsg{font-size:.76rem;padding:.5rem .65rem;border-left:3px solid}
+.authmsg.err{background:color-mix(in srgb,var(--late) 8%,transparent);border-color:var(--late);color:var(--late)}
+.authmsg.ok{background:color-mix(in srgb,var(--ok) 8%,transparent);border-color:var(--ok);color:var(--ok)}
+.profils{display:flex;flex-direction:column;gap:.3rem}
+.profil{display:flex;align-items:center;gap:.6rem;padding:.55rem .65rem;background:var(--card);
+  border:1px solid var(--rule);text-decoration:none;color:inherit}
+.profil:hover{border-color:var(--sig);text-decoration:none}
+.profil .pav{width:32px;height:32px;flex:none;display:grid;place-content:center;background:var(--sunk);
+  font-family:"IBM Plex Mono",monospace;font-size:.72rem;font-weight:600;color:var(--sig)}
+.profil b{display:block;font-size:.82rem}
+.profil em{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink3);font-style:normal}
+.sep{display:flex;align-items:center;gap:.6rem;font-family:"IBM Plex Mono",monospace;font-size:.6rem;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin:.3rem 0}
+.sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--rule)}
+.quisuisje{margin-left:auto;display:flex;align-items:center;gap:.5rem}
+.quisuisje .moi{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink3)}
+
+/* ── charge des jours dans le calendrier ────────────── */
+.day.pleine{background:color-mix(in srgb,var(--warn) 7%,var(--card))}
+.day.deborde{background:color-mix(in srgb,var(--late) 9%,var(--card))}
+.charge{display:block;height:3px;background:var(--rule2);margin-top:auto;overflow:hidden}
+.charge i{display:block;height:100%;background:var(--ok)}
+.day.pleine .charge i{background:var(--warn)}
+.day.deborde .charge i{background:var(--late)}
+.hcount{font-family:"IBM Plex Mono",monospace;font-size:.55rem;color:var(--ink3)}
+
+/* ── zone de tâche ──────────────────────────────────── */
+.jauge{display:flex;height:12px;background:var(--sunk);position:relative;margin:.3rem 0 .4rem;overflow:hidden}
+.jauge i{position:absolute;top:0;bottom:0;display:block}
+.jauge .occ{left:0;background:var(--evt)}
+.jauge .trv{background:var(--ok)}
+.jlegende{display:flex;flex-wrap:wrap;gap:.2rem 1rem;font-size:.72rem;color:var(--ink2);margin-bottom:.7rem}
+.jlegende .occ-t{color:var(--evt)}.jlegende .trv-t{color:var(--ok)}
+.jlegende .lib-t{color:var(--ink3)}.jlegende .plein-t{color:var(--late)}
+.soustitre{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink3);margin:.7rem 0 .3rem;padding-bottom:.15rem;border-bottom:1px solid var(--rule2)}
+.impossible{font-size:.76rem;line-height:1.5;color:var(--late);background:color-mix(in srgb,var(--late) 8%,transparent);
+  border-left:3px solid var(--late);padding:.55rem .7rem;margin:.35rem 0}
+.impossible b{color:var(--late)}
+.ok-zone{font-size:.76rem;color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent);
+  border-left:3px solid var(--ok);padding:.5rem .7rem;margin:.35rem 0}
+.zbtn{margin-top:.45rem}
+.qitem.retard{box-shadow:inset 3px 0 0 var(--late)}
+
+/* ── réglages ───────────────────────────────────────── */
+.caps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.4rem}
+label.cap{display:flex;align-items:center;gap:.4rem;font-size:.76rem;color:var(--ink2);
+  background:var(--sunk);padding:.35rem .5rem}
+label.cap span{flex:1}
+label.cap input{width:62px;text-align:right;font-family:"IBM Plex Mono",monospace}
+label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ink3);font-style:normal}
+.captot{grid-column:1/-1;font-size:.76rem;color:var(--ink2);margin-top:.3rem}
+
+</style>
+</head>
+<body>
+<section id="ecranAuth" class="centre" hidden>
+  <div class="marque">
+    <div class="e">CNED · BTS CIEL 2<sup>e</sup> année</div>
+    <h1>Pilote de formation</h1>
+    <p>Suis ton avancement, cale ton planning, partage-le.</p>
+  </div>
+  <div class="onglets-auth" role="tablist">
+    <button role="tab" data-auth="connexion" aria-selected="true">Connexion</button>
+    <button role="tab" data-auth="inscription" aria-selected="false">Créer un compte</button>
+    <button role="tab" data-auth="oubli" aria-selected="false">Mot de passe oublié</button>
+  </div>
+  <div id="authMsg" class="authmsg" hidden></div>
+
+  <form class="carte" id="formConnexion">
+    <div class="champ"><label class="fl" for="conEmail">Adresse électronique</label>
+      <input id="conEmail" type="email" autocomplete="email" required></div>
+    <div class="champ"><label class="fl" for="conMdp">Mot de passe</label>
+      <input id="conMdp" type="password" autocomplete="current-password" required></div>
+    <button class="btn pri" type="submit">Se connecter</button>
+  </form>
+
+  <form class="carte" id="formInscription" hidden>
+    <div class="champ"><label class="fl" for="insNom">Nom affiché</label>
+      <input id="insNom" type="text" maxlength="40" placeholder="Gabriel"></div>
+    <div class="champ"><label class="fl" for="insEmail">Adresse électronique</label>
+      <input id="insEmail" type="email" autocomplete="email" required></div>
+    <div class="champ"><label class="fl" for="insMdp">Mot de passe</label>
+      <input id="insMdp" type="password" autocomplete="new-password" minlength="8" required></div>
+    <p class="aide">Au moins 8 caractères. Une seule inscription par adresse : si elle est déjà
+      utilisée, passe par « Connexion » ou « Mot de passe oublié ».</p>
+    <button class="btn pri" type="submit">Créer mon compte</button>
+  </form>
+
+  <form class="carte" id="formOubli" hidden>
+    <div class="champ"><label class="fl" for="oubEmail">Adresse électronique</label>
+      <input id="oubEmail" type="email" autocomplete="email" required></div>
+    <p class="aide">Tu recevras un lien pour choisir un nouveau mot de passe.</p>
+    <button class="btn pri" type="submit">Envoyer le lien</button>
+  </form>
+
+  <form class="carte" id="formNouveau" hidden>
+    <div class="champ"><label class="fl" for="nouMdp">Nouveau mot de passe</label>
+      <input id="nouMdp" type="password" autocomplete="new-password" minlength="8" required></div>
+    <button class="btn pri" type="submit">Enregistrer</button>
+  </form>
+
+  <div class="sep">ou consulter un planning</div>
+  <div class="profils" id="listeProfils"></div>
+</section>
+
+<section id="ecranProfils" class="centre" hidden>
+  <div class="marque">
+    <div class="e">Plannings publics</div>
+    <h1>Choisis un profil</h1>
+    <p>Ce profil n'existe pas ou n'est pas public.</p>
+  </div>
+  <div class="profils" id="listeProfils2"></div>
+  <a class="btn" href="?" style="text-align:center">Retour à la connexion</a>
+</section>
+
+<section id="appli" class="wrap" hidden>
+
+  <div class="mast">
+    <div>
+      <div class="eyebrow">CNED · BTS CIEL 2<sup>e</sup> année · Session 2027</div>
+      <h1 id="titreProfil">Pilote de formation</h1>
+    </div>
+    <div class="cd"><div class="n" id="cdN">—</div><div class="k">jours avant la session</div></div>
+    <div class="quisuisje" id="quiSuisJe"></div>
+    <div class="clock">
+      <div class="d" id="cdate">—</div>
+      <div class="t" id="ctime">—</div>
+      <div class="s"><i class="dot" id="sdot"></i><span id="stxt">chargement</span></div>
+    </div>
+  </div>
+
+  <div class="ro" id="robar" hidden>
+    <b>Vue publique.</b><span>Tu consultes le planning de Gabriel en lecture seule. Tu peux t'abonner
+      à la lettre d'information depuis l'onglet Journal.</span>
+  </div>
+
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-tab="today" aria-selected="true">Aujourd'hui</button>
+    <button role="tab" data-tab="cal"   aria-selected="false">Calendrier</button>
+    <button role="tab" data-tab="gantt" aria-selected="false">Gantt</button>
+    <button role="tab" data-tab="todo"  aria-selected="false">Étapes<span class="n" id="tnTodo"></span></button>
+    <button role="tab" data-tab="curve" aria-selected="false">Courbe</button>
+    <button role="tab" data-tab="mx"    aria-selected="false">Matrice</button>
+    <button role="tab" data-tab="notes" aria-selected="false">Notes</button>
+    <button role="tab" data-tab="jrnl"  aria-selected="false">Journal<span class="n" id="tnJ"></span></button>
+    <button role="tab" data-tab="regl"  aria-selected="false">Réglages</button>
+  </nav>
+
+  <section data-panel="today" class="stack">
+    <div class="hero" id="hero">
+      <div>
+        <div class="hlab">Statut</div>
+        <div class="hbig" id="hbig">—</div>
+        <div class="hsub" id="hsub"></div>
+        <div class="gtrack"><div class="gfill" id="gfill"></div><div class="gmark" id="gmark"></div></div>
+      </div>
+      <div class="hnums" id="hnums"></div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2>À faire maintenant</h2>
+        <div class="note">Coche une tâche : la suivante prend sa place</div></div>
+      <div class="queue" id="queue"></div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2>En retard</h2><div class="note" id="lateNote"></div></div>
+      <div class="queue" id="lateq"></div>
+    </div>
+  </section>
+
+  <section data-panel="cal" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Calendrier</h2>
+        <div class="note">Échéances calculées depuis le plan · heure de Paris</div></div>
+      <form class="evf" id="evf" hidden>
+        <div><label class="fl" for="evT">Titre de l'événement</label>
+          <input id="evT" required maxlength="90" placeholder="Révision Stormshield, RDV tuteur…"></div>
+        <div><label class="fl" for="evD">Date</label><input id="evD" type="date" required></div>
+        <div><label class="fl" for="evH">De</label><input id="evH" type="time" value="14:00"></div>
+        <div><label class="fl" for="evF">À</label><input id="evF" type="time" value="17:00"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn pri" type="submit">Ajouter</button></div>
+        <div class="full"><label class="fl" for="evL">Lien (facultatif)</label>
+          <input id="evL" type="url" placeholder="https://eformation.cned.fr/…"></div>
+      </form>
+      <div class="calbar">
+        <button class="btn" id="prevM" aria-label="Mois précédent">◀</button>
+        <div class="m" id="calM">—</div>
+        <button class="btn" id="nextM" aria-label="Mois suivant">▶</button>
+        <button class="btn" id="todayM" style="margin-left:auto">Aujourd'hui</button>
+      </div>
+      <div class="cal" id="cal"></div>
+      <div class="daypanel" id="daypanel"></div>
+    </div>
+  </section>
+
+  <section data-panel="gantt" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Diagramme de Gantt</h2>
+        <div class="note">Remplissage proportionnel aux heures validées</div></div>
+      <div class="scroll"><div class="grid" id="gantt"></div></div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </section>
+
+  <section data-panel="todo" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Toutes les étapes</h2>
+        <div class="note"><button class="btn" id="expandAll">Tout déplier</button>
+          <button class="btn" id="collapseAll">Tout replier</button></div></div>
+      <div class="acc" id="acc"></div>
+    </div>
+  </section>
+
+  <section data-panel="curve" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Courbe de croissance</h2><div class="note" id="curveNote"></div></div>
+      <div class="chartbox" id="chartbox"></div>
+      <div class="ckey">
+        <span><i style="border-color:var(--ink3);border-top-style:dashed"></i>Plan prévu</span>
+        <span><i style="border-color:var(--ok)"></i>Ta progression réelle</span>
+        <span><i style="border-color:var(--ahead);border-top-style:dotted"></i>Projection à ton rythme</span>
+      </div>
+    </div>
+  </section>
+
+  <section data-panel="mx" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Matrice d'Eisenhower</h2><div class="note" id="mxnote"></div></div>
+      <div class="mx">
+        <div class="ylab">← moins urgent · urgent →</div>
+        <div class="mxr">
+          <div class="xlab"><div>Important</div><div>Moins important</div></div>
+          <div class="quads">
+            <div class="q" style="--qc:var(--sig)"><h3>Faire maintenant<span class="n" id="n1">0</span></h3><ul id="q1"></ul></div>
+            <div class="q" style="--qc:var(--gen)"><h3>Minuter / cadrer<span class="n" id="n3">0</span></h3><ul id="q3"></ul></div>
+            <div class="q" style="--qc:var(--b1)"><h3>Planifier<span class="n" id="n2">0</span></h3><ul id="q2"></ul></div>
+            <div class="q" style="--qc:var(--ink3)"><h3>Éliminer<span class="n" id="n4">0</span></h3><ul id="q4"></ul></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-panel="notes" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Notes obtenues</h2>
+        <div class="note">Saisis tes notes sur 20 à mesure que les devoirs reviennent</div></div>
+      <div class="hnums" id="gsum" style="margin-bottom:.9rem"></div>
+      <div class="scroll"><table class="gtab" id="gtab"></table></div>
+    </div>
+  </section>
+
+  <section data-panel="jrnl" class="stack" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Journal d'activité</h2><div class="note" id="jNote"></div></div>
+      <div id="jlist"></div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2>Lettre d'information</h2>
+        <div class="note">Un courriel part automatiquement dès qu'il y a du nouveau</div></div>
+      <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.6rem;max-width:62ch">
+        Chaque changement — étape terminée, événement ajouté, note saisie — part en récapitulatif
+        aux abonnés. Le 1<sup>er</sup> de chaque mois, le courriel rappelle aussi de rafraîchir le
+        scan de l'espace CNED, au cas où de nouveaux devoirs y auraient été publiés.</p>
+      <form id="subf" style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.6rem">
+        <div style="flex:1 1 220px"><label class="fl" for="subE">Recevoir les mises à jour</label>
+          <input id="subE" type="email" placeholder="prenom@exemple.fr" required></div>
+        <button class="btn pri" type="submit">M'abonner</button>
+      </form>
+      <div class="subs" id="subs"></div>
+      <div style="margin-top:.9rem;display:flex;gap:.4rem;flex-wrap:wrap">
+        <button class="btn" id="mkDigest">Composer le récapitulatif</button>
+        <button class="btn" id="cpDigest">Copier</button>
+        <a class="btn" id="mailDigest" href="#" style="display:inline-block">Ouvrir dans ma messagerie</a>
+      </div>
+      <div style="margin-top:.5rem"><textarea class="digest" id="digest"
+        placeholder="Clique sur « Composer le récapitulatif » pour générer le texte des changements récents."></textarea></div>
+    </div>
+  </section>
+
+  <section data-panel="regl" hidden>
+    <div class="panel">
+      <div class="phead"><h2>Heures de travail par jour</h2>
+        <div class="note">Le planning répartit tes étapes dans ces heures-là</div></div>
+      <div class="caps" id="caps"></div>
+      <p class="aide" style="margin-top:.8rem;max-width:64ch">
+        Quand tu poses un événement, les heures qu'il occupe sont retirées de la journée et
+        le travail prévu se redistribue sur les jours suivants. Une étape dont l'échéance est
+        déjà passée repart sur les premiers créneaux libres : le retard se rattrape tout seul.
+      </p>
+    </div>
+  </section>
+
+  <div class="foot">
+    Arborescence relevée sur <span class="mono">eformation.cned.fr</span> — 104 sections de cours.<br>
+    L'espace « Dépôt des devoirs » n'est pas consulté par cette application.
+  </div>
+</section>
+<script type="module" src="app.js"></script>
+</body>
+</html>
