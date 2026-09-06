@@ -361,6 +361,17 @@ label.cap{display:flex;align-items:center;gap:.4rem;font-size:.76rem;color:var(-
 label.cap span{flex:1}
 label.cap input{width:62px;text-align:right;font-family:"IBM Plex Mono",monospace}
 label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ink3);font-style:normal}
+.visi{display:grid;gap:.4rem;max-width:560px}
+.visi .opt{display:flex;gap:.55rem;align-items:flex-start;padding:.6rem .7rem;background:var(--sunk);
+  border-left:3px solid transparent;cursor:pointer}
+.visi .opt.on{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 7%,var(--sunk))}
+.visi .opt input{margin-top:.2rem;accent-color:var(--ok)}
+.visi .opt b{display:block;font-size:.79rem;color:var(--ink)}
+.visi .opt em{display:block;font-size:.73rem;color:var(--ink3);font-style:normal;line-height:1.4;margin-top:.1rem}
+.lienpartage{margin-top:.8rem;max-width:560px}
+.lp{display:flex;gap:.4rem;align-items:center;background:var(--sunk);padding:.4rem .5rem}
+.lp code{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink2);flex:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .captot{grid-column:1/-1;font-size:.76rem;color:var(--ink2);margin-top:.3rem}
 
 </style>
@@ -592,6 +603,11 @@ label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--
 
   <section data-panel="regl" hidden>
     <div class="panel">
+      <div class="phead"><h2>Mon profil</h2>
+        <div class="note">Qui peut consulter ton planning</div></div>
+      <div id="profilBox"></div>
+    </div>
+    <div class="panel" style="margin-top:.85rem">
       <div class="phead"><h2>Heures de travail par jour</h2>
         <div class="note">Le planning répartit tes étapes dans ces heures-là</div></div>
       <div class="caps" id="caps"></div>

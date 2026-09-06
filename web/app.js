@@ -671,6 +671,59 @@ function renderCapacites() {
     `<div class="captot">Soit <b class="mono">${total} h</b> par semaine</div>`;
 }
 
+/* ═════════ PROFIL : NOM ET VISIBILITÉ ═════════ */
+function renderProfil() {
+  const box = $("profilBox");
+  if (!box || !vue) return;
+  const url = location.origin + "?profil=" + vue.slug;
+  if (!canEdit) {
+    box.innerHTML = `<p class="aide">Tu consultes le planning de <b>${esc(vue.nom)}</b>
+      (<span class="mono">@${esc(vue.slug)}</span>), partagé publiquement.</p>`;
+    return;
+  }
+  box.innerHTML = `
+    <div class="champ" style="max-width:320px;margin-bottom:.6rem">
+      <label class="fl" for="pfNom">Nom affiché</label>
+      <input id="pfNom" type="text" maxlength="40" value="${esc(vue.nom)}">
+    </div>
+    <div class="visi">
+      <label class="opt${vue.public ? " on" : ""}">
+        <input type="radio" name="visi" value="public"${vue.public ? " checked" : ""}>
+        <span><b>Public</b><em>N'importe qui peut consulter ton planning, sans compte.
+          Ton profil apparaît sur la page d'accueil.</em></span></label>
+      <label class="opt${vue.public ? "" : " on"}">
+        <input type="radio" name="visi" value="prive"${vue.public ? "" : " checked"}>
+        <span><b>Privé</b><em>Toi seul y as accès. Le profil disparaît de la page
+          d'accueil et le lien direct ne montre plus rien.</em></span></label>
+    </div>
+    ${vue.public ? `<div class="lienpartage">
+      <span class="fl">Lien à partager</span>
+      <div class="lp"><code>${esc(url)}</code>
+        <button class="btn" id="copierLien">Copier</button></div>
+    </div>` : ""}`;
+
+  $("pfNom").onchange = async (e) => {
+    const nom = e.target.value.trim().slice(0, 40);
+    if (!nom || nom === vue.nom) return;
+    const { error } = await sb.from("ciel_profiles").update({ nom }).eq("id", vue.id);
+    if (!error) { vue.nom = nom; $("titreProfil").textContent = "Mon planning"; renderProfil(); }
+  };
+  box.querySelectorAll('input[name="visi"]').forEach((r) => (r.onchange = async () => {
+    const pub = r.value === "public";
+    const { error } = await sb.from("ciel_profiles").update({ public: pub }).eq("id", vue.id);
+    if (error) return setSync("warn", "changement refusé");
+    vue.public = pub;
+    log(pub ? "a rendu son planning public" : "a rendu son planning privé");
+    saveState(); renderProfil();
+  }));
+  const cp = $("copierLien");
+  if (cp) cp.onclick = async () => {
+    try { await navigator.clipboard.writeText(url); cp.textContent = "Copié ✓"; }
+    catch { cp.textContent = "Échec"; }
+    setTimeout(() => (cp.textContent = "Copier"), 1600);
+  };
+}
+
 /* ═════════ AUTHENTIFICATION ═════════ */
 function montrer(ecran) {
   ["ecranAuth", "ecranProfils", "appli"].forEach((k) => { const e = $(k); if (e) e.hidden = k !== ecran; });
@@ -883,7 +936,7 @@ $("tabs").addEventListener("click", (e) => {
   document.querySelectorAll("section[data-panel]").forEach((s) => (s.hidden = s.dataset.panel !== b.dataset.tab));
   if (b.dataset.tab === "cal") renderCal();
   if (b.dataset.tab === "curve") renderCurve();
-  if (b.dataset.tab === "regl") renderCapacites();
+  if (b.dataset.tab === "regl") { renderCapacites(); renderProfil(); }
 });
 document.addEventListener("change", (e) => {
   if (painting) return;
