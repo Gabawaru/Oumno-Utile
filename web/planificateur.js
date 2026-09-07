@@ -273,6 +273,11 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
     j.blocs = [...a.blocs, ...b.blocs].filter((x) => x.fin - x.debut >= 5).sort((x, y) => x.debut - y.debut);
     j.pauses = [...a.pauses, ...b.pauses].sort((x, y) => x[0] - y[0]);
   }
+  // Les heures déjà écoulées ne sont pas du temps libre : à 21 h, personne n'est
+  // disponible « de 12 h 15 à 13 h 15 ». On les retire de la journée en cours.
+  const cleAuj = iso(new Date(maintenant));
+  const dejaPasse = new Date(maintenant).getHours() * 60 + new Date(maintenant).getMinutes();
+
   for (const j of jours.values()) {
     j.travailPose = arrondi(j.blocs.reduce((a, b) => a + (b.fin - b.debut) / 60, 0));
     j.tardif = arrondi(j.blocs.filter((b) => b.tard).reduce((a, b) => a + (b.fin - b.debut) / 60, 0));
@@ -282,7 +287,8 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
     j.sature = j.libre <= 0.01 && j.libreRallonge <= 0.01;
     j.creneaux = soustraire(
       [[min(JOURNEE[0]), min(JOURNEE[1])]],
-      [...j.evenements.map((e) => e.plage), ...j.blocs.map((b) => [b.debut, b.fin]), ...j.pauses]
+      [...j.evenements.map((e) => e.plage), ...j.blocs.map((b) => [b.debut, b.fin]), ...j.pauses,
+       ...(j.cle === cleAuj ? [[0, dejaPasse]] : [])]
     );
   }
   return { jours, manques, tardif: arrondi(tardif) };
