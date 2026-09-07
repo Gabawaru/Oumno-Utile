@@ -4,8 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="Un planificateur de travail qui repartit tes heures, rattrape le retard sans supprimer les pauses, et dit a tes proches quand tu es reellement libre.">
-<meta name="theme-color" content="#c8102e">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%AF%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#0e141b">
+<link rel="icon" href="icones/repere.svg" type="image/svg+xml">
+<link rel="icon" href="icones/repere-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icones/repere-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Repère">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Repère — le planning qui dit quand tu es libre</title>
 <link rel="stylesheet" href="polices.css">
 <style>:root{color-scheme:light dark}html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
@@ -757,6 +763,77 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
 /* Visible des seuls lecteurs d'écran : l'étiquette existe sans occuper la place. */
 .horsvue{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
   clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ── installation et mention bêta ─────────────────────── */
+.pose{display:flex;align-items:center;gap:.7rem;max-width:31rem;width:100%;margin:0 auto;
+  background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--sig);
+  padding:.6rem .7rem}
+.pose img{flex:none;border-radius:8px}
+.pose div{flex:1;min-width:0}
+.pose b{display:block;font-size:.82rem;color:var(--ink)}
+.pose em{display:block;font-style:normal;font-size:.74rem;color:var(--ink3);line-height:1.45;
+  margin-top:.1rem}
+.pose .btn{flex:none}
+.pose .btn.mini{padding:.2rem .4rem;border-color:transparent;color:var(--ink3)}
+.pieds .beta{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.6rem;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);
+  border:1px solid var(--rule);border-radius:2px;padding:.1rem .3rem;opacity:.75}
+.pieds .beta:hover{opacity:1;border-color:var(--warn);color:var(--warn)}
+@media(max-width:560px){.pose{flex-wrap:wrap}.pose .btn{width:auto}}
+
+/* ── contacts ─────────────────────────────────────────── */
+.pastille{display:inline-grid;place-content:center;min-width:16px;height:16px;padding:0 4px;
+  margin-left:.35rem;background:var(--sig);color:#fff;border-radius:8px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.58rem;font-weight:600;
+  vertical-align:middle}
+.gens{display:flex;flex-direction:column;gap:.3rem}
+.gens .vide{font-size:.78rem;color:var(--ink3);font-style:italic;padding:.3rem 0}
+.pers{display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;background:var(--sunk);
+  border-left:3px solid var(--rule2);flex-wrap:wrap}
+.pers.attente{border-left-color:var(--warn)}
+.pers.ok{border-left-color:var(--ok)}
+.pers .pav{width:30px;height:30px;flex:none;display:grid;place-content:center;background:var(--card);
+  font-family:"IBM Plex Mono",monospace;font-size:.68rem;font-weight:600;color:var(--ink2);
+  border-radius:50%}
+.pers .qui{flex:1;min-width:8rem}
+.pers .qui b{display:block;font-size:.82rem}
+.pers .qui em{display:block;font-style:normal;font-size:.68rem;color:var(--ink3);
+  font-family:"IBM Plex Mono",monospace;margin-top:.05rem}
+.pers .act{display:flex;gap:.3rem;align-items:center;flex-wrap:wrap;margin-left:auto}
+.etiq{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.07em;
+  text-transform:uppercase;padding:.12rem .35rem;border-radius:2px}
+.etiq.att{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.etiq.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.etiq.non{color:var(--late);background:color-mix(in srgb,var(--late) 14%,transparent)}
+.resa{display:flex;flex-direction:column;gap:.25rem;padding:.55rem .65rem;background:var(--sunk);
+  border-left:3px solid var(--evt)}
+.resa.attente{border-left-color:var(--warn)}
+.resa.accepte{border-left-color:var(--ok)}
+.resa.refuse,.resa.annule{border-left-color:var(--rule2);opacity:.7}
+.resa .l1{display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap}
+.resa .quand{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink3)}
+.resa .t{font-size:.82rem;font-weight:600;color:var(--ink)}
+.resa .msg{font-size:.78rem;color:var(--ink2);line-height:1.5;
+  border-left:2px solid var(--rule);padding-left:.5rem;margin-top:.1rem}
+.resa .act{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.35rem}
+.rform{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.4rem;
+  align-items:end}
+.rform .champ{margin:0}
+.rform .large{grid-column:1/-1}
+.joi{display:grid;gap:.35rem;max-width:560px}
+.joi .opt{display:flex;gap:.55rem;align-items:flex-start;padding:.55rem .7rem;background:var(--sunk);
+  border-left:3px solid transparent;cursor:pointer}
+.joi .opt.on{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 7%,var(--sunk))}
+.joi .opt input{margin-top:.2rem;accent-color:var(--ok)}
+.joi .opt b{display:block;font-size:.8rem;color:var(--ink)}
+.joi .opt em{display:block;font-size:.73rem;color:var(--ink3);font-style:normal;line-height:1.45;
+  margin-top:.08rem}
+.ligne.occupe{border-left-color:var(--ink3);background:var(--sunk)}
+.ligne.occupe .quoi{color:var(--ink3);font-style:italic}
+@media(max-width:640px){
+  .pers{gap:.4rem}.pers .act{margin-left:0;width:100%}
+  .rform{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -884,6 +961,15 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
     </form>
   </div>
 
+  <div class="pose" id="pose" hidden>
+    <img src="icones/repere-192.png" alt="" width="44" height="44">
+    <div><b>Mets Repère sur ton écran d'accueil</b>
+      <em>Deux gestes, moins d'un mégaoctet, et ça s'ouvre comme une vraie application
+        — même sans réseau.</em></div>
+    <a class="btn" href="installer.html">Comment faire</a>
+    <button class="btn mini" id="poseNon" aria-label="Masquer">✕</button>
+  </div>
+
   <div class="vitrine" id="vitrine" hidden>
     <div class="sep">Des plannings ouverts à consulter</div>
     <div class="profils" id="listeProfils"></div>
@@ -891,10 +977,12 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
 
   <div class="pieds">
     <span>Repère</span>
-    <a href="aide.html">Aide et questions fréquentes</a>
-    <a href="conditions.html">Conditions générales</a>
+    <a href="installer.html">Installer l'application</a>
+    <a href="aide.html">Aide</a>
+    <a href="conditions.html">Conditions</a>
     <a href="confidentialite.html">Confidentialité</a>
     <a href="aide.html#mentions">Mentions légales</a>
+    <a class="beta" href="beta.html" title="Ce que « bêta » implique">bêta</a>
   </div>
  </div>
 </section>
@@ -933,6 +1021,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
     <button role="tab" data-tab="today" aria-selected="true">Aujourd'hui</button>
     <button role="tab" data-tab="cal"   aria-selected="false">Calendrier</button>
     <button role="tab" data-tab="dispo" aria-selected="false">Quand je suis libre</button>
+    <button role="tab" data-tab="social" aria-selected="false">Contacts<span class="pastille" id="pastille" hidden></span></button>
     <button role="tab" data-tab="todo"  aria-selected="false">Étapes</button>
     <button role="tab" data-tab="regl"  aria-selected="false">Réglages</button>
   </nav>
@@ -950,13 +1039,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
     <div class="panel">
       <div class="phead"><h2>Ma journée</h2><div class="note" id="dateJour"></div></div>
       <div id="journee"></div>
-    </div>
-
-    <div class="panel">
-      <div class="phead"><h2>Ma progression</h2>
-        <div class="note">Heures faites, face au plan</div></div>
-      <div class="courbe" id="courbe"></div>
-      <div class="ckey" id="ckey"></div>
     </div>
 
     <div class="panel" id="blocRetard" hidden>
@@ -989,6 +1071,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
           <input id="evL" type="url" placeholder="Lien (facultatif)">
           <label class="urgcase"><input type="checkbox" id="evU"><span>Urgent</span></label>
           <label class="urgcase"><input type="checkbox" id="evP"><span>C'est une pause</span></label>
+          <label class="urgcase"><input type="checkbox" id="evV"><span>Titre visible par les autres</span></label>
         </div>
       </form>
 
@@ -1024,6 +1107,45 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
     </div>
   </section>
 
+  <!-- ─────────── CONTACTS ─────────── -->
+  <section data-panel="social" class="stack" hidden>
+    <div class="panel" id="pDemandes" hidden>
+      <div class="phead"><h2>À traiter</h2>
+        <div class="note">Demandes qui attendent une réponse de ta part</div></div>
+      <div id="demandes"></div>
+    </div>
+
+    <div class="panel">
+      <div class="phead"><h2>Réserver un créneau</h2>
+        <div class="note">Chez quelqu'un qui t'a accepté</div></div>
+      <div id="resaForm"></div>
+      <div class="soustitre" style="margin-top:1rem">Mes demandes envoyées</div>
+      <div id="mesResa"></div>
+    </div>
+
+    <div class="panel">
+      <div class="phead"><h2>Je suis abonné à</h2>
+        <div class="note">Leur planning, quand ils l'autorisent</div></div>
+      <div id="abonnements"></div>
+    </div>
+
+    <div class="panel">
+      <div class="phead"><h2>Abonnés à mon planning</h2>
+        <div class="note">Coche « vrai nom » pour ceux qui peuvent savoir qui tu es</div></div>
+      <div id="abonnes"></div>
+    </div>
+
+    <div class="panel">
+      <div class="phead"><h2>Trouver quelqu'un</h2>
+        <div class="note">Les plannings ouverts à la consultation</div></div>
+      <div class="champ" style="max-width:320px;margin-bottom:.6rem">
+        <label class="horsvue" for="chercheP">Chercher un pseudonyme</label>
+        <input id="chercheP" type="search" placeholder="Chercher un pseudonyme…">
+      </div>
+      <div id="annuaire"></div>
+    </div>
+  </section>
+
   <!-- ─────────── ÉTAPES ─────────── -->
   <section data-panel="todo" class="stack" hidden>
     <div class="panel">
@@ -1033,6 +1155,12 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
           <button class="btn" id="collapseAll">Tout replier</button>
         </div></div>
       <div class="acc" id="acc"></div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2>Ma progression</h2>
+        <div class="note">Heures faites, face au plan</div></div>
+      <div class="courbe" id="courbe"></div>
+      <div class="ckey" id="ckey"></div>
     </div>
     <div class="panel">
       <div class="phead"><h2>Vue d'ensemble de l'année</h2></div>
@@ -1046,6 +1174,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
     <div class="panel">
       <div class="phead"><h2>Mon profil</h2><div class="note">Qui peut consulter ce planning</div></div>
       <div id="profilBox"></div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2>Être joignable</h2>
+        <div class="note">Qui peut te demander un créneau</div></div>
+      <div id="joignableBox"></div>
     </div>
     <div class="panel">
       <div class="phead"><h2>Mon programme</h2>
@@ -1070,10 +1203,12 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
 
   <div class="pieds">
     <span>Repère</span>
-    <a href="aide.html">Aide et questions fréquentes</a>
-    <a href="conditions.html">Conditions générales</a>
+    <a href="installer.html">Installer l'application</a>
+    <a href="aide.html">Aide</a>
+    <a href="conditions.html">Conditions</a>
     <a href="confidentialite.html">Confidentialité</a>
     <a href="aide.html#mentions">Mentions légales</a>
+    <a class="beta" href="beta.html" title="Ce que « bêta » implique">bêta</a>
   </div>
 </section>
 

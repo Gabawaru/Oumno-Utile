@@ -18,8 +18,8 @@ let capacites = { 0: 2, 1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 3 };
 let reports = {};        // échéances repoussées à la main
 let programme = null;    // modèle choisi, ou matières déclarées à la main
 let modeleEnAttente = null;  // modèle retenu à l'inscription, posé à la 1re ouverture
-let partages = [];       // comptes autorisés à voir mon planning privé
 let nomReel = null;      // vrai nom du profil consulté, si l'on y a droit
+let abonnements = [], abonnes = [], resaRecues = [], resaEnvoyees = [], annuaire = [];
 let partJour = null;     // { date, h } — la part de travail fixée pour le jour
 let plan = null;         // résultat du planificateur
 
@@ -533,7 +533,7 @@ function renderAll(){
   painting=true;
   replanifier();
   renderToday();renderCourbe();paintGantt();renderGrades();renderJournal();
-  renderCapacites();renderProfil();renderProgramme();renderCompte();
+  renderCapacites();renderProfil();renderProgramme();renderCompte();renderJoignable();majPastille();
   if(!document.querySelector('[data-panel="cal"]').hidden) renderCal();
   syncChecks();applyMode();
   painting=false;
@@ -697,6 +697,11 @@ function friseHTML(cle, { compact = false } = {}) {
         </span></label>`;
     }
     const e = x.ev;
+    // On ne montre le titre d'un événement que s'il est explicitement partagé.
+    if (!canEdit && !e.visible) {
+      return `<div class="ligne occupe"><span class="hh">${plage}</span>
+        <span class="quoi">Occupé · ${dur} h</span></div>`;
+    }
     return `<div class="ligne ${x.type}"><span class="hh">${plage}</span>
       <span class="quoi"><b>${esc(e.titre || e.title || "")}</b>
         ${e.urgent ? `<span class="urg">urgent</span>` : ""}
@@ -755,6 +760,8 @@ function nouvelEvenement() {
     lien: lienSur($("evL").value.trim()),
     urgent: $("evU").checked,
     pause: $("evP").checked,
+    // Par défaut un événement est privé : les autres voient « occupé », rien de plus.
+    visible: $("evV").checked,
   };
 }
 function baseplan() {
@@ -837,7 +844,8 @@ function ajouter(force) {
   events.sort((a, b) => (a.date + (a.debut || "")).localeCompare(b.date + (b.debut || "")));
   log(`a ajouté « ${ev.titre} » le ${leJour(ev.date)} de ${ev.debut} à ${ev.fin}`);
   saveEvents();
-  $("evT").value = ""; $("evL").value = ""; $("evU").checked = false; $("evP").checked = false;
+  $("evT").value = ""; $("evL").value = "";
+  $("evU").checked = false; $("evP").checked = false; $("evV").checked = false;
   const z = $("alerte"); if (z) z.innerHTML = "";
   calSel = new Date(ev.date + "T00:00");
   renderAll();
@@ -1018,18 +1026,6 @@ function renderDispo() {
    qui n'est pas dans la liste. Ce qui suit ne fait que piloter cette liste. */
 
 /**
- * Les comptes autorisés à voir mon planning. Le nom passe par une fonction
- * dédiée : un profil privé n'est pas lisible directement, même par celui qui
- * l'a invité — et il n'a pas à voir ses réglages pour autant.
- */
-async function chargerPartages() {
-  partages = [];
-  if (!canEdit || !vue) return;
-  const { data } = await sb.rpc("mes_invites");
-  partages = Array.isArray(data) ? data : [];
-}
-
-/**
  * Le vrai nom vit dans sa propre table : les politiques de sécurité portent sur
  * des lignes et non sur des colonnes, donc le loger dans le profil l'aurait
  * rendu lisible par quiconque peut lire ce profil. Ici, la requête ne renvoie
@@ -1080,12 +1076,6 @@ function renderProfil() {
           et ton profil s'affiche sur la page d'accueil.</em></span></label>
     </div>
 
-    <div class="soustitre" style="margin-top:1rem">Personnes autorisées</div>
-    <p class="aide">Elles voient ton planning en lecture seule, même quand il est privé.
-      Coche <b>vrai nom</b> pour celles qui ont le droit de savoir qui tu es.
-      ${vue.public ? "Ton planning étant public, la première colonne ne change rien — la seconde, si." : ""}</p>
-    <div class="membres" id="membres"></div>
-
     <div class="soustitre" style="margin-top:1rem">Inviter par lien</div>
     <p class="aide">Quiconque ouvre ce lien en étant connecté obtient l'accès en lecture.
       Valable 30 jours, 25 utilisations, 20 liens actifs au plus. Ne le donne qu'à des
@@ -1098,8 +1088,6 @@ function renderProfil() {
     ${vue.public ? `<div class="soustitre" style="margin-top:1rem">Lien public</div>
       <div class="lp"><code>${esc(url)}</code>
         <button class="btn" id="copierLien">Copier</button></div>` : ""}`;
-
-  renderMembres();
 
   const reelInp = $("pfReel");
   reelInp.onchange = async () => {
@@ -1170,42 +1158,6 @@ function renderProfil() {
     catch { cp.textContent = "Échec"; }
     setTimeout(() => (cp.textContent = "Copier"), 1600);
   };
-}
-
-function renderMembres() {
-  const box = $("membres");
-  if (!box) return;
-  box.innerHTML = partages.length
-    ? partages.map((p) => `<div class="membre">
-        <span class="pav">${esc((p.nom || "?").slice(0, 2).toUpperCase())}</span>
-        <span class="mn"><b>${esc(p.nom || "Compte supprimé")}</b>
-          <em>${p.slug ? "@" + esc(p.slug) + " · " : ""}autorisé le ${new Date(p.cree_le).toLocaleDateString("fr-FR",
-            { day: "numeric", month: "long" })}</em></span>
-        <label class="urgcase mreel"><input type="checkbox" data-reel="${esc(p.invite)}"
-          ${p.voit_nom_reel ? "checked" : ""}><span>vrai nom</span></label>
-        <button class="btn" data-retirer="${esc(p.invite)}">Retirer</button>
-      </div>`).join("")
-    : `<p class="aide muted">Personne pour l'instant. Envoie un lien d'invitation ci-dessous.</p>`;
-  box.querySelectorAll("[data-reel]").forEach((c) => (c.onchange = async () => {
-    const { error } = await sb.rpc("regler_nom_reel", { qui: c.dataset.reel, autorise: c.checked });
-    if (error) { c.checked = !c.checked; return setSync("warn", "changement refusé"); }
-    const p = partages.find((x) => x.invite === c.dataset.reel);
-    if (p) p.voit_nom_reel = c.checked;
-    setSync("ok", c.checked ? "vrai nom partagé" : "vrai nom masqué");
-  }));
-  box.querySelectorAll("[data-retirer]").forEach((b) => (b.onclick = () => dialogue({
-    ton: "warn", titre: "Retirer cette personne ?",
-    corps: `<p>Elle n'aura plus accès à ton planning. Tu pourras l'inviter à nouveau.</p>`,
-    actions: [
-      { texte: "Annuler", pri: true },
-      { texte: "Retirer", faire: async () => {
-          await sb.from("ciel_partages").delete()
-            .eq("proprietaire", vue.id).eq("invite", b.dataset.retirer);
-          await chargerPartages();
-  await chargerNomReel(); renderMembres();
-        } },
-    ],
-  })));
 }
 
 /* ═════════ MON PROGRAMME ═════════
@@ -1455,6 +1407,361 @@ function renderCompte() {
   });
 }
 
+/* ═════════ CONTACTS ═════════
+   S'abonner, accepter, demander un créneau. Toutes les règles — qui peut
+   demander quoi à qui — sont appliquées par la base : l'interface ne fait que
+   les refléter. Masquer un bouton n'a jamais protégé personne. */
+
+const initiales = (n) => esc(String(n || "?").trim().slice(0, 2).toUpperCase());
+const jourFr = (d) => new Date(d + "T00:00").toLocaleDateString("fr-FR",
+  { weekday: "long", day: "numeric", month: "long" });
+
+async function chargerSocial() {
+  if (!session) { abonnements = abonnes = resaRecues = resaEnvoyees = []; return; }
+  const [a, b, r] = await Promise.all([
+    sb.rpc("mes_abonnements"),
+    sb.rpc("mes_abonnes"),
+    sb.from("ciel_reservations").select("*").order("jour", { ascending: true }),
+  ]);
+  abonnements = Array.isArray(a.data) ? a.data : [];
+  abonnes = Array.isArray(b.data) ? b.data : [];
+  const tout = Array.isArray(r.data) ? r.data : [];
+  resaRecues = tout.filter((x) => x.hote === session.user.id);
+  resaEnvoyees = tout.filter((x) => x.demandeur === session.user.id);
+  majPastille();
+}
+
+/** Le nombre de choses qui attendent vraiment une réponse de moi. */
+function aTraiter() {
+  return abonnes.filter((x) => x.etat === "attente").length
+       + resaRecues.filter((x) => x.etat === "attente").length;
+}
+function majPastille() {
+  const p = $("pastille");
+  if (!p) return;
+  const n = aTraiter();
+  p.hidden = n === 0;
+  p.textContent = n > 9 ? "9+" : String(n);
+}
+
+function renderSocial() {
+  if (!$("abonnements")) return;
+  renderDemandes();
+  renderAbonnements();
+  renderAbonnes();
+  renderResaForm();
+  renderMesResa();
+  renderAnnuaire();
+  majPastille();
+}
+
+/* ── ce qui attend une réponse ───────────────────────── */
+function renderDemandes() {
+  const bloc = $("pDemandes"), box = $("demandes");
+  const dem = abonnes.filter((x) => x.etat === "attente");
+  const res = resaRecues.filter((x) => x.etat === "attente");
+  bloc.hidden = !(dem.length || res.length);
+  if (bloc.hidden) return;
+
+  box.innerHTML = `<div class="gens">` + dem.map((d) => `
+    <div class="pers attente">
+      <span class="pav">${initiales(d.nom)}</span>
+      <span class="qui"><b>${esc(d.nom || "Compte")}</b>
+        <em>@${esc(d.slug || "?")} · veut suivre ton planning</em></span>
+      <span class="act">
+        <button class="btn pri" data-abok="${esc(d.qui)}">Accepter</button>
+        <button class="btn" data-abnon="${esc(d.qui)}">Refuser</button>
+      </span>
+    </div>`).join("") + `</div>`
+    + (res.length ? `<div class="soustitre" style="margin-top:.9rem">Créneaux demandés</div>
+      <div class="gens">` + res.map((r) => carteResa(r, true)).join("") + `</div>` : "");
+}
+
+function carteResa(r, cotehote) {
+  const qui = cotehote
+    ? (abonnes.find((a) => a.qui === r.demandeur) || abonnements.find((a) => a.qui === r.demandeur))
+    : abonnements.find((a) => a.qui === r.hote);
+  const nom = qui ? qui.nom : "Quelqu'un";
+  const etats = { attente: "en attente", accepte: "accepté", refuse: "refusé", annule: "annulé" };
+  return `<div class="resa ${r.etat}">
+    <div class="l1">
+      <span class="t">${esc(r.titre)}</span>
+      <span class="etiq ${r.etat === "accepte" ? "ok" : r.etat === "attente" ? "att" : "non"}">${etats[r.etat]}</span>
+    </div>
+    <div class="quand">${jourFr(r.jour)} · ${r.debut.slice(0, 5)} – ${r.fin.slice(0, 5)}
+      · ${cotehote ? "de" : "chez"} ${esc(nom)}</div>
+    ${r.message ? `<div class="msg">${esc(r.message)}</div>` : ""}
+    ${r.reponse ? `<div class="msg">Réponse : ${esc(r.reponse)}</div>` : ""}
+    <div class="act">
+      ${cotehote && r.etat === "attente" ? `
+        <button class="btn pri" data-rok="${r.id}">Accepter</button>
+        <button class="btn" data-rnon="${r.id}">Refuser</button>` : ""}
+      ${!cotehote && r.etat === "attente" ? `<button class="btn" data-rann="${r.id}">Annuler</button>` : ""}
+    </div>
+  </div>`;
+}
+
+/* ── mes abonnements ─────────────────────────────────── */
+function renderAbonnements() {
+  $("abonnements").innerHTML = abonnements.length
+    ? `<div class="gens">` + abonnements.map((a) => `
+      <div class="pers ${a.etat === "accepte" ? "ok" : "attente"}">
+        <span class="pav">${initiales(a.nom)}</span>
+        <span class="qui"><b>${esc(a.nom || "Compte")}</b>
+          <em>@${esc(a.slug || "?")}${a.public ? " · public" : ""}</em></span>
+        <span class="act">
+          ${a.etat === "attente" ? `<span class="etiq att">demande envoyée</span>` : ""}
+          ${a.etat === "accepte" && a.slug
+            ? `<a class="btn" href="?profil=${encodeURIComponent(a.slug)}">Voir</a>` : ""}
+          <button class="btn" data-desab="${esc(a.qui)}">Se désabonner</button>
+        </span>
+      </div>`).join("") + `</div>`
+    : `<div class="vide">Tu ne suis personne pour l'instant. Cherche un pseudonyme plus bas.</div>`;
+}
+
+/* ── mes abonnés ─────────────────────────────────────── */
+function renderAbonnes() {
+  const l = abonnes.filter((x) => x.etat === "accepte");
+  $("abonnes").innerHTML = l.length
+    ? `<div class="gens">` + l.map((a) => `
+      <div class="pers ok">
+        <span class="pav">${initiales(a.nom)}</span>
+        <span class="qui"><b>${esc(a.nom || "Compte")}</b>
+          <em>@${esc(a.slug || "?")} · depuis le ${new Date(a.cree_le).toLocaleDateString("fr-FR",
+            { day: "numeric", month: "long" })}</em></span>
+        <span class="act">
+          <label class="urgcase"><input type="checkbox" data-reel="${esc(a.qui)}"
+            ${a.voit_nom_reel ? "checked" : ""}><span>vrai nom</span></label>
+          <button class="btn" data-retirer="${esc(a.qui)}">Retirer</button>
+        </span>
+      </div>`).join("") + `</div>`
+    : `<div class="vide">Personne ne suit ton planning pour l'instant.</div>`;
+}
+
+/* ── demander un créneau ─────────────────────────────── */
+function renderResaForm() {
+  const ouverts = abonnements.filter((a) => a.etat === "accepte"
+    && (a.joignable === "tous" || a.joignable === "abonnes"));
+  $("resaForm").innerHTML = ouverts.length ? `
+    <div class="rform">
+      <div class="champ"><label class="fl" for="rQui">Chez qui</label>
+        <select id="rQui">${ouverts.map((a) =>
+          `<option value="${esc(a.qui)}">${esc(a.nom || a.slug)}</option>`).join("")}</select></div>
+      <div class="champ"><label class="fl" for="rJour">Quel jour</label>
+        <input id="rJour" type="date" value="${isoJour(new Date(NOW + DAY))}"></div>
+      <div class="champ"><label class="fl" for="rD">De</label>
+        <input id="rD" type="time" value="14:00"></div>
+      <div class="champ"><label class="fl" for="rF">À</label>
+        <input id="rF" type="time" value="17:00"></div>
+      <div class="champ large"><label class="fl" for="rT">Pour quoi faire</label>
+        <input id="rT" type="text" maxlength="90" placeholder="Réviser les maths ensemble"></div>
+      <div class="champ large"><label class="fl" for="rM">Un mot <span class="opt-t">facultatif</span></label>
+        <input id="rM" type="text" maxlength="500" placeholder="Chez moi ou à la bibli, comme tu veux"></div>
+      <div class="large"><button class="btn pri" id="rEnvoyer">Envoyer la demande</button></div>
+    </div>`
+    : `<div class="vide">Abonne-toi d'abord à quelqu'un : c'est ce qui ouvre la
+       possibilité de lui demander un créneau.</div>`;
+
+  const b = $("rEnvoyer");
+  if (b) b.onclick = envoyerDemande;
+}
+
+async function envoyerDemande() {
+  const b = $("rEnvoyer");
+  const titre = $("rT").value.trim();
+  if (!titre) return dialogue({ ton: "warn", titre: "Il manque le motif",
+    corps: `<p>Dis à quoi servirait ce créneau : c'est ce qui permet d'accepter ou non.</p>` });
+  b.disabled = true; b.textContent = "Envoi…";
+  const { data, error } = await sb.rpc("demander_creneau", {
+    hote_id: $("rQui").value, jour_d: $("rJour").value,
+    debut_h: $("rD").value, fin_h: $("rF").value,
+    titre_t: titre, message_t: $("rM").value.trim() || null,
+  });
+  b.disabled = false; b.textContent = "Envoyer la demande";
+  const r = String(data || "").replace(/"/g, "");
+  const refus = {
+    abonnes: "Cette personne n'accepte les demandes que de ses abonnés acceptés.",
+    ferme: "Cette personne n'accepte aucune demande pour l'instant.",
+    horaires: "L'heure de fin doit venir après l'heure de début.",
+    passe: "On ne réserve pas un créneau dans le passé.",
+    trop: "Tu as déjà dix demandes en attente chez cette personne.",
+    titre: "Il manque le motif.",
+  };
+  if (error || refus[r]) {
+    return dialogue({ ton: "warn", titre: "Demande non envoyée",
+      corps: `<p>${esc(refus[r] || error?.message || "Réessaie dans un instant.")}</p>` });
+  }
+  $("rT").value = ""; $("rM").value = "";
+  await chargerSocial(); renderSocial();
+  dialogue({ ton: "info", titre: r === "accepte" ? "C'est réservé" : "Demande envoyée",
+    corps: r === "accepte"
+      ? `<p>Cette personne accepte les demandes automatiquement : le créneau est posé.</p>`
+      : `<p>Elle recevra ta demande et pourra l'accepter ou la refuser.</p>` });
+}
+
+function renderMesResa() {
+  const l = resaEnvoyees.filter((r) => r.etat !== "annule");
+  $("mesResa").innerHTML = l.length
+    ? `<div class="gens">` + l.map((r) => carteResa(r, false)).join("") + `</div>`
+    : `<div class="vide">Aucune demande envoyée.</div>`;
+}
+
+/* ── annuaire ────────────────────────────────────────── */
+async function chargerAnnuaire() {
+  const { data } = await sb.from("ciel_profiles").select("id,slug,nom,public,joignable")
+    .eq("public", true).order("nom");
+  annuaire = (data || []).filter((p) => !session || p.id !== session.user.id);
+}
+
+function renderAnnuaire() {
+  const q = ($("chercheP")?.value || "").trim().toLowerCase();
+  const suivis = new Set(abonnements.map((a) => a.qui));
+  const l = annuaire.filter((p) => !q || p.nom.toLowerCase().includes(q) || p.slug.includes(q));
+  $("annuaire").innerHTML = l.length
+    ? `<div class="gens">` + l.slice(0, 40).map((p) => `
+      <div class="pers${suivis.has(p.id) ? " ok" : ""}">
+        <span class="pav">${initiales(p.nom)}</span>
+        <span class="qui"><b>${esc(p.nom)}</b><em>@${esc(p.slug)}</em></span>
+        <span class="act">
+          <a class="btn" href="?profil=${encodeURIComponent(p.slug)}">Voir</a>
+          ${suivis.has(p.id)
+            ? `<span class="etiq ok">suivi</span>`
+            : `<button class="btn pri" data-sab="${esc(p.id)}">S'abonner</button>`}
+        </span>
+      </div>`).join("") + `</div>`
+    : `<div class="vide">${q ? "Aucun pseudonyme ne correspond." :
+        "Aucun planning public pour l'instant. Les comptes privés se rejoignent par lien d'invitation."}</div>`;
+}
+
+/* ── joignabilité ────────────────────────────────────── */
+function renderJoignable() {
+  const box = $("joignableBox");
+  if (!box || !vue) return;
+  if (!canEdit) { box.innerHTML = ""; return; }
+  const j = vue.joignable || "abonnes";
+  const opts = [
+    ["tous", "Tout le monde", "N'importe quel compte peut te demander un créneau, même sans te suivre."],
+    ["abonnes", "Mes abonnés acceptés", "Seules les personnes que tu as acceptées peuvent demander. C'est le réglage par défaut."],
+    ["personne", "Personne", "Aucune demande ne t'atteint. Ton planning reste consultable selon ta visibilité."],
+  ];
+  box.innerHTML = `<div class="joi">` + opts.map(([v, t, d]) => `
+    <label class="opt${j === v ? " on" : ""}">
+      <input type="radio" name="joi" value="${v}"${j === v ? " checked" : ""}>
+      <span><b>${t}</b><em>${d}</em></span></label>`).join("") + `</div>
+    <label class="urgcase" style="margin-top:.7rem"><input type="checkbox" id="resaAuto"
+      ${vue.reservations_auto ? "checked" : ""}>
+      <span>Accepter les demandes automatiquement</span></label>
+    <p class="aide">Sans cette case, chaque demande attend ta réponse. Avec, le créneau
+      est posé directement — pratique quand on fait confiance, à éviter sinon.</p>`;
+
+  box.querySelectorAll('input[name="joi"]').forEach((r) => (r.onchange = async () => {
+    const { error } = await sb.from("ciel_profiles").update({ joignable: r.value }).eq("id", vue.id);
+    if (error) return setSync("warn", "changement refusé");
+    vue.joignable = r.value; renderJoignable(); setSync("ok", "enregistré");
+  }));
+  $("resaAuto").onchange = async (e) => {
+    const { error } = await sb.from("ciel_profiles")
+      .update({ reservations_auto: e.target.checked }).eq("id", vue.id);
+    if (error) { e.target.checked = !e.target.checked; return setSync("warn", "changement refusé"); }
+    vue.reservations_auto = e.target.checked; setSync("ok", "enregistré");
+  };
+}
+
+/* ── actions ─────────────────────────────────────────── */
+document.addEventListener("change", async (e) => {
+  const c = e.target.closest("[data-reel]");
+  if (!c) return;
+  const { error } = await sb.rpc("regler_nom_reel", { qui: c.dataset.reel, autorise: c.checked });
+  if (error) { c.checked = !c.checked; return setSync("warn", "changement refusé"); }
+  const a = abonnes.find((x) => x.qui === c.dataset.reel);
+  if (a) a.voit_nom_reel = c.checked;
+  setSync("ok", c.checked ? "vrai nom partagé" : "vrai nom masqué");
+});
+
+document.addEventListener("click", async (e) => {
+  const r = e.target.closest("[data-retirer]");
+  if (r) {
+    return dialogue({ ton: "warn", titre: "Retirer cette personne ?",
+      corps: `<p>Elle n'aura plus accès à ton planning. Elle pourra redemander.</p>`,
+      actions: [{ texte: "Annuler", pri: true },
+                { texte: "Retirer", faire: async () => {
+                    await sb.rpc("repondre_abonnement", { qui: r.dataset.retirer, accepte: false });
+                    await sb.from("ciel_partages").delete()
+                      .eq("proprietaire", vue.id).eq("invite", r.dataset.retirer);
+                    await chargerSocial(); renderSocial();
+                  } }] });
+  }
+});
+
+document.addEventListener("click", async (e) => {
+  const t = e.target;
+  const rpc = async (nom, args, apres) => {
+    const b = t.closest("button");
+    if (b) { b.disabled = true; }
+    const { error } = await sb.rpc(nom, args);
+    if (error) { if (b) b.disabled = false; return setSync("warn", "action refusée"); }
+    await chargerSocial();
+    renderSocial();
+    if (apres) apres();
+  };
+
+  const sab = t.closest("[data-sab]");
+  if (sab) {
+    const b = sab; b.disabled = true;
+    const { data } = await sb.rpc("s_abonner", { cible: b.dataset.sab });
+    const r = String(data || "").replace(/"/g, "");
+    await chargerSocial(); renderSocial();
+    return dialogue({ ton: "info", titre: r === "accepte" ? "Abonné" : "Demande envoyée",
+      corps: r === "accepte"
+        ? `<p>Ce planning est public : tu le suis désormais.</p>`
+        : `<p>Ce compte est privé. La personne recevra ta demande et décidera.</p>` });
+  }
+  const des = t.closest("[data-desab]");
+  if (des) return rpc("se_desabonner", { cible: des.dataset.desab });
+  const ok = t.closest("[data-abok]");
+  if (ok) return rpc("repondre_abonnement", { qui: ok.dataset.abok, accepte: true });
+  const non = t.closest("[data-abnon]");
+  if (non) return rpc("repondre_abonnement", { qui: non.dataset.abnon, accepte: false });
+
+  const rok = t.closest("[data-rok]");
+  if (rok) return repondreResa(+rok.dataset.rok, "accepte");
+  const rnon = t.closest("[data-rnon]");
+  if (rnon) return repondreResa(+rnon.dataset.rnon, "refuse");
+  const rann = t.closest("[data-rann]");
+  if (rann) return repondreResa(+rann.dataset.rann, "annule");
+});
+
+/**
+ * Accepter une demande la pose dans mon planning comme un événement : c'est ce
+ * qui fait que le planificateur en tient compte, et que mes proches la voient
+ * comme un moment occupé.
+ */
+async function repondreResa(id, etat) {
+  const r = resaRecues.concat(resaEnvoyees).find((x) => x.id === id);
+  if (!r) return;
+  const { error } = await sb.from("ciel_reservations")
+    .update({ etat, maj_le: new Date().toISOString() }).eq("id", id);
+  if (error) return setSync("warn", "réponse refusée");
+
+  if (etat === "accepte" && canEdit) {
+    const qui = abonnes.find((a) => a.qui === r.demandeur);
+    events.push({
+      id: "r" + r.id, date: r.jour, debut: r.debut.slice(0, 5), fin: r.fin.slice(0, 5),
+      titre: r.titre, urgent: false, pause: false, visible: true, resa: r.id,
+    });
+    events.sort((a, b) => (a.date + (a.debut || "")).localeCompare(b.date + (b.debut || "")));
+    log(`a accepté un créneau avec ${qui ? qui.nom : "quelqu'un"} le ${jourFr(r.jour)}`);
+    saveEvents();
+  }
+  if (etat === "annule" || etat === "refuse") {
+    events = events.filter((x) => x.resa !== r.id);
+    saveEvents();
+  }
+  await chargerSocial();
+  renderSocial();
+  renderAll();
+}
+
 /* ═════════ AUTHENTIFICATION ═════════ */
 function montrer(ecran) {
   ["ecranAuth", "ecranProfils", "appli"].forEach((k) => { const e = $(k); if (e) e.hidden = k !== ecran; });
@@ -1503,8 +1810,9 @@ async function ouvrir(profil) {
     saveState();
   }
   try { localStorage.removeItem("ciel.modele"); } catch {}
-  await chargerPartages();
   await chargerNomReel();
+  await chargerSocial();
+  await chargerAnnuaire();
   const { data: jr } = await sb.from("ciel_journal").select("ts,body")
     .eq("user_id", profil.id).order("ts", { ascending: false }).limit(120);
   journal = (jr || []).map((j) => ({ ts: j.ts, text: j.body }));
@@ -1627,6 +1935,22 @@ async function versConnexion(message, email) {
   $("boiteAuth").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
+/* ═════════ INVITATION À INSTALLER ═════════
+   Discrète, et seulement quand elle a un sens : ni dans l'application déjà
+   installée, ni si on l'a écartée. */
+(function proposerInstallation() {
+  const zone = $("pose");
+  if (!zone) return;
+  const posee = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  let ecarte = false;
+  try { ecarte = localStorage.getItem("ciel.pose") === "non"; } catch {}
+  zone.hidden = posee || ecarte;
+  $("poseNon").onclick = () => {
+    zone.hidden = true;
+    try { localStorage.setItem("ciel.pose", "non"); } catch {}
+  };
+})();
+
 /* onglets d'authentification */
 function ongletAuth(m) {
   document.querySelectorAll("[data-auth]").forEach((x) =>
@@ -1644,6 +1968,10 @@ document.querySelectorAll("[data-aller]").forEach((b) => b.addEventListener("cli
   $("boiteAuth").scrollIntoView({ behavior: "smooth", block: "center" });
   setTimeout(() => $(b.dataset.aller === "connexion" ? "conEmail" : "insNom")?.focus(), 420);
 }));
+
+document.addEventListener("input", (e) => {
+  if (e.target.id === "chercheP") { clearTimeout(tmr.ann); tmr.ann = setTimeout(renderAnnuaire, 200); }
+});
 
 $("insNom").addEventListener("input", () => {
   clearTimeout(tmr.insNom);
@@ -1851,7 +2179,8 @@ function ouvrirOnglet(nom, { focus = false } = {}) {
   });
 
   if (nom === "cal") renderCal();
-  if (nom === "regl") { renderCapacites(); renderProfil(); renderProgramme(); renderCompte(); }
+  if (nom === "regl") { renderCapacites(); renderProfil(); renderProgramme(); renderCompte(); renderJoignable(); }
+  if (nom === "social") renderSocial();
   if (nom === "dispo") renderDispo();
   try { sessionStorage.setItem("ciel.onglet", nom); } catch {}
 }
@@ -1908,5 +2237,11 @@ setInterval(() => { tickClock(); if (vue) renderAll(); }, 60000);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) { tickClock(); if (vue) renderAll(); }
 });
+
+/* Le service worker rend l'application ouvrable sans réseau. Son échec n'a
+   aucune conséquence : on ne bloque jamais le démarrage dessus. */
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
 
 demarrer();
