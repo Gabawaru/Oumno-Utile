@@ -11,14 +11,23 @@ replanification automatique et lettre d'information.
   via `?profil=identifiant`. La page d'accueil liste les profils publics.
 - **Horloge de Paris** — avance, retard et échéances se calculent sur `Europe/Paris`,
   quel que soit le fuseau du visiteur.
-- **Planification par capacité** — tu déclares tes heures de travail disponibles par jour
-  de semaine. Le planning répartit les étapes dans ces heures, échéance la plus proche
-  d'abord. Une étape dont l'échéance est passée repart sur les premiers créneaux libres :
-  le retard se rattrape tout seul.
-- **Zone de tâche** — clique un jour : capacité, heures déjà prises, travail placé, reste.
-  Ajoute un événement de 14 h à 17 h : l'application dit si ça rentre, et sinon combien
-  d'heures de travail n'auraient plus de place, avec un bouton pour ajouter quand même
-  et décaler le reste.
+- **Journée normale, puis rattrapage** — la journée type va de 9 h à 16 h, pauses comprises.
+  Le travail se pose d'abord là. Ce qui n'y tient pas glisse sur des heures inhabituelles
+  (le soir, jusqu'à 22 h), plafonnées à 2 h 30 par jour : au-delà, l'application prévient
+  plutôt que d'aligner des journées de quatorze heures.
+- **Pauses non négociables** — 15 min après chaque 1 h 30 de travail, et le repas de
+  12 h 15 à 13 h 15 que même le rattrapage ne touche pas. Une pause déclarée à la main
+  (case « c'est une pause » à l'ajout d'un événement) bloque le créneau comme un rendez-vous.
+- **Part du jour** — ce qui est prévu aujourd'hui est arrêté au premier calcul de la journée
+  et ne fait que décroître à mesure qu'on valide. Terminer sa journée la libère vraiment :
+  le travail des jours suivants ne vient pas la remplir aussitôt.
+- **Ajout d'un événement** — la vie passe avant le planning : un événement est toujours
+  accepté et le travail se décale, éventuellement sur la soirée ou sur les jours suivants.
+  Un seul cas de refus, annoncé en plein écran : quand des heures ne retrouveraient de place
+  nulle part, ni le jour même, ni le soir, ni ensuite. Le message nomme le jour qui bloque,
+  et laisse le choix d'ajouter quand même.
+- **Zone de tâche** — clique un jour : capacité, heures déjà prises, travail placé, heures
+  hors horaires, créneaux libres.
 - **Remettre à plus tard** — pour une étape qui ne rentre nulle part, un bouton calcule
   la première date à laquelle elle tient et y repousse son échéance.
 - **Lettre d'information** — inscription ouverte à tous sur un profil ; un courriel part
