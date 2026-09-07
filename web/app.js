@@ -69,7 +69,19 @@ const plural=(n,w)=>n+" "+w+(Math.abs(n)>1?"s":"");
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 /** Tout est calé sur l'heure de Paris, quel que soit le fuseau du visiteur. */
-function tickClock(){ NOW = parisNow(); }
+function tickClock(){ NOW = parisNow(); majHorloge(); }
+
+/** L'horloge de l'en-tête : c'est l'heure de Paris, pas celle du visiteur. */
+function majHorloge(){
+  const d = new Date(NOW);
+  const q = $("clkD"), t = $("clkT"), sec = $("clkS");
+  if (!q) return;
+  const j = d.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
+  q.textContent = j.charAt(0).toUpperCase() + j.slice(1);
+  t.firstChild.textContent =
+    `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  sec.textContent = ":" + String(d.getSeconds()).padStart(2, "0");
+}
 const nowQ=()=>{const d=new Date(NOW);
   return Math.max(0,Math.min(19,(d.getFullYear()-Y0)*24+(d.getMonth()-M0)*2+(d.getDate()>15?1:0)));};
 
@@ -294,7 +306,129 @@ function buildAcc(){
   document.getElementById("collapseAll").onclick=()=>document.querySelectorAll(".grpblk").forEach(b=>b.classList.remove("open"));
 }
 
-/* La courbe et la matrice d'Eisenhower ont ete retirees : le statut en toutes
+/* ═════════ COURBE DE PROGRESSION ═════════
+   Deux séries : le plan, en gris, sert de repère ; les heures réellement faites
+   portent la couleur du statut — c'est elle qu'on vient lire. La ligne du fait
+   s'arrête à aujourd'hui : on ne dessine pas un avenir qui n'existe pas. */
+const CB = { l: 48, r: 16, h: 24, b: 30, L: 960, H: 250 };
+
+/**
+ * La fenêtre montrée grandit avec l'année : au début, dix mois d'axe écraseraient
+ * dix jours d'historique en un trait de trois pixels. On garde toujours environ
+ * six semaines de piste devant, jusqu'à couvrir l'année entière en juin.
+ */
+function fenetreCourbe() {
+  return Math.min(T1, Math.max(NOW + 42 * DAY, T0 + (NOW - T0) * 1.35));
+}
+
+/** Plan continu, réalisé en marches d'escalier, ~60 points sur la fenêtre. */
+function pointsCourbe(tFin) {
+  const faits = Object.keys(done)
+    .map((id) => [Date.parse(done[id]) || T0, byId[id] ? byId[id].h : 0])
+    .filter((x) => x[1] > 0)
+    .sort((a, b) => a[0] - b[0]);
+  const cumule = (t) => faits.reduce((a, x) => a + (x[0] <= t ? x[1] : 0), 0);
+  const pas = Math.max(DAY, (tFin - T0) / 60);
+  const pts = [];
+  for (let t = T0; t <= tFin; t += pas) pts.push({ t, prevu: planned(t), fait: t <= NOW ? cumule(t) : null });
+  // Un point tombe exactement sur maintenant, pas sur le pas d'avant.
+  if (NOW > T0 && NOW < tFin) pts.push({ t: NOW, prevu: planned(NOW), fait: cumule(NOW) });
+  return pts.sort((a, b) => a.t - b.t);
+}
+
+function renderCourbe() {
+  const box = $("courbe");
+  if (!box) return;
+  const st = status();
+  const tFin = fenetreCourbe();
+  const pts = pointsCourbe(tFin);
+  // L'échelle verticale suit la fenêtre : sinon la courbe rampe au ras de l'axe.
+  const haut = Math.max(20, ...pts.map((p) => Math.max(p.prevu, p.fait || 0)));
+  const pas = haut > 400 ? 200 : haut > 150 ? 50 : 10;
+  const hMax = haut * 1.06;   // un peu d'air au-dessus, sans repère : rien ne l'atteint
+  const X = (t) => CB.l + ((t - T0) / (tFin - T0)) * (CB.L - CB.l - CB.r);
+  const Y = (h) => CB.H - CB.b - (h / hMax) * (CB.H - CB.h - CB.b);
+  const ligne = (cle) => pts.filter((p) => p[cle] != null)
+    .map((p, i) => `${i ? "L" : "M"}${X(p.t).toFixed(1)} ${Y(p[cle]).toFixed(1)}`).join(" ");
+
+  const faits = pts.filter((p) => p.fait != null);
+  const dernier = faits[faits.length - 1];
+  const aire = faits.length
+    ? `${ligne("fait")} L${X(dernier.t).toFixed(1)} ${Y(0)} L${X(T0)} ${Y(0)} Z` : "";
+
+  // Repères : uniquement des valeurs et des dates que la courbe atteint vraiment.
+  // Aucun repère ne porte une valeur que la courbe n'atteint pas.
+  const paliers = [0];
+  for (let h = pas; h <= haut; h += pas) paliers.push(h);
+  const jours = (tFin - T0) / DAY;
+  const saut = jours > 200 ? 2 : jours > 90 ? 1 : 0;   // 0 = tous les 15 jours
+  const mois = [];
+  if (saut) {
+    for (const m = new Date(T0); m.getTime() <= tFin; m.setMonth(m.getMonth() + saut)) {
+      // MONTHS est indexé sur l'année scolaire (septembre = 0), pas sur le calendrier.
+      mois.push({ t: m.getTime(), n: MONTHS[(m.getMonth() - 8 + 12) % 12] });
+    }
+  } else {
+    for (let t = T0; t <= tFin; t += 14 * DAY) mois.push({ t, n: fmtD(t) });
+  }
+
+  box.innerHTML = `<svg viewBox="0 0 ${CB.L} ${CB.H}" role="img"
+      aria-label="Heures faites face au plan, du ${fmtD(T0)} au ${fmtD(tFin)}">
+    ${paliers.map((h) => `<line class="grille" x1="${CB.l}" x2="${CB.L - CB.r}"
+        y1="${Y(h)}" y2="${Y(h)}"/>
+      <text class="axe" x="${CB.l - 8}" y="${Y(h) + 4}" text-anchor="end">${Math.round(h)} h</text>`).join("")}
+    ${mois.map((m) => `<text class="axe" x="${X(m.t)}" y="${CB.H - 9}" text-anchor="middle">${m.n}</text>`).join("")}
+    <line class="auj" x1="${X(NOW)}" x2="${X(NOW)}" y1="${CB.h - 4}" y2="${CB.H - CB.b}"/>
+    <text class="axe" x="${X(NOW)}" y="${CB.h - 9}" text-anchor="middle">aujourd'hui</text>
+    ${aire ? `<path class="aire" d="${aire}"/>` : ""}
+    <path class="plan" d="${ligne("prevu")}"/>
+    ${faits.length ? `<path class="fait" d="${ligne("fait")}"/>
+      <circle class="bout" cx="${X(dernier.t)}" cy="${Y(dernier.fait)}" r="4"/>` : ""}
+    <g id="viseur" hidden><line class="viseur" y1="${CB.h - 6}" y2="${CB.H - CB.b}"/>
+      <circle class="bout" r="3.5"/></g>
+    <rect id="capteur" x="${CB.l}" y="${CB.h - 6}" width="${CB.L - CB.l - CB.r}"
+      height="${CB.H - CB.b - CB.h + 6}" fill="transparent" style="cursor:crosshair"/>
+  </svg><div class="bulle" id="bulle" hidden></div>`;
+  box.style.setProperty("--hc", COL[st.kind]);
+
+  const note = box.parentElement.querySelector(".note");
+  if (note) note.textContent = `Heures faites face au plan, jusqu'au ${fmtD(tFin)}`;
+
+  $("ckey").innerHTML =
+    `<span><i style="background:${COL[st.kind]}"></i>Fait — <b>${Math.round(st.act)} h</b></span>
+     <span><i style="background:var(--ink3);opacity:.7"></i>Plan — <b>${Math.round(st.exp)} h</b> à ce jour</span>
+     <span>${st.gap >= 0 ? `<b>${st.gap} h</b> d'avance sur le plan`
+        : `<b>${-st.gap} h</b> de retard sur le plan`}</span>`;
+
+  // Survol : viseur, point et bulle, sur le point le plus proche.
+  const svg = box.querySelector("svg"), capt = $("capteur"), vis = $("viseur"), bul = $("bulle");
+  const bouger = (ev) => {
+    const r = svg.getBoundingClientRect();
+    const cx = ((ev.clientX - r.left) / r.width) * CB.L;
+    const t = T0 + ((cx - CB.l) / (CB.L - CB.l - CB.r)) * (tFin - T0);
+    let p = pts[0];
+    for (const q of pts) if (Math.abs(q.t - t) < Math.abs(p.t - t)) p = q;
+    vis.hidden = false;
+    vis.querySelector("line").setAttribute("x1", X(p.t));
+    vis.querySelector("line").setAttribute("x2", X(p.t));
+    const c = vis.querySelector("circle");
+    c.setAttribute("cx", X(p.t));
+    c.setAttribute("cy", Y(p.fait != null ? p.fait : p.prevu));
+    c.setAttribute("opacity", p.fait != null ? 1 : 0);
+    bul.hidden = false;
+    bul.innerHTML = `<div class="q">${fmtDL(p.t)}</div>
+      ${p.fait != null ? `<div class="l"><i style="background:${COL[st.kind]}"></i>Fait <b>${Math.round(p.fait)} h</b></div>` : ""}
+      <div class="l"><i style="background:var(--ink3)"></i>Plan <b>${Math.round(p.prevu)} h</b></div>`;
+    // La bulle reste dans le cadre, même sur le tout premier point.
+    const demi = bul.offsetWidth / 2;
+    bul.style.left = Math.min(r.width - demi - 4, Math.max(demi + 4, (X(p.t) / CB.L) * r.width)) + "px";
+    bul.style.top = (Y(p.fait != null ? p.fait : p.prevu) / CB.H) * r.height + "px";
+  };
+  capt.addEventListener("pointermove", bouger);
+  capt.addEventListener("pointerleave", () => { vis.hidden = true; bul.hidden = true; });
+}
+
+/* La matrice d'Eisenhower a ete retiree : le statut en toutes
    lettres dit deja si l'on est dans les temps, et c'est le planificateur qui
    arbitre les priorites, en placant chaque etape a une heure precise. */
 /* ═════════ NOTES ═════════ */
@@ -350,7 +484,7 @@ let painting=false;
 function renderAll(){
   painting=true;
   replanifier();
-  renderToday();paintGantt();renderGrades();renderJournal();
+  renderToday();renderCourbe();paintGantt();renderGrades();renderJournal();
   renderCapacites();renderProfil();
   if(!document.querySelector('[data-panel="cal"]').hidden) renderCal();
   syncChecks();applyMode();
@@ -1124,6 +1258,8 @@ document.addEventListener("change", (e) => {
   }
 });
 
+// L'horloge bat à la seconde ; le planning ne se recalcule qu'à la minute.
+setInterval(() => { NOW = parisNow(); majHorloge(); }, 1000);
 setInterval(() => { tickClock(); if (vue) renderAll(); }, 60000);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) { tickClock(); if (vue) renderAll(); }

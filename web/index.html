@@ -431,6 +431,42 @@ label.cap{flex-wrap:wrap}
 .captot .btn{margin-top:.5rem}
 .phead .note b{color:var(--ink)}
 .phead .note b.fini{color:var(--ok)}
+
+/* ── horloge de Paris ─────────────────────────────────── */
+.clock{margin-left:auto;text-align:right;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  line-height:1.2;flex:none}
+.clock .d{font-size:.68rem;color:var(--ink3)}
+.clock .t{font-size:1.3rem;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.clock .t .sec{font-size:.78rem;color:var(--ink3);font-weight:400}
+.clock .s{font-size:.55rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);
+  display:flex;align-items:center;gap:.28rem;justify-content:flex-end;margin-top:.1rem}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex:none}
+.dot.ok{background:var(--ok)}
+@media(max-width:560px){.clock{margin-left:0;text-align:left}
+  .clock .s{justify-content:flex-start}}
+
+/* ── courbe de progression ────────────────────────────── */
+.courbe{width:100%;position:relative}
+.courbe svg{width:100%;height:auto;display:block;overflow:visible}
+.courbe .grille{stroke:var(--rule2);stroke-width:1}
+.courbe .axe{fill:var(--ink3);font-family:"IBM Plex Mono",monospace;font-size:11px}
+.courbe .plan{fill:none;stroke:var(--ink3);stroke-width:2;stroke-linejoin:round;opacity:.7}
+.courbe .aire{fill:var(--hc);opacity:.12}
+.courbe .fait{fill:none;stroke:var(--hc);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.courbe .auj{stroke:var(--ink3);stroke-width:1;stroke-dasharray:3 3}
+.courbe .bout{fill:var(--hc);stroke:var(--card);stroke-width:2}
+.courbe .viseur{stroke:var(--ink3);stroke-width:1;opacity:.55}
+.bulle{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--rule);
+  padding:.4rem .55rem;font-size:.72rem;line-height:1.45;white-space:nowrap;
+  box-shadow:0 6px 18px color-mix(in srgb,var(--ink) 18%,transparent);transform:translate(-50%,-115%)}
+.bulle .q{font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--ink3);
+  letter-spacing:.06em;text-transform:uppercase}
+.bulle .l{display:flex;align-items:center;gap:.35rem;color:var(--ink2)}
+.bulle .l b{color:var(--ink);font-family:"IBM Plex Mono",monospace}
+.bulle i{width:9px;height:2.5px;border-radius:1px;flex:none;display:block}
+.ckey{display:flex;flex-wrap:wrap;gap:.3rem 1.1rem;margin-top:.5rem;font-size:.73rem;color:var(--ink2)}
+.ckey span{display:flex;align-items:center;gap:.38rem}
+.ckey i{width:15px;height:2.5px;border-radius:1px;display:block;flex:none}
 #evP{accent-color:var(--ok)}
 </style>
 </head>
@@ -502,6 +538,11 @@ label.cap{flex-wrap:wrap}
       <h1 id="titreProfil">Mon planning</h1>
       <div class="sous" id="sousTitre"></div>
     </div>
+    <div class="clock" id="horloge">
+      <div class="d" id="clkD">—</div>
+      <div class="t" id="clkT">--:--<span class="sec" id="clkS">:--</span></div>
+      <div class="s"><span class="dot ok"></span>heure de Paris</div>
+    </div>
     <div class="quisuisje" id="quiSuisJe"></div>
   </header>
 
@@ -530,6 +571,13 @@ label.cap{flex-wrap:wrap}
     <div class="panel">
       <div class="phead"><h2>Ma journée</h2><div class="note" id="dateJour"></div></div>
       <div id="journee"></div>
+    </div>
+
+    <div class="panel">
+      <div class="phead"><h2>Ma progression</h2>
+        <div class="note">Heures faites, face au plan</div></div>
+      <div class="courbe" id="courbe"></div>
+      <div class="ckey" id="ckey"></div>
     </div>
 
     <div class="panel" id="blocRetard" hidden>
