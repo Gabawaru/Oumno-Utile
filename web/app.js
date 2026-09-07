@@ -96,6 +96,9 @@ function lienSur(v){
   }catch{ return null; }
 }
 
+/** Le système peut demander qu'on ne bouge rien : on l'écoute partout. */
+const SOBRE = window.matchMedia("(prefers-reduced-motion: reduce)");
+
 /** Tout est calé sur l'heure de Paris, quel que soit le fuseau du visiteur. */
 function tickClock(){ NOW = parisNow(); majHorloge(); }
 
@@ -118,10 +121,17 @@ let done=Object.create(null), events=[], journal=[], subs=[], grades={};
 let canEdit=false;
 let pendingLog=[], subCount=0, tmr={};
 const LS="ciel.v4";
-function saveLocal(){ if(!vue||!estMoi()) return;
-  try{localStorage.setItem(LS,JSON.stringify(etat));}catch(e){} }
-function loadLocal(){ try{const r=JSON.parse(localStorage.getItem(LS)||"null");
-  if(r) appliquerEtat(r);}catch(e){} }
+/** Copie de secours dans le navigateur, pour survivre à une coupure réseau. */
+function saveLocal(){
+  if(!vue||!estMoi()) return;
+  try{ localStorage.setItem(LS, JSON.stringify({ id: vue.id, data: etat() })); }catch(e){}
+}
+function loadLocal(id){
+  try{
+    const r = JSON.parse(localStorage.getItem(LS) || "null");
+    return r && r.id === id && r.data ? r.data : null;
+  }catch(e){ return null; }
+}
 /** Message d'état discret, affiché dans l'en-tête. */
 function setSync(k,t){
   const e=$("sousTitre"); if(!e) return;
@@ -167,20 +177,12 @@ function saveState(){
   },600);
 }
 const saveProgress=saveState, saveEvents=saveState, saveGrades=saveState;
-function saveSubs(){}
 
 /* ═════════ CALCULS ═════════ */
 const doneH=r=>r.steps.reduce((a,s)=>a+(done[s.id]?s.h:0),0);
 const actualH=()=>ALL.reduce((a,s)=>a+(done[s.id]?s.h:0),0);
 const isLate=s=>!done[s.id]&&NOW>s.t1;
 const lateDays=s=>Math.floor((NOW-s.t1)/DAY);
-function pace(){
-  const ts=Object.values(done).map(v=>Date.parse(v)).filter(v=>v>0);
-  if(!ts.length) return 0;
-  const el=Math.max(NOW-Math.min(...ts),14*DAY), win=Math.min(28*DAY,el), since=NOW-win;
-  let h=0; for(const s of ALL){const t=Date.parse(done[s.id]); if(t>0&&t>=since)h+=s.h;}
-  return h/(win/(7*DAY));
-}
 function status(){
   const act=actualH(),exp=planned(NOW),eq=plannedDate(act);
   const days=Math.round((eq-NOW)/DAY), late=ALL.filter(isLate);
@@ -243,9 +245,16 @@ function renderToday(){
   const cle = isoJour(new Date(NOW));
   const jAuj = plan.jours.get(cle);
   const reste = jAuj ? jAuj.travailPose : 0;
-  $("dateJour").innerHTML = `${fmtDL(NOW)} — ` + (reste >= 0.05
+  const cible = $("dateJour");
+  const avant = cible.dataset.reste;
+  cible.innerHTML = `${fmtDL(NOW)} — ` + (reste >= 0.05
     ? `<b>${reste} h</b> à faire`
     : `<b class="fini">part du jour faite</b>`);
+  cible.dataset.reste = String(reste);
+  if (avant !== undefined && avant !== String(reste) && !SOBRE.matches) {
+    const b = cible.querySelector("b");
+    if (b) { b.classList.add("pulse"); setTimeout(() => b.classList.remove("pulse"), 400); }
+  }
   $("journee").innerHTML = friseHTML(cle, { compact: true });
 
   // Retard : on ne montre le bloc que s'il y a quelque chose dedans.
@@ -1480,8 +1489,10 @@ async function chargerProfil(slug) {
 async function ouvrir(profil) {
   vue = profil;
   canEdit = estMoi();
-  const { data: st } = await sb.from("ciel_state").select("data").eq("user_id", profil.id).maybeSingle();
-  appliquerEtat(st ? st.data : {});
+  const { data: st, error: errEtat } = await sb.from("ciel_state")
+    .select("data").eq("user_id", profil.id).maybeSingle();
+  const secours = errEtat ? loadLocal(profil.id) : null;
+  appliquerEtat(st ? st.data : secours || {});
   // Premier passage après inscription : on pose le modèle retenu.
   if (!modeleEnAttente) { try { modeleEnAttente = localStorage.getItem("ciel.modele"); } catch {} }
   if (modeleEnAttente && estMoi() && !(programme.matieres || []).length && programme.modele === "cned") {
@@ -1523,9 +1534,15 @@ async function ouvrir(profil) {
   };
   montrer("appli");
   buildGantt(); buildAcc();
+  let dernier = null;
+  try { dernier = sessionStorage.getItem("ciel.onglet"); } catch {}
+  if (dernier && document.querySelector(`#tabs button[data-tab="${dernier}"]`)) ouvrirOnglet(dernier);
+  else placerTrait();
   $("evD").value = isoJour(new Date(NOW));
   renderAll();
-  setSync("ok", canEdit ? "mode édition" : "lecture publique");
+  // Le repli sur la copie locale doit se voir : c'est le dernier mot de l'ouverture.
+  if (secours) setSync("warn", "hors ligne — copie locale");
+  else setSync("ok", canEdit ? "mode édition" : "lecture publique");
 }
 
 async function demarrer() {
@@ -1799,27 +1816,80 @@ $("todayM").onclick = () => {
   const d = new Date(NOW);
   calCur = new Date(d.getFullYear(), d.getMonth(), 1); calSel = d; renderCal();
 };
+/* ═════════ ONGLETS ═════════
+   Un trait glisse sous l'onglet courant et le panneau entre par le bas : on voit
+   d'où l'on vient. Les flèches naviguent, comme dans tout jeu d'onglets. Rien de
+   tout cela ne bouge si le système demande à ce que ça ne bouge pas. */
+function placerTrait() {
+  const barre = $("tabs");
+  const actif = barre.querySelector('button[aria-selected="true"]');
+  if (!actif) return;
+  barre.style.setProperty("--tx", actif.offsetLeft + "px");
+  barre.style.setProperty("--tw", actif.offsetWidth + "px");
+}
+
+function ouvrirOnglet(nom, { focus = false } = {}) {
+  const b = document.querySelector(`#tabs button[data-tab="${nom}"]`);
+  if (!b) return;
+  document.querySelectorAll("#tabs button").forEach((x) => {
+    const on = x === b;
+    x.setAttribute("aria-selected", on);
+    x.tabIndex = on ? 0 : -1;
+  });
+  placerTrait();
+  if (focus) b.focus();
+  b.scrollIntoView({ block: "nearest", inline: "nearest" });
+
+  document.querySelectorAll("section[data-panel]").forEach((sec) => {
+    const on = sec.dataset.panel === nom;
+    sec.hidden = !on;
+    if (on && !SOBRE.matches) {
+      sec.classList.remove("entre");
+      void sec.offsetWidth;          // force le redémarrage de l'animation
+      sec.classList.add("entre");
+    }
+  });
+
+  if (nom === "cal") renderCal();
+  if (nom === "regl") { renderCapacites(); renderProfil(); renderProgramme(); renderCompte(); }
+  if (nom === "dispo") renderDispo();
+  try { sessionStorage.setItem("ciel.onglet", nom); } catch {}
+}
+
 $("tabs").addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-tab]"); if (!b) return;
-  document.querySelectorAll("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === b));
-  document.querySelectorAll("section[data-panel]").forEach((s) => (s.hidden = s.dataset.panel !== b.dataset.tab));
-  if (b.dataset.tab === "cal") renderCal();
-  if (b.dataset.tab === "regl") { renderCapacites(); renderProfil(); renderProgramme(); renderCompte(); }
-  if (b.dataset.tab === "dispo") renderDispo();
+  const b = e.target.closest("button[data-tab]");
+  if (b) ouvrirOnglet(b.dataset.tab);
 });
+
+$("tabs").addEventListener("keydown", (e) => {
+  const cles = { ArrowRight: 1, ArrowLeft: -1, Home: "d", End: "f" };
+  if (!(e.key in cles)) return;
+  e.preventDefault();
+  const l = [...document.querySelectorAll("#tabs button")];
+  const i = l.findIndex((x) => x.getAttribute("aria-selected") === "true");
+  const p = cles[e.key];
+  const n = p === "d" ? 0 : p === "f" ? l.length - 1 : (i + p + l.length) % l.length;
+  ouvrirOnglet(l[n].dataset.tab, { focus: true });
+});
+
+addEventListener("resize", placerTrait);
 document.addEventListener("change", (e) => {
   if (painting) return;
   const cb = e.target.closest("input[data-cb]");
   if (cb) {
     if (!canEdit) { cb.checked = !cb.checked; return; }
     const s = byId[cb.dataset.cb], on = cb.checked;
-    const item = cb.closest(".qitem");
+    const item = cb.closest(".qitem") || cb.closest(".ligne.trav");
     const appliquer = () => {
       if (on) done[s.id] = new Date(NOW).toISOString(); else delete done[s.id];
       log(`${on ? "a terminé" : "a rouvert"} : ${s.row.n} · ${s.n} (${s.h} h)`);
       saveProgress(); renderAll();
     };
-    if (item && on) { item.classList.add("going"); setTimeout(appliquer, 260); } else appliquer();
+    // Valider fait glisser la ligne dehors : on voit ce qu'on vient d'enlever.
+    if (item && on && !SOBRE.matches) {
+      item.classList.add(item.classList.contains("qitem") ? "going" : "partie");
+      setTimeout(appliquer, 260);
+    } else appliquer();
     return;
   }
   const gr = e.target.closest("input[data-gr]");
