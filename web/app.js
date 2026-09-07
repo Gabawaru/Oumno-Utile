@@ -19,6 +19,7 @@ let reports = {};        // échéances repoussées à la main
 let programme = null;    // modèle choisi, ou matières déclarées à la main
 let modeleEnAttente = null;  // modèle retenu à l'inscription, posé à la 1re ouverture
 let partages = [];       // comptes autorisés à voir mon planning privé
+let nomReel = null;      // vrai nom du profil consulté, si l'on y a droit
 let partJour = null;     // { date, h } — la part de travail fixée pour le jour
 let plan = null;         // résultat du planificateur
 
@@ -78,7 +79,22 @@ const hhmm =t=>new Date(t).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-
 const iso  =d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 const sameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
 const plural=(n,w)=>n+" "+w+(Math.abs(n)>1?"s":"");
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/**
+ * Un lien saisi par quelqu'un n'est rendu que s'il pointe vers le web. Sans ce
+ * filtre, « javascript:… » dans le lien d'un événement s'exécute chez tous ceux
+ * qui consultent un planning public : c'est une injection stockée, pas une
+ * curiosité. Le protocole est vérifié après analyse, pas par comparaison de
+ * chaîne — « JaVaScRiPt: » et « java\tscript: » passeraient.
+ */
+function lienSur(v){
+  if(!v) return null;
+  try{
+    const u=new URL(String(v), location.origin);
+    return (u.protocol==="https:"||u.protocol==="http:") ? u.href : null;
+  }catch{ return null; }
+}
 
 /** Tout est calé sur l'heure de Paris, quel que soit le fuseau du visiteur. */
 function tickClock(){ NOW = parisNow(); majHorloge(); }
@@ -238,12 +254,12 @@ function renderToday(){
   if (lates.length) {
     $("lateNote").textContent = `${lates.length} étape${lates.length > 1 ? "s" : ""} dont la date est passée`;
     $("lateq").innerHTML = lates.slice(0, 8).map((s2) => `
-      <label class="qitem" style="--c:${s2.g.c}">
-        <input type="checkbox" class="cb" data-cb="${s2.id}"${canEdit ? "" : " disabled"}>
+      <label class="qitem" style="--c:${esc(s2.g.c)}">
+        <input type="checkbox" class="cb" data-cb="${esc(s2.id)}"${canEdit ? "" : " disabled"}>
         <span class="qbody"><span class="qtitle">${esc(s2.row.n)} · ${esc(s2.n)}</span>
         <span class="qmeta"><span class="lt">${lateDays(s2) < 1 ? "échéance passée aujourd'hui" : plural(lateDays(s2), "jour") + " de retard"}</span>
           <span>${s2.h} h</span>
-          ${s2.row.url ? `<a href="${s2.row.url}" target="_blank" rel="noopener">cours ↗</a>` : ""}
+          ${s2.row.url ? `<a href="${esc(s2.row.url)}" target="_blank" rel="noopener">cours ↗</a>` : ""}
         </span></span></label>`).join("") +
       (lates.length > 8 ? `<div class="empty muted">+ ${lates.length - 8} autres</div>` : "");
   }
@@ -262,10 +278,10 @@ function buildGantt(){
   GROUPES.forEach((grp,gi)=>{
     if(gi)h+='<div class="spacer"></div>';
     h+=`<div class="glabel grp">${grp.name}${grp.code?`<span class="code">${grp.code}</span>`:""}<span class="code">${grp.h} h</span></div>
-      <div class="lane grp"><div class="bar grp" data-g="${grp.id}" style="--c:${grp.c};grid-column:${col(grp.s)}/${col(grp.e)}"><div class="fill"></div></div></div>`;
+      <div class="lane grp"><div class="bar grp" data-g="${esc(grp.id)}" style="--c:${esc(grp.c)};grid-column:${col(grp.s)}/${col(grp.e)}"><div class="fill"></div></div></div>`;
     grp.rows.forEach(r=>{
-      h+=`<div class="glabel sub" data-lab="${r.id}" title="${esc(r.n)}">${r.url?`<a href="${r.url}" target="_blank" rel="noopener" style="color:inherit">${esc(r.n)}</a>`:esc(r.n)}${r.code?`<span class="code">${r.code}</span>`:""}</div>
-        <div class="lane"><div class="bar" data-r="${r.id}" style="--c:${grp.c};grid-column:${col(r.s)}/${col(r.e)}">
+      h+=`<div class="glabel sub" data-lab="${esc(r.id)}" title="${esc(r.n)}">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(r.n)}</a>`:esc(r.n)}${r.code?`<span class="code">${r.code}</span>`:""}</div>
+        <div class="lane"><div class="bar" data-r="${esc(r.id)}" style="--c:${esc(grp.c)};grid-column:${col(r.s)}/${col(r.e)}">
           <div class="fill"></div><span class="blab"></span></div></div>`;
     });
   });
@@ -285,7 +301,7 @@ function paintGantt(){
       if(bar){bar.querySelector(".fill").style.width=pc+"%";
         bar.querySelector(".blab").textContent=`${d}/${r.h} h`;
         bar.classList.toggle("done",pc>=99.5);bar.classList.toggle("lt",late&&pc<99.5);}
-      const lab=document.querySelector(`[data-lab="${r.id}"]`);
+      const lab=document.querySelector(`[data-lab="${esc(r.id)}"]`);
       if(lab){lab.classList.toggle("full",pc>=99.5);lab.classList.toggle("lt",late&&pc<99.5);}
       const rh=document.querySelector(`[data-rh="${r.id}"]`);if(rh)rh.textContent=`${d}/${r.h} h`;
     });
@@ -299,17 +315,17 @@ function paintGantt(){
 /* ═════════ ÉTAPES ═════════ */
 function buildAcc(){
   document.getElementById("acc").innerHTML=GROUPES.map(g=>`
-   <div class="grpblk" style="--c:${g.c}">
+   <div class="grpblk" style="--c:${esc(g.c)}">
      <div class="grphd" role="button" tabindex="0" aria-expanded="false">
        <span class="car">▶</span><span class="nm">${g.name}</span>
        <span class="mini"><i data-mini="${g.id}"></i></span>
        <span class="ct" data-ct="${g.id}">0/${g.h} h</span></div>
      <div class="grpbody">${g.rows.map(r=>`
-       <div><div class="rowhd">${r.url?`<a href="${r.url}" target="_blank" rel="noopener">${esc(r.n)} ↗</a>`:esc(r.n)}
+       <div><div class="rowhd">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.n)} ↗</a>`:esc(r.n)}
          <span class="rh" data-rh="${r.id}">0/${r.h} h</span></div>
        <div class="steps">${r.steps.map(s=>`
          <label class="step" data-step="${s.id}">
-           <input type="checkbox" class="cb" data-cb="${s.id}">
+           <input type="checkbox" class="cb" data-cb="${esc(s.id)}">
            <span class="lbl">${esc(s.n)}${s.date?` <b class="mono" style="color:var(--sig)">${s.date}</b>`:""}</span>
            <span class="hh">${s.h} h</span></label>`).join("")}</div></div>`).join("")}</div>
    </div>`).join("");
@@ -326,7 +342,11 @@ function buildAcc(){
    Deux séries : le plan, en gris, sert de repère ; les heures réellement faites
    portent la couleur du statut — c'est elle qu'on vient lire. La ligne du fait
    s'arrête à aujourd'hui : on ne dessine pas un avenir qui n'existe pas. */
-const CB = { l: 48, r: 16, h: 24, b: 30, L: 960, H: 250 };
+/** Le cadre du graphique suit la largeur : sur 390 px, un viewBox de 960 réduit
+ *  le texte à quatre pixels. Plus étroit, il reste lisible. */
+const cadreCourbe = () => (window.innerWidth < 640
+  ? { l: 42, r: 12, h: 22, b: 28, L: 460, H: 240 }
+  : { l: 48, r: 16, h: 24, b: 30, L: 960, H: 250 });
 
 /**
  * La fenêtre montrée grandit avec l'année : au début, dix mois d'axe écraseraient
@@ -355,6 +375,7 @@ function pointsCourbe(tFin) {
 function renderCourbe() {
   const box = $("courbe");
   if (!box) return;
+  const CB = cadreCourbe();
   const st = status();
   const tFin = fenetreCourbe();
   const pts = pointsCourbe(tFin);
@@ -377,7 +398,8 @@ function renderCourbe() {
   const paliers = [0];
   for (let h = pas; h <= haut; h += pas) paliers.push(h);
   const jours = (tFin - T0) / DAY;
-  const saut = jours > 200 ? 2 : jours > 90 ? 1 : 0;   // 0 = tous les 15 jours
+  const etroit = CB.L < 600;
+  const saut = jours > (etroit ? 120 : 200) ? 2 : jours > (etroit ? 55 : 90) ? 1 : 0;
   const mois = [];
   if (saut) {
     for (const m = new Date(T0); m.getTime() <= tFin; m.setMonth(m.getMonth() + saut)) {
@@ -385,7 +407,8 @@ function renderCourbe() {
       mois.push({ t: m.getTime(), n: MONTHS[(m.getMonth() - 8 + 12) % 12] });
     }
   } else {
-    for (let t = T0; t <= tFin; t += 14 * DAY) mois.push({ t, n: fmtD(t) });
+    const pasDates = etroit ? 21 : 14;
+    for (let t = T0; t <= tFin; t += pasDates * DAY) mois.push({ t, n: fmtD(t) });
   }
 
   box.innerHTML = `<svg viewBox="0 0 ${CB.L} ${CB.H}" role="img"
@@ -475,7 +498,7 @@ function renderJournal(){
     ? journal.slice(0,80).map(j=>`<div class="jrow" style="--c:var(--evt)">
         <span class="jt">${new Date(j.ts).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})} ${hhmm(Date.parse(j.ts))}</span>
         <span>${esc(j.text)}</span></div>`).join("")
-    : `<div class="empty muted">Rien encore. Chaque action de Gabriel s'inscrira ici.</div>`;
+    : `<div class="empty muted">Rien encore. Chaque changement s'inscrira ici.</div>`;
   document.getElementById("subs").innerHTML= canEdit
     ? (subs.length
         ? subs.map((e,i)=>`<span class="pill">${esc(e)}<button data-sub="${i}" title="Retirer">✕</button></span>`).join("")
@@ -655,21 +678,22 @@ function friseHTML(cle, { compact = false } = {}) {
     if (x.type === "trav") {
       const e = x.bloc.etape;
       const part = Math.round(((x.f - x.d) / 60 / e.h) * 100);
-      return `<label class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}" style="--c:${e.g.c}">
+      return `<label class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}" style="--c:${esc(e.g.c)}">
         <span class="hh">${plage}</span>
-        <span class="quoi"><input type="checkbox" class="cb" data-cb="${e.id}"${canEdit ? "" : " disabled"}>
+        <span class="quoi"><input type="checkbox" class="cb" data-cb="${esc(e.id)}"${canEdit ? "" : " disabled"}>
           <b>${esc(e.n)}</b> <em>${esc(e.row.n)}</em>
           ${compact ? "" : `<span class="part">${dur} h sur ${e.h} h${part < 100 ? ` · ${part} %` : ""}</span>`}
           ${x.bloc.tard ? `<span class="lt">hors horaires</span>` : x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
-          ${e.row.url ? `<a href="${e.row.url}" target="_blank" rel="noopener">cours ↗</a>` : ""}
+          ${e.row.url ? `<a href="${esc(e.row.url)}" target="_blank" rel="noopener">cours ↗</a>` : ""}
         </span></label>`;
     }
     const e = x.ev;
     return `<div class="ligne ${x.type}"><span class="hh">${plage}</span>
       <span class="quoi"><b>${esc(e.titre || e.title || "")}</b>
         ${e.urgent ? `<span class="urg">urgent</span>` : ""}
-        ${e.lien ? `<a href="${esc(e.lien)}" target="_blank" rel="noopener">ouvrir ↗</a>` : ""}
-        ${canEdit ? `<button class="btn mini" data-del="${e.id}" title="Supprimer">✕</button>` : ""}
+        ${lienSur(e.lien) ? `<a href="${esc(lienSur(e.lien))}" target="_blank"
+          rel="noopener noreferrer">ouvrir ↗</a>` : ""}
+        ${canEdit ? `<button class="btn mini" data-del="${esc(e.id)}" title="Supprimer">✕</button>` : ""}
       </span></div>`;
   }).join("") + `</div>`;
 }
@@ -701,7 +725,7 @@ function renderZone() {
           <span class="qtitle">${esc(m.etape.row.n)} · ${esc(m.etape.n)}</span>
           <span class="qmeta"><span class="lt">${m.h} h sans créneau</span>
             <span>échéance ${fmtD(m.ech)}</span></span></span>
-          ${canEdit ? `<button class="btn" data-tard="${m.etape.id}">Plus tard</button>` : ""}
+          ${canEdit ? `<button class="btn" data-tard="${esc(m.etape.id)}">Plus tard</button>` : ""}
         </div>`).join("") + `</div>`;
   }
   $("daypanel").innerHTML = h;
@@ -719,7 +743,7 @@ function nouvelEvenement() {
     date: $("evD").value,
     debut: $("evH").value,
     fin: $("evF").value,
-    lien: $("evL").value.trim(),
+    lien: lienSur($("evL").value.trim()),
     urgent: $("evU").checked,
     pause: $("evP").checked,
   };
@@ -764,6 +788,14 @@ function ajouter(force) {
   if (!canEdit) return;
   const ev = nouvelEvenement();
   if (!ev.titre || !ev.date) return;
+  const lienBrut = $("evL").value.trim();
+  if (lienBrut && !ev.lien) {
+    dialogue({ ton: "warn", titre: "Ce lien n'est pas acceptable",
+      corps: `<p>Seules les adresses commençant par <b>http://</b> ou <b>https://</b>
+        sont acceptées. C'est ce qui empêche qu'un lien piégé s'exécute chez les
+        gens qui consultent ton planning.</p>` });
+    return;
+  }
   if (duree(ev) <= 0) {
     dialogue({ titre: "Ces horaires ne tiennent pas debout",
       corps: `<p>L'heure de fin doit venir après l'heure de début.</p>` });
@@ -988,6 +1020,20 @@ async function chargerPartages() {
   partages = Array.isArray(data) ? data : [];
 }
 
+/**
+ * Le vrai nom vit dans sa propre table : les politiques de sécurité portent sur
+ * des lignes et non sur des colonnes, donc le loger dans le profil l'aurait
+ * rendu lisible par quiconque peut lire ce profil. Ici, la requête ne renvoie
+ * rien quand on n'y a pas droit — ce n'est pas l'interface qui cache, c'est la
+ * base qui refuse.
+ */
+async function chargerNomReel() {
+  nomReel = null;
+  if (!vue || !session) return;
+  const { data } = await sb.from("ciel_identites").select("nom_reel").eq("user_id", vue.id).maybeSingle();
+  nomReel = data && data.nom_reel ? data.nom_reel : null;
+}
+
 function renderProfil() {
   const box = $("profilBox");
   if (!box || !vue) return;
@@ -998,11 +1044,21 @@ function renderProfil() {
     return;
   }
   box.innerHTML = `
-    <div class="champ" style="max-width:320px;margin-bottom:.7rem">
-      <label class="fl" for="pfNom">Nom affiché</label>
-      <input id="pfNom" type="text" maxlength="40" value="${esc(vue.nom)}">
-      <div class="dispo" id="pfDispo"></div>
-      <div class="fl2">Unique : deux comptes ne peuvent pas porter le même nom.</div>
+    <div class="deuxchamps">
+      <div class="champ">
+        <label class="fl" for="pfNom">Pseudonyme</label>
+        <input id="pfNom" type="text" maxlength="40" value="${esc(vue.nom)}">
+        <div class="dispo" id="pfDispo"></div>
+        <div class="fl2">C'est ce que tout le monde voit. Unique : deux comptes ne
+          peuvent pas porter le même.</div>
+      </div>
+      <div class="champ">
+        <label class="fl" for="pfReel">Vrai nom <span class="opt-t">facultatif</span></label>
+        <input id="pfReel" type="text" maxlength="80" value="${esc(nomReel || "")}"
+          placeholder="Prénom Nom">
+        <div class="fl2">Montré aux seules personnes que tu coches ci-dessous.
+          Jamais public, même si ton planning l'est.</div>
+      </div>
     </div>
     <div class="visi">
       <label class="opt${vue.public ? "" : " on"}">
@@ -1017,12 +1073,16 @@ function renderProfil() {
 
     <div class="soustitre" style="margin-top:1rem">Personnes autorisées</div>
     <p class="aide">Elles voient ton planning en lecture seule, même quand il est privé.
-      ${vue.public ? "Ton planning étant public, cette liste ne change rien pour l'instant." : ""}</p>
+      Coche <b>vrai nom</b> pour celles qui ont le droit de savoir qui tu es.
+      ${vue.public ? "Ton planning étant public, la première colonne ne change rien — la seconde, si." : ""}</p>
     <div class="membres" id="membres"></div>
 
     <div class="soustitre" style="margin-top:1rem">Inviter par lien</div>
     <p class="aide">Quiconque ouvre ce lien en étant connecté obtient l'accès en lecture.
-      Valable 30 jours, 25 utilisations. Ne le donne qu'à des gens de confiance.</p>
+      Valable 30 jours, 25 utilisations, 20 liens actifs au plus. Ne le donne qu'à des
+      gens de confiance : le lien ne vérifie pas qui l'ouvre.</p>
+    <label class="urgcase" style="margin-bottom:.45rem"><input type="checkbox" id="invReel">
+      <span>Ce lien donne aussi accès à mon vrai nom</span></label>
     <div class="lp"><code id="lienInvit">—</code>
       <button class="btn" id="faireInvit">Créer un lien</button></div>
 
@@ -1031,6 +1091,18 @@ function renderProfil() {
         <button class="btn" id="copierLien">Copier</button></div>` : ""}`;
 
   renderMembres();
+
+  const reelInp = $("pfReel");
+  reelInp.onchange = async () => {
+    const v = reelInp.value.trim().slice(0, 80);
+    if (v === (nomReel || "")) return;
+    const { error } = v
+      ? await sb.from("ciel_identites").upsert({ user_id: vue.id, nom_reel: v, maj_le: new Date().toISOString() })
+      : await sb.from("ciel_identites").delete().eq("user_id", vue.id);
+    if (error) return setSync("warn", "vrai nom non enregistré");
+    nomReel = v || null;
+    setSync("ok", v ? "vrai nom enregistré" : "vrai nom effacé");
+  };
 
   const nomInp = $("pfNom");
   nomInp.oninput = () => {
@@ -1068,13 +1140,20 @@ function renderProfil() {
   $("faireInvit").onclick = async () => {
     const b = $("faireInvit");
     b.disabled = true; b.textContent = "…";
-    const { data, error } = await sb.rpc("creer_invitation");
+    const avecNom = $("invReel").checked;
+    const { data, error } = await sb.rpc("creer_invitation", { avec_nom_reel: avecNom });
     b.disabled = false; b.textContent = "Créer un lien";
-    if (error || !data) return setSync("warn", "lien impossible");
+    if (error || !data) {
+      return dialogue({ ton: "warn", titre: "Lien impossible",
+        corps: `<p>${/trop de liens/.test(error?.message || "")
+          ? "Tu as déjà 20 liens actifs. Attends qu'ils expirent avant d'en créer d'autres."
+          : "Le lien n'a pas pu être créé. Réessaie dans un instant."}</p>` });
+    }
     const lien = location.origin + "?invite=" + String(data).replace(/"/g, "");
     $("lienInvit").textContent = lien;
     try { await navigator.clipboard.writeText(lien); setSync("ok", "lien copié"); } catch {}
-    log("a créé un lien d'invitation");
+    log(avecNom ? "a créé un lien d'invitation donnant son vrai nom"
+               : "a créé un lien d'invitation");
   };
   const cp = $("copierLien");
   if (cp) cp.onclick = async () => {
@@ -1093,9 +1172,18 @@ function renderMembres() {
         <span class="mn"><b>${esc(p.nom || "Compte supprimé")}</b>
           <em>${p.slug ? "@" + esc(p.slug) + " · " : ""}autorisé le ${new Date(p.cree_le).toLocaleDateString("fr-FR",
             { day: "numeric", month: "long" })}</em></span>
-        <button class="btn" data-retirer="${p.invite}">Retirer</button>
+        <label class="urgcase mreel"><input type="checkbox" data-reel="${esc(p.invite)}"
+          ${p.voit_nom_reel ? "checked" : ""}><span>vrai nom</span></label>
+        <button class="btn" data-retirer="${esc(p.invite)}">Retirer</button>
       </div>`).join("")
     : `<p class="aide muted">Personne pour l'instant. Envoie un lien d'invitation ci-dessous.</p>`;
+  box.querySelectorAll("[data-reel]").forEach((c) => (c.onchange = async () => {
+    const { error } = await sb.rpc("regler_nom_reel", { qui: c.dataset.reel, autorise: c.checked });
+    if (error) { c.checked = !c.checked; return setSync("warn", "changement refusé"); }
+    const p = partages.find((x) => x.invite === c.dataset.reel);
+    if (p) p.voit_nom_reel = c.checked;
+    setSync("ok", c.checked ? "vrai nom partagé" : "vrai nom masqué");
+  }));
   box.querySelectorAll("[data-retirer]").forEach((b) => (b.onclick = () => dialogue({
     ton: "warn", titre: "Retirer cette personne ?",
     corps: `<p>Elle n'aura plus accès à ton planning. Tu pourras l'inviter à nouveau.</p>`,
@@ -1104,7 +1192,8 @@ function renderMembres() {
       { texte: "Retirer", faire: async () => {
           await sb.from("ciel_partages").delete()
             .eq("proprietaire", vue.id).eq("invite", b.dataset.retirer);
-          await chargerPartages(); renderMembres();
+          await chargerPartages();
+  await chargerNomReel(); renderMembres();
         } },
     ],
   })));
@@ -1312,12 +1401,33 @@ function renderCompte() {
       Tout ce qui est enregistré est visible dans cet onglet et modifiable.
       Le détail est dans la
       <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</p>
+    <div class="zaction">
+      <div><b>Changer mon mot de passe</b>
+        <em>Un lien part vers ${esc(session.user.email)}. Il n'y a pas d'autre chemin :
+          personne, pas même l'éditeur, ne peut lire ni fixer ton mot de passe.</em></div>
+      <button class="btn" id="mdpLien">Recevoir le lien</button>
+    </div>
     <div class="zdanger">
       <div><b>Supprimer mon compte</b>
         <em>Efface immédiatement le compte, le planning, le journal, les partages et
           les abonnés. C'est définitif : il n'y a pas de sauvegarde.</em></div>
       <button class="btn danger" id="supprCompte">Supprimer mon compte</button>
     </div>`;
+  $("mdpLien").onclick = async () => {
+    const b = $("mdpLien");
+    b.disabled = true; b.textContent = "Envoi…";
+    const { error } = await sb.auth.resetPasswordForEmail(session.user.email,
+      { redirectTo: location.origin + "?reinit=1" });
+    b.disabled = false; b.textContent = "Recevoir le lien";
+    dialogue({ ton: error ? "warn" : "info",
+      titre: error ? "L'envoi a échoué" : "Le lien est parti",
+      corps: error
+        ? `<p>${esc(error.message)}</p><p class="petit">Si tu viens d'en demander un,
+             attends une minute avant de réessayer.</p>`
+        : `<p>Ouvre le courriel envoyé à <b>${esc(session.user.email)}</b> et suis le lien.
+             Tu choisiras un nouveau mot de passe, puis tu reviendras à la connexion.</p>` });
+  };
+
   $("supprCompte").onclick = () => dialogue({
     ton: "stop", titre: "Supprimer définitivement ce compte ?",
     corps: `<p>Le compte <b>${esc(session.user.email)}</b>, ton planning, ton journal,
@@ -1373,13 +1483,17 @@ async function ouvrir(profil) {
   const { data: st } = await sb.from("ciel_state").select("data").eq("user_id", profil.id).maybeSingle();
   appliquerEtat(st ? st.data : {});
   // Premier passage après inscription : on pose le modèle retenu.
+  if (!modeleEnAttente) { try { modeleEnAttente = localStorage.getItem("ciel.modele"); } catch {} }
   if (modeleEnAttente && estMoi() && !(programme.matieres || []).length && programme.modele === "cned") {
     programme = depuisModele(modeleEnAttente);
     modeleEnAttente = null;
+    try { localStorage.removeItem("ciel.modele"); } catch {}
     chargerProgramme(programme);
     saveState();
   }
+  try { localStorage.removeItem("ciel.modele"); } catch {}
   await chargerPartages();
+  await chargerNomReel();
   const { data: jr } = await sb.from("ciel_journal").select("ts,body")
     .eq("user_id", profil.id).order("ts", { ascending: false }).limit(120);
   journal = (jr || []).map((j) => ({ ts: j.ts, text: j.body }));
@@ -1391,6 +1505,11 @@ async function ouvrir(profil) {
     subs = []; subCount = 0;
   }
   $("titreProfil").textContent = canEdit ? "Mon planning" : "Planning de " + profil.nom;
+  const sr = $("sousReel");
+  if (sr) {
+    sr.hidden = canEdit || !nomReel;
+    sr.textContent = nomReel ? nomReel : "";
+  }
   $("robar").hidden = canEdit;
   $("quiSuisJe").innerHTML = session
     ? `<span class="moi">${esc(session.user.email)}</span><button class="btn" id="deco">Se déconnecter</button>`
@@ -1472,6 +1591,25 @@ async function consommerInvitation(jeton) {
   location.href = "/";
 }
 
+/**
+ * Fin d'un parcours (compte créé, mot de passe changé) : on referme la session
+ * et on revient à la connexion, adresse pré-remplie. Se reconnecter une fois
+ * confirme que les identifiants marchent vraiment.
+ */
+async function versConnexion(message, email) {
+  try { await sb.auth.signOut(); } catch {}
+  session = null; moi = null; vue = null; canEdit = false;
+  history.replaceState(null, "", location.pathname);
+  montrer("ecranAuth");
+  renderModeles();
+  chargerProfils();
+  ongletAuth("connexion");
+  if (email) $("conEmail").value = email;
+  messageAuth(message, true);
+  setTimeout(() => $(email ? "conMdp" : "conEmail").focus(), 120);
+  $("boiteAuth").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 /* onglets d'authentification */
 function ongletAuth(m) {
   document.querySelectorAll("[data-auth]").forEach((x) =>
@@ -1546,13 +1684,11 @@ $("formInscription").addEventListener("submit", async (e) => {
       ? "Un compte existe déjà avec cette adresse. Utilise « Connexion », ou « Mot de passe oublié »."
       : error.message);
   }
-  if (data.session) {
-    messageAuth("");
-    modeleEnAttente = modeleChoisi;
-    await demarrer();
-    return;
-  }
-  messageAuth("Compte créé. Ouvre le courriel de confirmation pour activer ton accès.", true);
+  modeleEnAttente = modeleChoisi;
+  try { localStorage.setItem("ciel.modele", modeleChoisi); } catch {}
+  await versConnexion(data.session
+    ? "Compte créé. Connecte-toi pour ouvrir ton planning."
+    : "Compte créé. Ouvre le courriel de confirmation, puis connecte-toi ici.", email);
 });
 
 $("formConnexion").addEventListener("submit", async (e) => {
@@ -1587,17 +1723,17 @@ sb.auth.onAuthStateChange(async (evt) => {
     document.querySelector('[data-auth="nouveau"]')?.click();
     $("formConnexion").hidden = true; $("formInscription").hidden = true; $("formOubli").hidden = true;
     $("formNouveau").hidden = false;
-    messageAuth("Choisis ton nouveau mot de passe.", true);
+    messageAuth("Choisis ton nouveau mot de passe. Tu seras ensuite ramené à la connexion.", true);
   }
 });
 $("formNouveau").addEventListener("submit", async (e) => {
   e.preventDefault();
   const mdp = $("nouMdp").value;
-  if (mdp.length < 8) return messageAuth("Au moins 8 caractères.");
+  if (mdp.length < 8) return messageAuth("Le mot de passe doit faire au moins 8 caractères.");
+  if (mdp !== $("nouMdp2").value) return messageAuth("Les deux mots de passe ne correspondent pas.");
   const { error } = await sb.auth.updateUser({ password: mdp });
   if (error) return messageAuth(error.message);
-  messageAuth("Mot de passe changé.", true);
-  setTimeout(() => (location.href = "?"), 900);
+  await versConnexion("Mot de passe changé. Connecte-toi avec le nouveau.");
 });
 
 /* ═════════ ÉVÉNEMENTS D'INTERFACE ═════════ */
