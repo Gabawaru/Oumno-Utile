@@ -126,13 +126,15 @@ export function creerClient(url, cle) {
         return p.then(res, rej);
       },
       async insert(corps) { return ecrire("POST", corps); },
-      // Volontairement synchrone : il faut pouvoir enchaîner .eq() derrière,
+      // Volontairement synchrones : il faut pouvoir enchaîner .eq() derrière,
       // l'écriture ne part qu'au moment où la requête est attendue.
       update(corps) { q._maj = corps; return q; },
+      delete() { q._suppr = true; return q; },
     };
     async function executer() {
       const parts = [`select=${colonnes}`, ...f, tri, limite].filter(Boolean);
       if (q._maj) return ecrire("PATCH", q._maj);
+      if (q._suppr) return ecrire("DELETE", undefined);
       const r = await requete(`${url}/rest/v1/${table}?${parts.join("&")}`, { headers: entetes() });
       if (r.error) return r;
       return { data: unique ? (r.data?.[0] ?? null) : r.data, error: null };
@@ -142,7 +144,7 @@ export function creerClient(url, cle) {
       const r = await requete(`${url}/rest/v1/${table}${parts.length ? "?" + parts.join("&") : ""}`, {
         method: methode,
         headers: { ...entetes(), Prefer: "return=minimal" },
-        body: JSON.stringify(corps),
+        body: corps === undefined ? undefined : JSON.stringify(corps),
       });
       return { data: null, error: r.error };
     }
@@ -163,5 +165,13 @@ export function creerClient(url, cle) {
     return { data: d, error: null };
   }
 
-  return { auth, from };
+  /** Appel d'une fonction SQL exposée par PostgREST. */
+  async function rpc(nom, params) {
+    const r = await requete(`${url}/rest/v1/rpc/${nom}`, {
+      method: "POST", headers: entetes(), body: JSON.stringify(params || {}),
+    });
+    return { data: r.data, error: r.error };
+  }
+
+  return { auth, from, rpc };
 }

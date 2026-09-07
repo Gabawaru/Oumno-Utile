@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%8E%AF%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="polices.css">
+<link rel="stylesheet" href="pages.css">
+<title>Confidentialité — Repère</title>
+</head>
+<body>
+<div class="doc">
+<a class="retour" href="/">← Revenir au planning</a>
+
+<div class="tete">
+  <h1>Politique de confidentialité</h1>
+  <p>Ce que Repère enregistre, pourquoi, pendant combien de temps, et comment
+     reprendre la main dessus.</p>
+  <div class="maj">Version 1 · en vigueur au 7 septembre 2026</div>
+</div>
+
+<div class="bloc">
+  <h2>En une phrase</h2>
+  <p>Repère enregistre votre adresse électronique, un nom affiché et le contenu de
+  votre planning. Il n'y a <b>ni publicité, ni mesure d'audience, ni traceur</b>, et
+  rien n'est revendu. Votre planning n'est visible que par vous, sauf si vous
+  décidez explicitement de le rendre public ou de le partager avec des personnes
+  précises.</p>
+</div>
+
+<div class="bloc">
+  <h2>1. Qui est responsable du traitement</h2>
+  <div class="avert"><b>À compléter avant l'ouverture au public.</b> La loi impose
+    d'identifier l'éditeur du site. Ces mentions sont laissées vides à dessein :
+    elles ne peuvent pas être inventées.</div>
+  <table>
+    <tr><th>Champ</th><th>Valeur</th></tr>
+    <tr><td>Responsable</td><td><span class="trou">[nom ou raison sociale]</span></td></tr>
+    <tr><td>Statut</td><td><span class="trou">[particulier / association / société]</span></td></tr>
+    <tr><td>Adresse</td><td><span class="trou">[adresse postale]</span></td></tr>
+    <tr><td>Contact</td><td><span class="trou">[adresse de contact]</span></td></tr>
+  </table>
+  <p>Aucun délégué à la protection des données n'est désigné : le traitement est de
+  petite échelle et ne porte ni sur des données sensibles, ni sur un suivi
+  systématique à grande échelle.</p>
+</div>
+
+<div class="bloc">
+  <h2>2. Ce qui est enregistré, et pourquoi</h2>
+  <table>
+    <tr><th>Donnée</th><th>Pourquoi</th><th>Base légale</th></tr>
+    <tr><td>Adresse électronique</td>
+        <td>Identifier le compte, permettre la réinitialisation du mot de passe</td>
+        <td>Exécution du service (art. 6.1.b)</td></tr>
+    <tr><td>Mot de passe</td>
+        <td>Protéger l'accès. Il n'est jamais stocké en clair : seule une empreinte
+            bcrypt est conservée, et personne — pas même l'éditeur — ne peut le lire</td>
+        <td>Exécution du service</td></tr>
+    <tr><td>Nom affiché et identifiant public</td>
+        <td>Vous nommer auprès des personnes qui consultent votre planning</td>
+        <td>Exécution du service</td></tr>
+    <tr><td>Contenu du planning</td>
+        <td>Étapes validées et leur date, événements (titre, horaires, lien),
+            plages de travail déclarées, notes que vous saisissez</td>
+        <td>Exécution du service</td></tr>
+    <tr><td>Journal des changements</td>
+        <td>Vous montrer, et montrer aux personnes autorisées, ce qui a bougé</td>
+        <td>Exécution du service</td></tr>
+    <tr><td>Liste des partages</td>
+        <td>Savoir qui a le droit de consulter un planning privé</td>
+        <td>Exécution du service</td></tr>
+    <tr><td>Adresse d'abonnement à la lettre</td>
+        <td>Envoyer le récapitulatif des changements</td>
+        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
+    <tr><td>Date d'acceptation des conditions</td>
+        <td>Prouver que le consentement a bien été recueilli</td>
+        <td>Obligation légale (art. 7.1)</td></tr>
+  </table>
+  <h3>Ce qui n'est pas collecté</h3>
+  <p>Ni adresse IP conservée, ni empreinte de navigateur, ni géolocalisation, ni
+  cookie publicitaire, ni mesure d'audience. Aucune donnée sensible au sens de
+  l'article 9 du RGPD n'est demandée.</p>
+</div>
+
+<div class="bloc">
+  <h2>3. Qui peut voir votre planning</h2>
+  <p>C'est vous qui décidez, et le réglage est immédiat.</p>
+  <ul>
+    <li><b>Privé</b> — c'est le réglage par défaut à l'inscription. Vous seul y avez
+    accès, plus les comptes que vous ajoutez nommément.</li>
+    <li><b>Personnes autorisées</b> — vous choisissez qui, une par une, et vous pouvez
+    retirer l'autorisation quand vous voulez. Elles voient votre planning en lecture
+    seule et ne peuvent rien y modifier.</li>
+    <li><b>Public</b> — n'importe qui, avec ou sans compte, peut consulter le planning
+    et voit votre nom affiché. Votre adresse électronique, elle, n'est jamais montrée.</li>
+  </ul>
+  <p>Ces règles ne sont pas seulement appliquées par l'interface : elles sont posées
+  au niveau de la base de données, ligne par ligne. Un planning privé n'est pas
+  seulement caché, il est inaccessible.</p>
+</div>
+
+<div class="bloc">
+  <h2>4. Sous-traitants et hébergement</h2>
+  <table>
+    <tr><th>Prestataire</th><th>Rôle</th><th>Où</th></tr>
+    <tr><td>Supabase</td><td>Base de données et gestion des comptes</td>
+        <td>Union européenne — Paris (eu-west-3)</td></tr>
+    <tr><td>Vercel</td><td>Hébergement des pages</td>
+        <td>États-Unis, sous clauses contractuelles types</td></tr>
+    <tr><td>Resend</td><td>Envoi de la lettre d'information, si vous vous y abonnez</td>
+        <td>États-Unis, sous clauses contractuelles types</td></tr>
+  </table>
+  <p>Les polices de caractères sont servies depuis ce site, et non par un tiers :
+  aucune adresse IP de visiteur n'est transmise à Google ou à un autre fournisseur
+  de polices.</p>
+</div>
+
+<div class="bloc">
+  <h2>5. Combien de temps</h2>
+  <table>
+    <tr><th>Donnée</th><th>Durée</th></tr>
+    <tr><td>Compte et planning</td><td>Tant que le compte existe. Supprimé immédiatement
+      et définitivement à la suppression du compte.</td></tr>
+    <tr><td>Journal des changements</td><td>Supprimé avec le compte.</td></tr>
+    <tr><td>Abonnement à la lettre</td><td>Jusqu'à la désinscription.</td></tr>
+    <tr><td>Liens d'invitation</td><td>30 jours, ou 25 utilisations.</td></tr>
+  </table>
+</div>
+
+<div class="bloc">
+  <h2>6. Vos droits</h2>
+  <p>Le RGPD vous donne des droits sur vos données. Deux d'entre eux s'exercent
+  directement dans l'application, sans écrire à personne :</p>
+  <ul>
+    <li><b>Accès et rectification</b> — tout ce qui est enregistré est affiché et
+    modifiable dans <b>Réglages</b>.</li>
+    <li><b>Effacement</b> — le bouton <b>Supprimer mon compte</b>, dans Réglages,
+    efface immédiatement le compte, le planning, le journal, les partages et les
+    abonnés. L'opération est définitive et sans copie de sauvegarde.</li>
+  </ul>
+  <p>Les autres droits — portabilité, limitation, opposition, retrait du consentement,
+  et le droit de définir des directives sur le sort de vos données après votre décès —
+  s'exercent auprès du responsable indiqué au point 1.</p>
+  <p>En cas de désaccord, vous pouvez saisir la
+  <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener">CNIL</a>.</p>
+</div>
+
+<div class="bloc">
+  <h2>7. Stockage dans votre navigateur</h2>
+  <p>Repère ne dépose <b>aucun cookie</b>. Il utilise le stockage local du navigateur
+  pour deux choses seulement : garder votre session ouverte entre deux visites, et
+  conserver une copie de votre planning pour qu'il reste consultable en cas de coupure
+  réseau. Ces deux usages sont strictement nécessaires au fonctionnement du service,
+  ce qui les dispense de bandeau de consentement. Vider les données du site les efface.</p>
+</div>
+
+<div class="bloc">
+  <h2>8. Sécurité</h2>
+  <ul>
+    <li>Tout passe en HTTPS.</li>
+    <li>Les mots de passe sont hachés avec bcrypt, jamais stockés en clair.</li>
+    <li>Les autorisations sont vérifiées par la base elle-même, à chaque requête.</li>
+    <li>La clé publique visible dans le navigateur ne donne aucun accès en écriture :
+    c'est son usage prévu, la protection repose sur les politiques de sécurité.</li>
+    <li>Le code de l'application est ouvert et vérifiable.</li>
+  </ul>
+</div>
+
+<div class="bloc">
+  <h2>9. Modifications</h2>
+  <p>Toute évolution de ce document sera annoncée dans l'application, et une nouvelle
+  acceptation sera demandée si les changements touchent à vos droits ou à l'usage de
+  vos données.</p>
+</div>
+
+<div class="pied">
+  <a href="/">Repère</a> · <a href="conditions.html">Conditions générales</a> ·
+  <a href="confidentialite.html">Confidentialité</a> · <a href="aide.html">Aide et mentions légales</a>
+</div>
+</div>
+</body>
+</html>
