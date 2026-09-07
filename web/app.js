@@ -1,5 +1,6 @@
 import { creerClient } from "./supa.js";
-import { MONTHS, MFULL, DOW, DAY, TZ, CNED, EXAM, GROUPS } from "./planning.js";
+import { MONTHS, MFULL, DOW, DAY, TZ, CNED, EXAM } from "./planning.js";
+import { versGroupes, MODELES, QUINZAINES, COULEURS, depuisModele } from "./modeles.js";
 import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree,
          trouverCreneaux, creneauxTexte, plusLongCreneau, normaliserCapacites,
          journeeType, REGLES, JOURNEE,
@@ -15,6 +16,9 @@ let moi = null;          // mon profil
 let vue = null;          // profil consulté
 let capacites = { 0: 2, 1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 3 };
 let reports = {};        // échéances repoussées à la main
+let programme = null;    // modèle choisi, ou matières déclarées à la main
+let modeleEnAttente = null;  // modèle retenu à l'inscription, posé à la 1re ouverture
+let partages = [];       // comptes autorisés à voir mon planning privé
 let partJour = null;     // { date, h } — la part de travail fixée pour le jour
 let plan = null;         // résultat du planificateur
 
@@ -28,22 +32,30 @@ const qStart=q=>new Date(Y0,M0+Math.floor(q/2),q%2?16:1);
 const qEnd  =q=>q%2?new Date(Y0,M0+Math.floor(q/2)+1,1):new Date(Y0,M0+Math.floor(q/2),16);
 const T0=qStart(0).getTime(),T1=qEnd(19).getTime();
 
-const ALL=[],DEVS=[];
-GROUPS.forEach(g=>g.rows.forEach(r=>{
-  r.g=g; r.h=r.steps.reduce((a,s)=>a+s.h,0);
-  r.cid=r.cid||g.cid;
-  r.url=r.cid?CNED+r.cid+(r.u?"&section="+r.u:""):null;
-  const a=qStart(r.s).getTime(),b=qEnd(r.e-1).getTime(),span=b-a;
-  let cum=0;
-  r.steps.forEach(s=>{
-    s.row=r;s.g=g;s.t0=a+span*(cum/r.h);cum+=s.h;s.t1=a+span*(cum/r.h);
-    ALL.push(s); if(s.dev) DEVS.push(s);
-  });
-}));
-GROUPS.forEach(g=>{g.h=g.rows.reduce((a,r)=>a+r.h,0);
-  g.s=Math.min(...g.rows.map(r=>r.s));g.e=Math.max(...g.rows.map(r=>r.e));});
-const TOTAL_H=GROUPS.reduce((a,g)=>a+g.h,0);
-const byId={}; ALL.forEach(s=>byId[s.id]=s);
+/* Le programme n'est plus figé : c'est celui du profil consulté. Le moteur ne
+   connaît que des étapes avec un volume d'heures et une période — le référentiel
+   CNED n'est qu'un modèle parmi d'autres. */
+let GROUPES=[], ALL=[], DEVS=[], TOTAL_H=0, byId={};
+
+function chargerProgramme(prog){
+  GROUPES = versGroupes(prog);
+  ALL=[]; DEVS=[]; byId={};
+  GROUPES.forEach(g=>g.rows.forEach(r=>{
+    r.g=g; r.h=r.steps.reduce((a,s)=>a+s.h,0);
+    r.cid=r.cid||g.cid;
+    r.url=r.cid?CNED+r.cid+(r.u?"&section="+r.u:""):null;
+    const a=qStart(r.s).getTime(),b=qEnd(r.e-1).getTime(),span=b-a;
+    let cum=0;
+    r.steps.forEach(s=>{
+      s.row=r;s.g=g;s.t0=a+span*(cum/Math.max(r.h,1));cum+=s.h;s.t1=a+span*(cum/Math.max(r.h,1));
+      ALL.push(s); if(s.dev) DEVS.push(s);
+    });
+  }));
+  GROUPES.forEach(g=>{g.h=g.rows.reduce((a,r)=>a+r.h,0);
+    g.s=Math.min(...g.rows.map(r=>r.s));g.e=Math.max(...g.rows.map(r=>r.e));});
+  TOTAL_H=GROUPES.reduce((a,g)=>a+g.h,0);
+  ALL.forEach(s=>byId[s.id]=s);
+}
 
 function planned(t){let v=0;for(const s of ALL){
   if(t>=s.t1)v+=s.h; else if(t>s.t0)v+=s.h*(t-s.t0)/(s.t1-s.t0);}return v;}
@@ -108,9 +120,11 @@ function appliquerEtat(d){
   capacites = normaliserCapacites(d.capacites);
   reports   = d.reports   || {};
   partJour  = d.partJour  || null;
+  programme = d.programme || { modele: "cned", matieres: [] };
+  chargerProgramme(programme);
   Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
 }
-const etat=()=>({done,evenements:events,notes:grades,capacites,reports,partJour});
+const etat=()=>({done,evenements:events,notes:grades,capacites,reports,partJour,programme});
 
 function log(text){
   pendingLog.push(text);
@@ -245,7 +259,7 @@ function buildGantt(){
   const g=document.getElementById("gantt"),NQ=nowQ();
   let h='<div class="corner"></div>';
   MONTHS.forEach((m,i)=>h+=`<div class="mcell${Math.floor(NQ/2)===i?" now":""}">${m}</div>`);
-  GROUPS.forEach((grp,gi)=>{
+  GROUPES.forEach((grp,gi)=>{
     if(gi)h+='<div class="spacer"></div>';
     h+=`<div class="glabel grp">${grp.name}${grp.code?`<span class="code">${grp.code}</span>`:""}<span class="code">${grp.h} h</span></div>
       <div class="lane grp"><div class="bar grp" data-g="${grp.id}" style="--c:${grp.c};grid-column:${col(grp.s)}/${col(grp.e)}"><div class="fill"></div></div></div>`;
@@ -256,12 +270,14 @@ function buildGantt(){
     });
   });
   g.innerHTML=h;
+  // Le renvoi vers le CNED n'a de sens que si les lots portent un lien de cours.
+  const liens=GROUPES.some(gp=>gp.rows.some(r=>r.url));
   document.getElementById("legend").innerHTML=
-    GROUPS.map(gp=>`<span class="li"><span class="sw" style="background:${gp.c}"></span>${short(gp)} — ${gp.h} h</span>`).join("")+
-    `<span class="li" style="margin-left:auto" class="muted">Clique le nom d'un lot pour ouvrir le cours sur eformation.cned.fr</span>`;
+    GROUPES.map(gp=>`<span class="li"><span class="sw" style="background:${gp.c}"></span>${short(gp)} — ${gp.h} h</span>`).join("")+
+    (liens?`<span class="li muted" style="margin-left:auto">Clique le nom d'un lot pour ouvrir le cours</span>`:"");
 }
 function paintGantt(){
-  GROUPS.forEach(g=>{
+  GROUPES.forEach(g=>{
     let gd=0;
     g.rows.forEach(r=>{
       const d=doneH(r);gd+=d;const pc=r.h?d/r.h*100:0,late=r.steps.some(isLate);
@@ -282,7 +298,7 @@ function paintGantt(){
 
 /* ═════════ ÉTAPES ═════════ */
 function buildAcc(){
-  document.getElementById("acc").innerHTML=GROUPS.map(g=>`
+  document.getElementById("acc").innerHTML=GROUPES.map(g=>`
    <div class="grpblk" style="--c:${g.c}">
      <div class="grphd" role="button" tabindex="0" aria-expanded="false">
        <span class="car">▶</span><span class="nm">${g.name}</span>
@@ -485,7 +501,7 @@ function renderAll(){
   painting=true;
   replanifier();
   renderToday();renderCourbe();paintGantt();renderGrades();renderJournal();
-  renderCapacites();renderProfil();
+  renderCapacites();renderProfil();renderProgramme();renderCompte();
   if(!document.querySelector('[data-panel="cal"]').hidden) renderCal();
   syncChecks();applyMode();
   painting=false;
@@ -956,43 +972,90 @@ function renderDispo() {
   }, 30);
 }
 
-/* ═════════ PROFIL : NOM ET VISIBILITÉ ═════════ */
+/* ═════════ PROFIL, PARTAGES ET INVITATIONS ═════════
+   Un planning privé n'est pas seulement caché : la base refuse de le servir à
+   qui n'est pas dans la liste. Ce qui suit ne fait que piloter cette liste. */
+
+/**
+ * Les comptes autorisés à voir mon planning. Le nom passe par une fonction
+ * dédiée : un profil privé n'est pas lisible directement, même par celui qui
+ * l'a invité — et il n'a pas à voir ses réglages pour autant.
+ */
+async function chargerPartages() {
+  partages = [];
+  if (!canEdit || !vue) return;
+  const { data } = await sb.rpc("mes_invites");
+  partages = Array.isArray(data) ? data : [];
+}
+
 function renderProfil() {
   const box = $("profilBox");
   if (!box || !vue) return;
   const url = location.origin + "?profil=" + vue.slug;
   if (!canEdit) {
     box.innerHTML = `<p class="aide">Tu consultes le planning de <b>${esc(vue.nom)}</b>
-      (<span class="mono">@${esc(vue.slug)}</span>), partagé publiquement.</p>`;
+      (<span class="mono">@${esc(vue.slug)}</span>), en lecture seule.</p>`;
     return;
   }
   box.innerHTML = `
-    <div class="champ" style="max-width:320px;margin-bottom:.6rem">
+    <div class="champ" style="max-width:320px;margin-bottom:.7rem">
       <label class="fl" for="pfNom">Nom affiché</label>
       <input id="pfNom" type="text" maxlength="40" value="${esc(vue.nom)}">
+      <div class="dispo" id="pfDispo"></div>
+      <div class="fl2">Unique : deux comptes ne peuvent pas porter le même nom.</div>
     </div>
     <div class="visi">
-      <label class="opt${vue.public ? " on" : ""}">
-        <input type="radio" name="visi" value="public"${vue.public ? " checked" : ""}>
-        <span><b>Public</b><em>N'importe qui peut consulter ton planning, sans compte.
-          Ton profil apparaît sur la page d'accueil.</em></span></label>
       <label class="opt${vue.public ? "" : " on"}">
         <input type="radio" name="visi" value="prive"${vue.public ? "" : " checked"}>
-        <span><b>Privé</b><em>Toi seul y as accès. Le profil disparaît de la page
-          d'accueil et le lien direct ne montre plus rien.</em></span></label>
+        <span><b>Privé</b><em>Toi seul, plus les personnes que tu autorises nommément
+          ci-dessous. Le profil n'apparaît nulle part.</em></span></label>
+      <label class="opt${vue.public ? " on" : ""}">
+        <input type="radio" name="visi" value="public"${vue.public ? " checked" : ""}>
+        <span><b>Public</b><em>N'importe qui peut consulter ton planning, sans compte,
+          et ton profil s'affiche sur la page d'accueil.</em></span></label>
     </div>
-    ${vue.public ? `<div class="lienpartage">
-      <span class="fl">Lien à partager</span>
-      <div class="lp"><code>${esc(url)}</code>
-        <button class="btn" id="copierLien">Copier</button></div>
-    </div>` : ""}`;
 
-  $("pfNom").onchange = async (e) => {
-    const nom = e.target.value.trim().slice(0, 40);
+    <div class="soustitre" style="margin-top:1rem">Personnes autorisées</div>
+    <p class="aide">Elles voient ton planning en lecture seule, même quand il est privé.
+      ${vue.public ? "Ton planning étant public, cette liste ne change rien pour l'instant." : ""}</p>
+    <div class="membres" id="membres"></div>
+
+    <div class="soustitre" style="margin-top:1rem">Inviter par lien</div>
+    <p class="aide">Quiconque ouvre ce lien en étant connecté obtient l'accès en lecture.
+      Valable 30 jours, 25 utilisations. Ne le donne qu'à des gens de confiance.</p>
+    <div class="lp"><code id="lienInvit">—</code>
+      <button class="btn" id="faireInvit">Créer un lien</button></div>
+
+    ${vue.public ? `<div class="soustitre" style="margin-top:1rem">Lien public</div>
+      <div class="lp"><code>${esc(url)}</code>
+        <button class="btn" id="copierLien">Copier</button></div>` : ""}`;
+
+  renderMembres();
+
+  const nomInp = $("pfNom");
+  nomInp.oninput = () => {
+    clearTimeout(tmr.nom);
+    tmr.nom = setTimeout(async () => {
+      const v = nomInp.value.trim(), z = $("pfDispo");
+      if (v === vue.nom || v.length < 2) { z.className = "dispo"; z.textContent = ""; return; }
+      const { data } = await sb.rpc("nom_disponible", { candidat: v });
+      z.className = "dispo " + (data ? "oui" : "non");
+      z.textContent = data ? "Ce nom est libre." : "Ce nom est déjà pris.";
+    }, 400);
+  };
+  nomInp.onchange = async () => {
+    const nom = nomInp.value.trim().slice(0, 40);
     if (!nom || nom === vue.nom) return;
     const { error } = await sb.from("ciel_profiles").update({ nom }).eq("id", vue.id);
-    if (!error) { vue.nom = nom; $("titreProfil").textContent = "Mon planning"; renderProfil(); }
+    if (error) {
+      nomInp.value = vue.nom;
+      dialogue({ ton: "warn", titre: "Ce nom est déjà pris",
+        corps: `<p>Les noms affichés sont uniques, à la casse près. Essaie autre chose.</p>` });
+      return;
+    }
+    vue.nom = nom; renderProfil();
   };
+
   box.querySelectorAll('input[name="visi"]').forEach((r) => (r.onchange = async () => {
     const pub = r.value === "public";
     const { error } = await sb.from("ciel_profiles").update({ public: pub }).eq("id", vue.id);
@@ -1001,12 +1064,276 @@ function renderProfil() {
     log(pub ? "a rendu son planning public" : "a rendu son planning privé");
     saveState(); renderProfil();
   }));
+
+  $("faireInvit").onclick = async () => {
+    const b = $("faireInvit");
+    b.disabled = true; b.textContent = "…";
+    const { data, error } = await sb.rpc("creer_invitation");
+    b.disabled = false; b.textContent = "Créer un lien";
+    if (error || !data) return setSync("warn", "lien impossible");
+    const lien = location.origin + "?invite=" + String(data).replace(/"/g, "");
+    $("lienInvit").textContent = lien;
+    try { await navigator.clipboard.writeText(lien); setSync("ok", "lien copié"); } catch {}
+    log("a créé un lien d'invitation");
+  };
   const cp = $("copierLien");
   if (cp) cp.onclick = async () => {
     try { await navigator.clipboard.writeText(url); cp.textContent = "Copié ✓"; }
     catch { cp.textContent = "Échec"; }
     setTimeout(() => (cp.textContent = "Copier"), 1600);
   };
+}
+
+function renderMembres() {
+  const box = $("membres");
+  if (!box) return;
+  box.innerHTML = partages.length
+    ? partages.map((p) => `<div class="membre">
+        <span class="pav">${esc((p.nom || "?").slice(0, 2).toUpperCase())}</span>
+        <span class="mn"><b>${esc(p.nom || "Compte supprimé")}</b>
+          <em>${p.slug ? "@" + esc(p.slug) + " · " : ""}autorisé le ${new Date(p.cree_le).toLocaleDateString("fr-FR",
+            { day: "numeric", month: "long" })}</em></span>
+        <button class="btn" data-retirer="${p.invite}">Retirer</button>
+      </div>`).join("")
+    : `<p class="aide muted">Personne pour l'instant. Envoie un lien d'invitation ci-dessous.</p>`;
+  box.querySelectorAll("[data-retirer]").forEach((b) => (b.onclick = () => dialogue({
+    ton: "warn", titre: "Retirer cette personne ?",
+    corps: `<p>Elle n'aura plus accès à ton planning. Tu pourras l'inviter à nouveau.</p>`,
+    actions: [
+      { texte: "Annuler", pri: true },
+      { texte: "Retirer", faire: async () => {
+          await sb.from("ciel_partages").delete()
+            .eq("proprietaire", vue.id).eq("invite", b.dataset.retirer);
+          await chargerPartages(); renderMembres();
+        } },
+    ],
+  })));
+}
+
+/* ═════════ MON PROGRAMME ═════════
+   Le référentiel CNED n'est qu'un modèle. Qui n'est pas en BTS CIEL déclare ses
+   propres matières : le moteur ne demande qu'un volume d'heures et une période. */
+function renderProgramme() {
+  const box = $("progBox");
+  if (!box) return;
+  if (!canEdit) {
+    box.innerHTML = `<p class="aide">${GROUPES.length
+      ? `${GROUPES.length} matière${GROUPES.length > 1 ? "s" : ""}, ${Math.round(TOTAL_H)} h au total.`
+      : "Aucun programme déclaré."}</p>`;
+    return;
+  }
+  const perso = programme.modele === "perso";
+  box.innerHTML = `
+    <p class="aide">${perso
+      ? `Ton programme, à ta main : <b>${programme.matieres.length}</b> matière(s),
+         <b>${Math.round(TOTAL_H)} h</b> au total.`
+      : `Tu utilises le modèle <b>${esc(MODELES[programme.modele]?.nom || programme.modele)}</b> —
+         ${Math.round(TOTAL_H)} h. Passe à un programme modifiable pour ajouter tes propres matières.`}</p>
+    ${perso ? `<div class="matieres" id="matieres"></div>
+      <button class="btn pri" id="ajMatiere">Ajouter une matière</button>` : ""}
+    <div class="zbascule">
+      ${perso ? "" : `<button class="btn" id="versPerso">Rendre ce programme modifiable</button>`}
+      <button class="btn" id="autreModele">Repartir d'un autre modèle</button>
+    </div>`;
+
+  if (perso) renderMatieres();
+
+  const vp = $("versPerso");
+  if (vp) vp.onclick = () => {
+    // Le modèle figé devient une copie modifiable, sans rien perdre.
+    programme = {
+      modele: "perso",
+      matieres: GROUPES.map((g) => ({
+        id: g.id, nom: g.name, couleur: (g.c.match(/--(\w+)/) || [, "b1"])[1],
+        etapes: g.rows.flatMap((r) => r.steps.map((st) => ({ id: st.id, n: st.n, h: st.h, s: r.s, e: r.e }))),
+      })),
+    };
+    appliquerProgramme("a rendu son programme modifiable");
+  };
+
+  $("autreModele").onclick = () => dialogue({
+    ton: "warn", titre: "Repartir d'un autre modèle ?",
+    corps: `<p>Ton programme actuel sera remplacé. Les étapes déjà validées qui
+        n'existent pas dans le nouveau modèle disparaîtront du suivi.</p>
+      <div class="mchoix">${Object.values(MODELES).map((m) =>
+        `<label class="modele"><input type="radio" name="mnew" value="${m.id}">
+          <span><b>${esc(m.nom)}</b><em>${esc(m.resume)}</em></span></label>`).join("")}</div>`,
+    actions: [
+      { texte: "Annuler", pri: true },
+      { texte: "Remplacer", faire: () => {
+          const c = document.querySelector('input[name="mnew"]:checked');
+          if (!c) return;
+          programme = depuisModele(c.value);
+          appliquerProgramme(`a repris le modèle « ${MODELES[c.value].nom} »`);
+        } },
+    ],
+  });
+}
+
+function appliquerProgramme(texte) {
+  chargerProgramme(programme);
+  if (texte) log(texte);
+  saveState();
+  buildGantt(); buildAcc();
+  renderAll(); renderProgramme();
+}
+
+/** La matière dépliée : celle qu'on vient d'ajouter, sinon la première. */
+let matiereOuverte = null;
+
+function renderMatieres() {
+  const box = $("matieres");
+  if (!box) return;
+  box.innerHTML = programme.matieres.map((m, im) => {
+    const total = m.etapes.reduce((a, e) => a + e.h, 0);
+    const ouverte = matiereOuverte ? m.id === matiereOuverte : im === 0;
+    return `<details class="mat"${ouverte ? " open" : ""}>
+      <summary><i style="background:var(--${m.couleur})"></i>
+        <b>${esc(m.nom)}</b>
+        <span class="ct">${m.etapes.length} étape${m.etapes.length > 1 ? "s" : ""} · ${total} h</span>
+      </summary>
+      <div class="matcorps">
+        <div class="ligne1">
+          <input type="text" data-mnom="${im}" value="${esc(m.nom)}" maxlength="50" placeholder="Nom de la matière">
+          <select data-mcoul="${im}">${COULEURS.map((c) =>
+            `<option value="${c.id}"${c.id === m.couleur ? " selected" : ""}>${c.nom}</option>`).join("")}</select>
+          <button class="btn danger mini" data-msuppr="${im}">Supprimer</button>
+        </div>
+        <table class="etapes"><tr><th>Étape</th><th>Heures</th><th>De</th><th>À</th><th></th></tr>
+        ${m.etapes.map((e, ie) => `<tr>
+          <td><input type="text" data-en="${im}.${ie}" value="${esc(e.n)}" maxlength="70"></td>
+          <td><input type="number" data-eh="${im}.${ie}" value="${e.h}" min="1" max="400" step="1"></td>
+          <td><select data-es="${im}.${ie}">${QUINZAINES.map((q) =>
+            `<option value="${q.q}"${q.q === e.s ? " selected" : ""}>${q.texte}</option>`).join("")}</select></td>
+          <td><select data-ee="${im}.${ie}">${QUINZAINES.map((q) =>
+            `<option value="${q.q + 1}"${q.q + 1 === e.e ? " selected" : ""}>${q.texte}</option>`).join("")}</select></td>
+          <td><button class="btn mini" data-esuppr="${im}.${ie}" title="Supprimer l'étape">✕</button></td>
+        </tr>`).join("")}
+        </table>
+        <button class="btn" data-eaj="${im}">Ajouter une étape</button>
+      </div>
+    </details>`;
+  }).join("") || `<p class="aide muted">Aucune matière. Ajoute la première ci-dessous.</p>`;
+  // On retient le pli choisi, sinon chaque frappe replierait la matière ouverte.
+  box.querySelectorAll("details.mat").forEach((d, i) => (d.ontoggle = () => {
+    if (d.open) matiereOuverte = programme.matieres[i] ? programme.matieres[i].id : null;
+  }));
+}
+
+/** Un seul point d'entrée pour toutes les modifications du programme. */
+function brancherProgramme() {
+  document.addEventListener("input", (ev) => {
+    if (!canEdit || !programme || programme.modele !== "perso") return;
+    const t = ev.target;
+    const maj = (fn) => { clearTimeout(tmr.prog); tmr.prog = setTimeout(() => { fn(); appliquerProgramme(); }, 600); };
+    if (t.dataset.mnom !== undefined) {
+      const i = +t.dataset.mnom, v = t.value.trim();
+      if (v) maj(() => { programme.matieres[i].nom = v; });
+    } else if (t.dataset.en !== undefined) {
+      const [i, j] = t.dataset.en.split(".").map(Number), v = t.value.trim();
+      if (v) maj(() => { programme.matieres[i].etapes[j].n = v; });
+    } else if (t.dataset.eh !== undefined) {
+      const [i, j] = t.dataset.eh.split(".").map(Number), v = Math.max(1, Math.min(400, +t.value || 1));
+      maj(() => { programme.matieres[i].etapes[j].h = v; });
+    }
+  });
+
+  document.addEventListener("change", (ev) => {
+    if (!canEdit || !programme || programme.modele !== "perso") return;
+    const t = ev.target;
+    if (t.dataset.mcoul !== undefined) {
+      programme.matieres[+t.dataset.mcoul].couleur = t.value;
+      appliquerProgramme();
+    } else if (t.dataset.es !== undefined || t.dataset.ee !== undefined) {
+      const cle = t.dataset.es !== undefined ? "s" : "e";
+      const [i, j] = (t.dataset.es ?? t.dataset.ee).split(".").map(Number);
+      const et = programme.matieres[i].etapes[j];
+      et[cle] = +t.value;
+      if (et.e <= et.s) et[cle === "s" ? "e" : "s"] = cle === "s" ? et.s + 1 : et.e - 1;
+      appliquerProgramme();
+    }
+  });
+
+  document.addEventListener("click", (ev) => {
+    if (!canEdit) return;
+    const aj = ev.target.closest("#ajMatiere");
+    if (aj) {
+      if (programme.modele !== "perso") return;
+      const n = programme.matieres.length;
+      const id = "m" + Date.now().toString(36);
+      programme.matieres.push({
+        id, nom: "Nouvelle matière",
+        couleur: COULEURS[n % COULEURS.length].id,
+        etapes: [{ id: "e" + Date.now().toString(36), n: "Première étape", h: 10, s: 0, e: 4 }],
+      });
+      matiereOuverte = id;          // on la déplie : c'est elle qu'on vient de créer
+      appliquerProgramme("a ajouté une matière");
+      return;
+    }
+    const ea = ev.target.closest("[data-eaj]");
+    if (ea) {
+      const m = programme.matieres[+ea.dataset.eaj];
+      matiereOuverte = m.id;
+      const d = m.etapes[m.etapes.length - 1];
+      m.etapes.push({ id: "e" + Date.now().toString(36), n: "Nouvelle étape", h: 10,
+                      s: d ? d.s : 0, e: d ? d.e : 4 });
+      appliquerProgramme();
+      return;
+    }
+    const es = ev.target.closest("[data-esuppr]");
+    if (es) {
+      const [i, j] = es.dataset.esuppr.split(".").map(Number);
+      programme.matieres[i].etapes.splice(j, 1);
+      appliquerProgramme();
+      return;
+    }
+    const ms = ev.target.closest("[data-msuppr]");
+    if (ms) {
+      const i = +ms.dataset.msuppr, m = programme.matieres[i];
+      dialogue({ ton: "warn", titre: `Supprimer « ${m.nom} » ?`,
+        corps: `<p>Ses ${m.etapes.length} étape(s) et leur avancement disparaîtront du suivi.</p>`,
+        actions: [{ texte: "Annuler", pri: true },
+                  { texte: "Supprimer", faire: () => {
+                      programme.matieres.splice(i, 1);
+                      appliquerProgramme(`a supprimé la matière « ${m.nom} »`);
+                    } }] });
+    }
+  });
+}
+brancherProgramme();
+
+/* ═════════ MON COMPTE ═════════ */
+function renderCompte() {
+  const box = $("compteBox");
+  if (!box) return;
+  if (!canEdit || !session) { box.innerHTML = ""; return; }
+  box.innerHTML = `
+    <p class="aide">Compte <b>${esc(session.user.email)}</b>.
+      Tout ce qui est enregistré est visible dans cet onglet et modifiable.
+      Le détail est dans la
+      <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</p>
+    <div class="zdanger">
+      <div><b>Supprimer mon compte</b>
+        <em>Efface immédiatement le compte, le planning, le journal, les partages et
+          les abonnés. C'est définitif : il n'y a pas de sauvegarde.</em></div>
+      <button class="btn danger" id="supprCompte">Supprimer mon compte</button>
+    </div>`;
+  $("supprCompte").onclick = () => dialogue({
+    ton: "stop", titre: "Supprimer définitivement ce compte ?",
+    corps: `<p>Le compte <b>${esc(session.user.email)}</b>, ton planning, ton journal,
+        tes partages et tes abonnés seront effacés <b>immédiatement</b>.</p>
+      <p>Il n'y a pas de sauvegarde et aucune restauration n'est possible.</p>`,
+    actions: [
+      { texte: "Annuler", pri: true },
+      { texte: "Supprimer définitivement", faire: async () => {
+          const { error } = await sb.rpc("supprimer_mon_compte");
+          if (error) return dialogue({ ton: "warn", titre: "Suppression impossible",
+            corps: `<p>${esc(error.message)}</p>` });
+          try { localStorage.clear(); } catch {}
+          location.href = "/";
+        } },
+    ],
+  });
 }
 
 /* ═════════ AUTHENTIFICATION ═════════ */
@@ -1019,14 +1346,20 @@ function messageAuth(txt, ok) {
   m.textContent = txt;
   m.hidden = !txt;
 }
-async function chargerProfils() {
-  const { data } = await sb.from("ciel_profiles").select("id,slug,nom,public").eq("public", true).order("nom");
-  const l = data || [];
-  $("listeProfils").innerHTML = l.length
+/** Les plannings qu'on peut ouvrir : les publics, plus ceux partagés avec moi. */
+async function chargerProfils(cible = "listeProfils") {
+  const { data } = await sb.from("ciel_profiles").select("id,slug,nom,public").order("nom");
+  const l = (data || []).filter((p) => !session || p.id !== session.user.id);
+  const box = $(cible);
+  if (!box) return l;
+  box.innerHTML = l.length
     ? l.map((p) => `<a class="profil" href="?profil=${encodeURIComponent(p.slug)}">
         <span class="pav">${esc(p.nom.slice(0, 2).toUpperCase())}</span>
-        <span><b>${esc(p.nom)}</b><em>@${esc(p.slug)}</em></span></a>`).join("")
-    : `<p class="muted">Aucun planning public pour l'instant.</p>`;
+        <span><b>${esc(p.nom)}</b><em>@${esc(p.slug)}${p.public ? "" : " · partagé avec toi"}</em></span></a>`).join("")
+    : `<p class="muted">Aucun planning ouvert à la consultation pour l'instant.</p>`;
+  const vit = $("vitrine");
+  if (vit && cible === "listeProfils") vit.hidden = !l.length;
+  return l;
 }
 async function chargerProfil(slug) {
   let q = sb.from("ciel_profiles").select("id,slug,nom,public");
@@ -1039,6 +1372,14 @@ async function ouvrir(profil) {
   canEdit = estMoi();
   const { data: st } = await sb.from("ciel_state").select("data").eq("user_id", profil.id).maybeSingle();
   appliquerEtat(st ? st.data : {});
+  // Premier passage après inscription : on pose le modèle retenu.
+  if (modeleEnAttente && estMoi() && !(programme.matieres || []).length && programme.modele === "cned") {
+    programme = depuisModele(modeleEnAttente);
+    modeleEnAttente = null;
+    chargerProgramme(programme);
+    saveState();
+  }
+  await chargerPartages();
   const { data: jr } = await sb.from("ciel_journal").select("ts,body")
     .eq("user_id", profil.id).order("ts", { ascending: false }).limit(120);
   journal = (jr || []).map((j) => ({ ts: j.ts, text: j.body }));
@@ -1073,39 +1414,131 @@ async function demarrer() {
   await sb.auth.recupererDepuisUrl();
   const { data: { session: s } } = await sb.auth.getSession();
   session = s;
-  const slug = new URLSearchParams(location.search).get("profil");
+  const params = new URLSearchParams(location.search);
+
+  // Lien d'invitation : le jeton n'est lisible par personne, seule la base le
+  // consomme. On le retire de l'adresse dès qu'il est traité.
+  const invite = params.get("invite");
+  if (invite) {
+    if (!session) {
+      montrer("ecranAuth");
+      renderModeles();
+      messageAuth("Connecte-toi ou crée un compte : l'invitation s'appliquera juste après.", true);
+      try { sessionStorage.setItem("ciel.invite", invite); } catch {}
+      chargerProfils();
+      return;
+    }
+    await consommerInvitation(invite);
+    return;
+  }
+  // Invitation mise de côté avant la connexion.
+  let attente = null;
+  try { attente = sessionStorage.getItem("ciel.invite"); } catch {}
+  if (attente && session) {
+    try { sessionStorage.removeItem("ciel.invite"); } catch {}
+    await consommerInvitation(attente);
+    return;
+  }
+
+  const slug = params.get("profil");
   if (slug) {
     const p = await chargerProfil(slug);
     if (p) return ouvrir(p);
-    montrer("ecranProfils"); chargerProfils(); return;
+    montrer("ecranProfils"); chargerProfils("listeProfils2"); return;
   }
   if (session) {
     moi = await chargerProfil(null);
     if (moi) return ouvrir(moi);
   }
   montrer("ecranAuth");
+  renderModeles();
   chargerProfils();
 }
 
+/** Consomme un lien d'invitation et ouvre le planning auquel il donne accès. */
+async function consommerInvitation(jeton) {
+  const { data, error } = await sb.rpc("accepter_invitation", { jeton_recu: jeton });
+  const res = String(data || "").replace(/"/g, "");
+  history.replaceState(null, "", location.pathname);
+  if (error || res === "invalide") {
+    montrer("ecranAuth"); renderModeles(); chargerProfils();
+    messageAuth("Ce lien d'invitation n'est plus valable. Demande-en un nouveau.");
+    return;
+  }
+  if (res === "connexion") { montrer("ecranAuth"); renderModeles(); chargerProfils(); return; }
+  if (res === "soi") { location.href = "/"; return; }
+  const p = await chargerProfil(res);
+  if (p) { setSync("ok", "invitation acceptée"); return ouvrir(p); }
+  location.href = "/";
+}
+
 /* onglets d'authentification */
-document.querySelectorAll("[data-auth]").forEach((b) => b.addEventListener("click", () => {
-  const m = b.dataset.auth;
-  document.querySelectorAll("[data-auth]").forEach((x) => x.setAttribute("aria-selected", x === b));
+function ongletAuth(m) {
+  document.querySelectorAll("[data-auth]").forEach((x) =>
+    x.setAttribute("aria-selected", x.dataset.auth === m));
   ["formConnexion", "formInscription", "formOubli"].forEach((f, i) =>
     ($(f).hidden = ["connexion", "inscription", "oubli"][i] !== m));
   messageAuth("");
+}
+document.querySelectorAll("[data-auth]").forEach((b) =>
+  b.addEventListener("click", () => ongletAuth(b.dataset.auth)));
+
+// Les deux boutons de la page d'accueil mènent au bon formulaire.
+document.querySelectorAll("[data-aller]").forEach((b) => b.addEventListener("click", () => {
+  ongletAuth(b.dataset.aller);
+  $("boiteAuth").scrollIntoView({ behavior: "smooth", block: "center" });
+  setTimeout(() => $(b.dataset.aller === "connexion" ? "conEmail" : "insNom")?.focus(), 420);
 }));
+
+$("insNom").addEventListener("input", () => {
+  clearTimeout(tmr.insNom);
+  tmr.insNom = setTimeout(verifierNom, 450);
+});
+
+/** Le nom affiché est unique : on le dit avant de valider, pas après. */
+let modeleChoisi = "cned";
+function renderModeles() {
+  const box = $("insModeles");
+  if (!box) return;
+  box.innerHTML = Object.values(MODELES).map((m) => `
+    <label class="modele${m.id === modeleChoisi ? " on" : ""}">
+      <input type="radio" name="modele" value="${m.id}"${m.id === modeleChoisi ? " checked" : ""}>
+      <span><b>${esc(m.nom)}</b><em>${esc(m.resume)}</em></span></label>`).join("");
+  box.querySelectorAll('input[name="modele"]').forEach((r) => (r.onchange = () => {
+    modeleChoisi = r.value; renderModeles();
+  }));
+}
+
+async function verifierNom() {
+  const inp = $("insNom"), zone = $("nomDispo");
+  if (!inp || !zone) return true;
+  const v = inp.value.trim();
+  if (v.length < 2) { zone.className = "dispo"; zone.textContent = ""; return false; }
+  const { data, error } = await sb.rpc("nom_disponible", { candidat: v });
+  if (error) { zone.className = "dispo"; zone.textContent = ""; return true; }
+  zone.className = "dispo " + (data ? "oui" : "non");
+  zone.textContent = data ? "Ce nom est libre." : "Ce nom est déjà pris. Choisis-en un autre.";
+  return Boolean(data);
+}
 
 $("formInscription").addEventListener("submit", async (e) => {
   e.preventDefault();
   const email = $("insEmail").value.trim().toLowerCase();
   const mdp = $("insMdp").value;
   const nom = $("insNom").value.trim();
+  if (nom.length < 2) return messageAuth("Choisis un nom affiché d'au moins 2 caractères.");
   if (mdp.length < 8) return messageAuth("Le mot de passe doit faire au moins 8 caractères.");
+  if (!$("insCgu").checked) return messageAuth("Il faut accepter les conditions pour créer un compte.");
+  if (!(await verifierNom())) return messageAuth("Ce nom est déjà pris. Choisis-en un autre.");
   messageAuth("Création du compte…", true);
   const { data, error } = await sb.auth.signUp({
     email, password: mdp,
-    options: { data: { nom: nom || email.split("@")[0] }, emailRedirectTo: location.origin },
+    options: {
+      // Le déclencheur en base lit ces champs : nom dédoublonné, profil privé,
+      // et la date d'acceptation des conditions, qui doit pouvoir être prouvée.
+      data: { nom, public: false, conditions: "1", modele: modeleChoisi },
+      emailRedirectTo: location.origin,
+    },
   });
   if (error) {
     const dup = /already|exists|registered/i.test(error.message);
@@ -1113,7 +1546,12 @@ $("formInscription").addEventListener("submit", async (e) => {
       ? "Un compte existe déjà avec cette adresse. Utilise « Connexion », ou « Mot de passe oublié »."
       : error.message);
   }
-  if (data.session) { messageAuth(""); await demarrer(); return; }
+  if (data.session) {
+    messageAuth("");
+    modeleEnAttente = modeleChoisi;
+    await demarrer();
+    return;
+  }
   messageAuth("Compte créé. Ouvre le courriel de confirmation pour activer ton accès.", true);
 });
 
@@ -1230,7 +1668,7 @@ $("tabs").addEventListener("click", (e) => {
   document.querySelectorAll("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === b));
   document.querySelectorAll("section[data-panel]").forEach((s) => (s.hidden = s.dataset.panel !== b.dataset.tab));
   if (b.dataset.tab === "cal") renderCal();
-  if (b.dataset.tab === "regl") { renderCapacites(); renderProfil(); }
+  if (b.dataset.tab === "regl") { renderCapacites(); renderProfil(); renderProgramme(); renderCompte(); }
   if (b.dataset.tab === "dispo") renderDispo();
 });
 document.addEventListener("change", (e) => {

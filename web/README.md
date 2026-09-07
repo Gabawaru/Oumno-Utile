@@ -1,14 +1,23 @@
-# Pilote CIEL 2A — application web
+# Repère — application web
 
-Plannings de révision partagés : consultation libre, comptes personnels,
-replanification automatique et lettre d'information.
+Un planificateur de travail personnel : il répartit les heures, garde les pauses,
+rattrape le retard le soir plutôt que de le laisser filer, et dit à qui l'on veut
+quand on est réellement libre.
 
 ## Ce que fait l'application
 
 - **Comptes** — chacun crée le sien (adresse + mot de passe). Une seule inscription
-  par adresse, mot de passe oublié par courriel. L'identité est gérée par Supabase Auth.
+  par adresse, **nom affiché unique**, mot de passe oublié par courriel, conditions et
+  politique de confidentialité acceptées à l'inscription et datées en base.
+- **Programme au choix** — le référentiel BTS CIEL du CNED n'est qu'un modèle. On peut
+  aussi partir d'une trame de révisions ou d'une page blanche et déclarer ses propres
+  matières et étapes. Le moteur ne connaît que des étapes avec un volume d'heures et
+  une période.
+- **Qui voit quoi** — privé par défaut. On autorise des comptes un par un, on envoie un
+  **lien d'invitation** (30 jours, 25 usages), ou on ouvre le planning à tous. Toujours
+  en lecture seule. Ces règles sont posées dans la base, pas seulement dans l'interface.
 - **Consultation libre** — les plannings publics s'ouvrent sans compte, en lecture seule,
-  via `?profil=identifiant`. La page d'accueil liste les profils publics.
+  via `?profil=identifiant`. La page d'accueil liste ce qui est ouvert à la consultation.
 - **Horloge de Paris** — avance, retard et échéances se calculent sur `Europe/Paris`,
   quel que soit le fuseau du visiteur.
 - **Journée normale, puis rattrapage** — la journée type va de 9 h à 16 h, pauses comprises.
@@ -32,6 +41,8 @@ replanification automatique et lettre d'information.
   la première date à laquelle elle tient et y repousse son échéance.
 - **Lettre d'information** — inscription ouverte à tous sur un profil ; un courriel part
   quand il y a du nouveau, et rappelle le 1er du mois de rafraîchir le scan CNED.
+- **Effacement en un clic** — le bouton *Supprimer mon compte* efface compte, planning,
+  journal, partages et abonnés, immédiatement et sans copie.
 
 ## Architecture
 
@@ -40,14 +51,24 @@ même domaine, pour qu'un blocage réseau ne laisse jamais une page blanche.
 
 ```
 web/
-├── index.html          écrans d'authentification et application
-├── app.js              logique de l'application
-├── supa.js             client Supabase minimal (auth + requêtes)
-├── planning.js         référentiel BTS CIEL 2A relevé sur eformation.cned.fr
-├── planificateur.js    moteur de répartition des heures
-├── api/cron.js         tâche quotidienne : récapitulatif aux abonnés
-└── vercel.json         planification du cron
+├── index.html           page d'accueil, authentification et application
+├── app.js               logique de l'application
+├── supa.js              client Supabase minimal (auth + requêtes + RPC)
+├── planificateur.js     moteur de répartition des heures, pauses et rattrapage
+├── modeles.js           modèles de programme et programme sur mesure
+├── planning.js          référentiel BTS CIEL 2A relevé sur eformation.cned.fr
+├── conditions.html      conditions générales
+├── confidentialite.html politique de confidentialité et RGPD
+├── aide.html            questions fréquentes et mentions légales
+├── pages.css            feuille commune aux trois pages ci-dessus
+├── polices.css polices/ IBM Plex servi depuis le même domaine
+├── api/cron.js          tâche quotidienne : récapitulatif aux abonnés
+└── vercel.json          planification du cron
 ```
+
+Les polices sont servies depuis ce domaine et non par Google : charger une police
+chez un tiers transmet l'adresse IP de chaque visiteur, ce qui n'a pas de base légale
+ici et n'apporte rien.
 
 Le navigateur parle directement à Supabase : ce sont les politiques de sécurité au
 niveau des lignes qui décident de tout. La seule route serveur est le cron, seul
@@ -70,7 +91,19 @@ L'application elle-même n'en a besoin d'aucune.
 ## Base de données
 
 Projet Supabase **« CNED link »** (`hnmeefndnckqkdjjbgwe`, `eu-west-3`).
-Tables `ciel_profiles`, `ciel_state`, `ciel_journal`, `ciel_subs`.
+Tables `ciel_profiles`, `ciel_state`, `ciel_journal`, `ciel_subs`, `ciel_partages`,
+`ciel_invitations`.
+
+Le navigateur n'accède jamais aux jetons d'invitation ni aux noms des comptes privés :
+des fonctions `security definer` font le travail et n'exposent que le nécessaire.
+
+| Fonction | Qui | Ce qu'elle fait |
+|---|---|---|
+| `nom_disponible(text)` | tout le monde | dit si un nom affiché est libre, sans lire la table |
+| `creer_invitation()` | connecté | tire un jeton et l'enregistre |
+| `accepter_invitation(text)` | connecté | consomme un jeton et crée le partage |
+| `mes_invites()` | connecté | nomme les comptes que j'ai autorisés |
+| `supprimer_mon_compte()` | connecté | efface tout, en cascade |
 
 Le dépôt est public et la clé publiable circule dans le navigateur : c'est son usage
 prévu. La protection repose entièrement sur les politiques de sécurité.
@@ -78,7 +111,11 @@ prévu. La protection repose entièrement sur les politiques de sécurité.
 | Rôle | Peut | Ne peut pas |
 |---|---|---|
 | visiteur | lire les profils publics, leur planning et leur journal ; s'abonner à une lettre | écrire quoi que ce soit, lire un profil privé, lire la liste des abonnés |
-| compte connecté | tout ce qui précède, plus écrire **son** planning | toucher au planning d'un autre |
+| compte connecté | tout ce qui précède, plus écrire **son** planning et lire ceux qu'on lui a partagés | toucher au planning d'un autre, même partagé |
+
+Éprouvé par bascule de rôle réelle en base : un visiteur anonyme et un tiers connecté
+lisent 0 ligne d'un planning privé, l'invité en lit 1 et n'y écrit rien, et les jetons
+d'invitation ne sont lisibles par personne.
 
 Un déclencheur crée le profil et le planning vide à l'inscription, avec un identifiant
 dérivé de l'adresse et dédoublonné.
@@ -89,6 +126,9 @@ dérivé de l'adresse et dédoublonné.
   que tu veuilles une inscription immédiate ou vérifiée.
 - **Authentication → URL Configuration** : ajouter l'URL du site aux redirections, sinon
   le lien de réinitialisation ne revient pas au bon endroit.
+- **Mentions légales** : `aide.html` et `confidentialite.html` laissent en évidence les
+  champs d'identification de l'éditeur. Ils doivent être remplis avant toute ouverture
+  au public — la loi les impose et ils ne peuvent pas être inventés.
 - **Authentication → Emails** : sans SMTP personnalisé, Supabase limite fortement le
   nombre de courriels. Pour un usage réel, brancher un expéditeur.
 

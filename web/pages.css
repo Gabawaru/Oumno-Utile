@@ -1,0 +1,68 @@
+/* Feuille commune aux pages de documentation : conditions, confidentialité, aide.
+   Mêmes jetons que l'application, en plus sobre — ce sont des textes qu'on lit. */
+:root{
+  --paper:#eef1f5; --card:#fff; --sunk:#e4e9ef; --ink:#0e141b; --ink2:#43505f;
+  --ink3:#7a8797; --rule:#ccd5df; --rule2:#dde4ec; --sig:#c8102e; --ok:#1a7f5a;
+  --warn:#b26a00;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0c1116; --card:#141b23; --sunk:#1b242e; --ink:#e9eef4; --ink2:#a8b5c4;
+  --ink3:#71808f; --rule:#2a3642; --rule2:#222c37; --sig:#ff4d68; --ok:#3cb98a;
+  --warn:#d6a63c;
+}}
+:root[data-theme="dark"]{
+  --paper:#0c1116; --card:#141b23; --sunk:#1b242e; --ink:#e9eef4; --ink2:#a8b5c4;
+  --ink3:#71808f; --rule:#2a3642; --rule2:#222c37; --sig:#ff4d68; --ok:#3cb98a;
+  --warn:#d6a63c;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:15px;line-height:1.65;padding:clamp(.8rem,3vw,2rem)}
+.doc{max-width:47rem;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
+.retour{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.68rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink3);text-decoration:none}
+.retour:hover{color:var(--sig)}
+.tete{background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--sig);
+  padding:1.1rem 1.3rem}
+.tete h1{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:clamp(1.4rem,3.5vw,1.9rem);
+  font-weight:700;letter-spacing:-.015em;line-height:1.15}
+.tete p{color:var(--ink2);font-size:.87rem;margin-top:.35rem}
+.maj{font-family:"IBM Plex Mono",monospace;font-size:.63rem;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink3);margin-top:.5rem}
+.bloc{background:var(--card);border:1px solid var(--rule);padding:1rem 1.3rem 1.2rem}
+.bloc h2{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.05rem;font-weight:700;
+  padding-bottom:.4rem;border-bottom:1px solid var(--rule2);margin-bottom:.7rem}
+.bloc h3{font-size:.88rem;font-weight:600;margin:.9rem 0 .3rem;color:var(--ink)}
+.bloc p,.bloc li{color:var(--ink2);font-size:.87rem}
+.bloc p+p{margin-top:.55rem}
+.bloc ul,.bloc ol{margin:.4rem 0 .4rem 1.15rem;display:flex;flex-direction:column;gap:.22rem}
+.bloc a{color:var(--sig)}
+.bloc b,.bloc strong{color:var(--ink);font-weight:600}
+.bloc code{font-family:"IBM Plex Mono",monospace;font-size:.82em;background:var(--sunk);
+  padding:.06em .3em;border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:.82rem;margin:.5rem 0}
+th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink3);padding:.3rem .5rem .3rem 0;
+  border-bottom:1px solid var(--rule)}
+td{padding:.4rem .5rem .4rem 0;border-bottom:1px solid var(--rule2);color:var(--ink2);
+  vertical-align:top}
+td:first-child{color:var(--ink);font-weight:500;white-space:nowrap}
+.avert{background:color-mix(in srgb,var(--warn) 10%,var(--card));border-left:3px solid var(--warn);
+  padding:.6rem .8rem;font-size:.83rem;color:var(--ink2)}
+.avert b{color:var(--warn)}
+.trou{font-family:"IBM Plex Mono",monospace;font-size:.8em;background:color-mix(in srgb,var(--warn) 20%,transparent);
+  color:var(--warn);padding:.1em .35em;border-radius:2px;font-weight:600}
+.qa{display:flex;flex-direction:column;gap:.15rem}
+.qa details{border-bottom:1px solid var(--rule2)}
+.qa details:last-child{border-bottom:0}
+.qa summary{cursor:pointer;padding:.62rem .2rem;font-weight:600;font-size:.89rem;
+  list-style:none;display:flex;align-items:baseline;gap:.5rem}
+.qa summary::-webkit-details-marker{display:none}
+.qa summary::before{content:"+";font-family:"IBM Plex Mono",monospace;color:var(--sig);
+  font-weight:700;flex:none;width:.8em}
+.qa details[open] summary::before{content:"−"}
+.qa .rep{padding:0 .2rem .75rem 1.3rem;color:var(--ink2);font-size:.86rem}
+.qa .rep p+p{margin-top:.5rem}
+.pied{font-size:.72rem;color:var(--ink3);text-align:center;padding:.4rem 0 1rem;line-height:1.8}
+.pied a{color:var(--ink3)}
+.pied a:hover{color:var(--sig)}
