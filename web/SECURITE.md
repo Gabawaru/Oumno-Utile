@@ -43,10 +43,35 @@ session et revérifient `auth.uid()` en interne.
 exposé par PostgREST. Tant qu'il était dans `public`, il était appelable en
 `/rest/v1/rpc/` et permettait de sonder la visibilité d'un profil.
 
-> **Piège rencontré, à ne pas refaire :** `CREATE OR REPLACE FUNCTION` **remet les
-> droits à leur valeur par défaut**, c'est-à-dire `EXECUTE` pour `PUBLIC`. Toute
-> recréation doit être suivie de son `REVOKE`. C'est ainsi que six fonctions se
-> sont retrouvées ouvertes aux anonymes sans que rien ne le signale.
+> **Piège rencontré deux fois, à ne pas refaire.** Une fonction nouvellement créée
+> ou recréée repart avec `EXECUTE` ouvert. Et **`REVOKE ... FROM PUBLIC` ne suffit
+> pas** : Supabase accorde `EXECUTE` à `anon` *explicitement*, par privilège par
+> défaut sur le schéma `public`. Révoquer PUBLIC laisse cette concession intacte.
+> Il faut nommer `anon`.
+>
+> Le remède est un bloc **rejouable**, à passer après chaque migration — il remet
+> la matrice exacte quelles que soient les fonctions créées entre-temps :
+>
+> ```sql
+> do $$
+> declare f record; ouvertes text[] := array['nom_disponible'];
+> begin
+>   for f in select p.oid::regprocedure sig, p.proname nom from pg_proc p
+>            join pg_namespace n on n.oid = p.pronamespace
+>            where n.nspname = 'public' and p.prosecdef
+>   loop
+>     execute format('revoke all on function %s from public, anon, authenticated', f.sig);
+>     if f.nom = any(ouvertes) then
+>       execute format('grant execute on function %s to anon, authenticated', f.sig);
+>     elsif f.nom <> 'ciel_nouveau_compte' then
+>       execute format('grant execute on function %s to authenticated', f.sig);
+>     end if;
+>   end loop;
+> end $$;
+> ```
+>
+> Et `alter default privileges in schema public revoke execute on functions from
+> anon;` pour que la prochaine ne reparte pas ouverte.
 
 ### Injection de code (XSS)
 
@@ -196,6 +221,14 @@ Il a trouvé les deux erreurs de droits décrites plus haut : le passer après t
 migration n'est pas facultatif.
 
 ## Journal des audits
+
+**7 septembre 2026 — couche sociale.** Six fonctions nouvellement créées se sont
+retrouvées appelables sans session : le `REVOKE ... FROM PUBLIC` que je croyais
+suffisant ne retire pas la concession explicite d'`anon`. Aucune n'était
+exploitable — chacune vérifie `auth.uid()` — mais la défense en profondeur veut
+qu'`anon` ne puisse pas les appeler du tout. Corrigé par le bloc rejouable
+ci-dessus, et vérifié depuis l'extérieur : 401 sur toutes, sauf
+`nom_disponible`.
 
 **7 septembre 2026 — audit global.** Deux injections trouvées et refermées (lien
 `javascript:` d'un événement, sortie d'attribut par la couleur d'une matière).
