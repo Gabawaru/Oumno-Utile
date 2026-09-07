@@ -13,9 +13,13 @@ quand on est réellement libre.
   aussi partir d'une trame de révisions ou d'une page blanche et déclarer ses propres
   matières et étapes. Le moteur ne connaît que des étapes avec un volume d'heures et
   une période.
+- **Pseudonyme, et vrai nom sur autorisation** — le pseudonyme est public et unique ;
+  le vrai nom est facultatif, rangé dans une table à part, et montré aux seules
+  personnes pour lesquelles on coche ce droit.
 - **Qui voit quoi** — privé par défaut. On autorise des comptes un par un, on envoie un
-  **lien d'invitation** (30 jours, 25 usages), ou on ouvre le planning à tous. Toujours
-  en lecture seule. Ces règles sont posées dans la base, pas seulement dans l'interface.
+  **lien d'invitation** (30 jours, 25 usages, 20 liens actifs au plus), ou on ouvre le
+  planning à tous. Toujours en lecture seule. Ces règles sont posées dans la base, pas
+  seulement dans l'interface — voir [`SECURITE.md`](SECURITE.md).
 - **Consultation libre** — les plannings publics s'ouvrent sans compte, en lecture seule,
   via `?profil=identifiant`. La page d'accueil liste ce qui est ouvert à la consultation.
 - **Horloge de Paris** — avance, retard et échéances se calculent sur `Europe/Paris`,
@@ -57,6 +61,7 @@ web/
 ├── planificateur.js     moteur de répartition des heures, pauses et rattrapage
 ├── modeles.js           modèles de programme et programme sur mesure
 ├── planning.js          référentiel BTS CIEL 2A relevé sur eformation.cned.fr
+├── SECURITE.md          modèle de menace, défenses, et ce qui n'est pas couvert
 ├── conditions.html      conditions générales
 ├── confidentialite.html politique de confidentialité et RGPD
 ├── aide.html            questions fréquentes et mentions légales
@@ -65,6 +70,10 @@ web/
 ├── api/cron.js          tâche quotidienne : récapitulatif aux abonnés
 └── vercel.json          planification du cron
 ```
+
+`vercel.json` pose les en-têtes de sécurité, dont une politique de sécurité du
+contenu en `script-src 'self'` : aucun script étranger ne s'exécute, et les données
+ne peuvent partir nulle part ailleurs que vers la base.
 
 Les polices sont servies depuis ce domaine et non par Google : charger une police
 chez un tiers transmet l'adresse IP de chaque visiteur, ce qui n'a pas de base légale
@@ -103,7 +112,13 @@ des fonctions `security definer` font le travail et n'exposent que le nécessair
 | `creer_invitation()` | connecté | tire un jeton et l'enregistre |
 | `accepter_invitation(text)` | connecté | consomme un jeton et crée le partage |
 | `mes_invites()` | connecté | nomme les comptes que j'ai autorisés |
+| `regler_nom_reel(uuid,bool)` | connecté | accorde ou retire l'accès au vrai nom |
 | `supprimer_mon_compte()` | connecté | efface tout, en cascade |
+
+`prive.ciel_visible()`, le rouage interne des politiques, vit dans un schéma non
+exposé par PostgREST. **Attention :** `CREATE OR REPLACE FUNCTION` remet les droits
+à leur valeur par défaut (`EXECUTE` pour `PUBLIC`) — toute recréation doit être
+suivie de son `REVOKE`, et `get_advisors` passé après chaque migration.
 
 Le dépôt est public et la clé publiable circule dans le navigateur : c'est son usage
 prévu. La protection repose entièrement sur les politiques de sécurité.

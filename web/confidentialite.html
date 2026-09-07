@@ -56,9 +56,15 @@
         <td>Protéger l'accès. Il n'est jamais stocké en clair : seule une empreinte
             bcrypt est conservée, et personne — pas même l'éditeur — ne peut le lire</td>
         <td>Exécution du service</td></tr>
-    <tr><td>Nom affiché et identifiant public</td>
-        <td>Vous nommer auprès des personnes qui consultent votre planning</td>
+    <tr><td>Pseudonyme et identifiant public</td>
+        <td>Vous nommer auprès des personnes qui consultent votre planning.
+            Un pseudonyme suffit : rien n'oblige à donner son état civil</td>
         <td>Exécution du service</td></tr>
+    <tr><td>Vrai nom <i>(facultatif)</i></td>
+        <td>Être reconnu par les seules personnes que vous désignez. Conservé dans
+            une table à part et montré uniquement aux partages que vous cochez —
+            jamais public, même si votre planning l'est</td>
+        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
     <tr><td>Contenu du planning</td>
         <td>Étapes validées et leur date, événements (titre, horaires, lien),
             plages de travail déclarées, notes que vous saisissez</td>
@@ -97,6 +103,11 @@
   <p>Ces règles ne sont pas seulement appliquées par l'interface : elles sont posées
   au niveau de la base de données, ligne par ligne. Un planning privé n'est pas
   seulement caché, il est inaccessible.</p>
+  <h3>Pseudonyme et vrai nom</h3>
+  <p>Le <b>pseudonyme</b> est ce que tout le monde voit. Le <b>vrai nom</b> est
+  facultatif, vit dans une table séparée, et n'est montré qu'aux personnes pour
+  lesquelles vous cochez explicitement ce droit. Retirer la coche le masque
+  immédiatement. Vous pouvez donc partager votre planning sans dire qui vous êtes.</p>
 </div>
 
 <div class="bloc">
@@ -162,7 +173,10 @@
     <li>Les autorisations sont vérifiées par la base elle-même, à chaque requête.</li>
     <li>La clé publique visible dans le navigateur ne donne aucun accès en écriture :
     c'est son usage prévu, la protection repose sur les politiques de sécurité.</li>
-    <li>Le code de l'application est ouvert et vérifiable.</li>
+    <li>Le code de l'application est ouvert et vérifiable, et le détail des
+    protections est publié dans <code>SECURITE.md</code>.</li>
+    <li>Les en-têtes de sécurité du site — dont une politique de sécurité du
+    contenu stricte — empêchent l'exécution de tout script étranger.</li>
   </ul>
 </div>
 

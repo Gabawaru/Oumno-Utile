@@ -71,17 +71,61 @@ export function matiere(id, nom, couleur, etapes) {
 }
 export const etape = (id, n, h, s, e) => ({ id, n, h, s, e });
 
+/* ── frontière de confiance ────────────────────────────
+   Un programme vient de la base, donc de son propriétaire — qui peut y écrire
+   ce qu'il veut, y compris par appel direct à l'API. Or ce programme est rendu
+   chez les gens qui consultent son planning public. Tout ce qui en sort est
+   donc contraint ici, avant d'atteindre le moindre gabarit HTML. */
+
+const ID_VALIDE = /^[A-Za-z0-9._-]{1,48}$/;
+const COULEURS_OK = new Set(COULEURS.map((c) => c.id));
+const CTRL = /[\u0000-\u001f\u007f]/g;
+let compteur = 0;
+
+const texteSur = (v, max) => String(v == null ? "" : v).replace(CTRL, "").slice(0, max).trim();
+const idSur = (v, prefixe) => (ID_VALIDE.test(String(v == null ? "" : v)) ? String(v) : prefixe + ++compteur);
+const entierSur = (v, min, max, defaut) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : defaut;
+};
+
+/** Programme nettoyé : identifiants, couleurs, libellés et bornes sous contrôle. */
+export function assainirProgramme(prog) {
+  const brut = prog && typeof prog === "object" ? prog : {};
+  const modele = MODELES[brut.modele] ? brut.modele : brut.modele === "perso" ? "perso" : "cned";
+  if (modele !== "perso") return { modele, matieres: [] };
+  const matieres = (Array.isArray(brut.matieres) ? brut.matieres : []).slice(0, 40).map((m) => {
+    const mm = m && typeof m === "object" ? m : {};
+    return {
+      id: idSur(mm.id, "m"),
+      nom: texteSur(mm.nom, 60) || "Sans titre",
+      couleur: COULEURS_OK.has(mm.couleur) ? mm.couleur : "b1",
+      etapes: (Array.isArray(mm.etapes) ? mm.etapes : []).slice(0, 120).map((e) => {
+        const ee = e && typeof e === "object" ? e : {};
+        const s = entierSur(ee.s, 0, 19, 0);
+        return {
+          id: idSur(ee.id, "e"),
+          n: texteSur(ee.n, 90) || "Sans titre",
+          h: entierSur(ee.h, 1, 400, 1),
+          s,
+          e: entierSur(ee.e, s + 1, 20, Math.min(20, s + 2)),
+        };
+      }),
+    };
+  });
+  return { modele, matieres };
+}
+
 /**
  * Programme enregistré → structure attendue par le reste de l'application.
  * Chaque matière devient un lot d'une seule ligne : le diagramme, l'accordéon
  * et le planificateur n'ont rien à savoir de plus.
  */
 export function versGroupes(programme) {
-  if (!programme || programme.modele !== "perso") {
-    return (MODELES[programme?.modele] || MODELES.cned).groupes();
-  }
-  return (programme.matieres || [])
-    .filter((m) => (m.etapes || []).length)
+  const prog = assainirProgramme(programme);
+  if (prog.modele !== "perso") return MODELES[prog.modele].groupes();
+  return prog.matieres
+    .filter((m) => m.etapes.length)
     .map((m) => matiere(m.id, m.nom, m.couleur, m.etapes));
 }
 

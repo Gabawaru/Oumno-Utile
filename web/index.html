@@ -141,11 +141,13 @@ form.evf{display:grid;grid-template-columns:1fr;gap:.4rem;background:var(--sunk)
   margin-bottom:.7rem;border-left:3px solid var(--evt)}
 @media(min-width:700px){form.evf{grid-template-columns:2fr 1fr 1fr 1fr auto}}
 form.evf .full{grid-column:1/-1}
-input,select,textarea{font-family:inherit;font-size:.78rem;padding:.36rem .45rem;background:var(--card);
+/* Le width:100% ne concerne pas les cases ni les boutons radio : il les
+   étirerait sur toute la ligne et pousserait leur libellé hors du cadre.
+   L'exclusion vaut mieux qu'une règle qui écrase — celle-ci battrait .cb. */
+input:not([type=radio]):not([type=checkbox]),select,textarea{
+  font-family:inherit;font-size:.78rem;padding:.36rem .45rem;background:var(--card);
   color:var(--ink);border:1px solid var(--rule);border-radius:3px;width:100%}
-/* Les cases et les boutons radio gardent leur taille : sans cela, le width:100%
-   ci-dessus les étire sur toute la ligne et pousse le libellé hors du cadre. */
-input[type=radio],input[type=checkbox]{width:auto;height:auto;flex:none;padding:0}
+input[type=radio],input[type=checkbox]{flex:none;padding:0}
 input::placeholder,textarea::placeholder{color:var(--ink3)}
 label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.09em;
   text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:.12rem}
@@ -595,6 +597,116 @@ table.etapes td:nth-child(2){width:5.5rem}
 table.etapes td:nth-child(3),table.etapes td:nth-child(4){width:11.5rem}
 table.etapes td:last-child{width:2rem}
 .btn.mini.danger{padding:.18rem .45rem}
+
+/* ── téléphone ────────────────────────────────────────
+   Cibles tactiles d'au moins 40 px, en-tête empilé, onglets qui tiennent en
+   une ligne, et tableaux qui redeviennent des listes. */
+@media (max-width:640px){
+  body{padding:.55rem}
+  .wrap{gap:.6rem}
+  .panel{padding:.75rem .7rem .85rem}
+  .mast{flex-wrap:wrap;gap:.5rem;padding:.7rem .8rem}
+  .mast h1{font-size:1.15rem}
+  .ident{flex:1 1 100%}
+  .clock{margin-left:0;text-align:left;display:flex;align-items:baseline;gap:.45rem;
+    flex:1 1 100%;order:3;border-top:1px solid var(--rule2);padding-top:.45rem}
+  .clock .d{font-size:.66rem}
+  .clock .t{font-size:.95rem}
+  .clock .s{margin-top:0;margin-left:auto;justify-content:flex-end}
+  .quisuisje{margin-left:auto;order:2}
+  .quisuisje .moi{max-width:11rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .tabs{padding:2px;gap:0}
+  .tabs button{font-size:.7rem;padding:.5rem .3rem;letter-spacing:0;min-height:40px}
+
+  .hbig{font-size:1.5rem}
+  .hero{padding:.8rem .85rem;border-left-width:4px}
+  .hpied{gap:.15rem .7rem;font-size:.72rem}
+  .phead{flex-wrap:wrap;gap:.2rem .5rem}
+  .phead .note{margin-left:0;text-align:left;flex:1 1 100%}
+
+  /* la frise : l'heure au-dessus, le contenu en dessous */
+  .ligne{flex-wrap:wrap;gap:.1rem .55rem;padding:.45rem .55rem}
+  .ligne .hh{min-width:0;flex:1 1 100%;font-size:.64rem}
+  .ligne .quoi{flex:1 1 100%}
+  .cb{width:22px;height:22px}
+  .cb:checked::after{width:11px;height:5px}
+
+  .calbar{gap:.35rem}
+  .calbar .m{min-width:0;flex:1;font-size:.92rem}
+  .calbar .btn{min-height:38px;min-width:38px}
+  .day{min-height:56px;padding:.2rem .18rem}
+  .day .num{font-size:.6rem}
+  .chip{font-size:.5rem}
+  .hcount{font-size:.5rem}
+
+  .evf .ligne1,.evf .ligne2{gap:.3rem}
+  .evf .ligne1 #evT,.evf .ligne2 #evL{flex:1 1 100%}
+  .evf #evD{flex:1 1 100%;width:auto}
+  .evf #evH,.evf #evF{flex:1 1 0;width:auto;min-width:0}
+  .evf .fleche{flex:none}
+  .evf button[type=submit]{flex:1 1 100%;min-height:40px}
+
+  .btn{min-height:34px;padding:.4rem .6rem}
+  .btn.gros{min-height:44px;width:100%;justify-content:center}
+  .durees .btn{flex:1 1 auto}
+
+  .caps{grid-template-columns:1fr}
+  .deuxchamps{grid-template-columns:1fr}
+  .zdanger,.zaction{flex-direction:column;align-items:stretch}
+  .zdanger .btn,.zaction .btn{margin-left:0;width:100%;min-height:40px}
+  .membre{flex-wrap:wrap;gap:.35rem .5rem}
+  .membre .mn{flex:1 1 calc(100% - 3rem)}
+  .membre .mreel{order:3}
+  .membre .btn{order:4;margin-left:auto}
+  .lp{flex-wrap:wrap}
+  .lp code{flex:1 1 100%;white-space:normal;word-break:break-all;font-size:.66rem}
+
+  /* l'éditeur de programme : chaque étape devient une fiche */
+  .matcorps .ligne1 .btn{margin-left:0;width:100%}
+  table.etapes,table.etapes tbody,table.etapes tr,table.etapes td{display:block;width:auto}
+  table.etapes tr:first-child{display:none}
+  table.etapes tr{border:1px solid var(--rule2);padding:.4rem;margin-bottom:.35rem;
+    display:grid;grid-template-columns:1fr auto;gap:.3rem}
+  table.etapes td{padding:0}
+  table.etapes td:first-child{grid-column:1/-1}
+  table.etapes td:nth-child(2){width:auto}
+  table.etapes td:nth-child(3),table.etapes td:nth-child(4){width:auto;grid-column:1/-1}
+  table.etapes td:last-child{width:auto;display:flex;align-items:center;justify-content:flex-end}
+  table.etapes td:nth-child(2)::before{content:"heures";display:block;
+    font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink3);margin-bottom:.1rem}
+  table.etapes td:nth-child(3)::before{content:"de";display:block;
+    font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink3);margin-bottom:.1rem}
+  table.etapes td:nth-child(4)::before{content:"à";display:block;
+    font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink3);margin-bottom:.1rem}
+
+  .gtab td.num{width:60px}
+  .jourlibre{flex-wrap:wrap}
+  .jourlibre .quand{flex:1 1 100%}
+  .resume{gap:.4rem .9rem}
+  .pieds{gap:.3rem .7rem;font-size:.7rem}
+
+  /* accueil */
+  .accueil{gap:1.3rem}
+  .heros{gap:1.1rem}
+  .apercu{padding:.6rem .55rem .65rem}
+  .apligne{flex-wrap:wrap;gap:.05rem .5rem;padding:.3rem .4rem}
+  .apligne span{min-width:0;flex:1 1 100%}
+  .atouts{grid-template-columns:1fr}
+  .boite,.vitrine{max-width:none}
+  .modele{padding:.6rem .55rem}
+}
+@media (max-width:380px){
+  .tabs button{font-size:.65rem;padding:.5rem .18rem}
+}
+/* Pas d'effet de survol là où il n'y a pas de souris. */
+@media (hover:none){
+  .day:hover{background:var(--card)}
+  .ligne.trav:hover{background:var(--sunk)}
+}
 </style>
 </head>
 <body>
@@ -714,8 +826,11 @@ table.etapes td:last-child{width:2rem}
 
     <form class="carte" id="formNouveau" hidden>
       <div class="champ"><label class="fl" for="nouMdp">Nouveau mot de passe</label>
-        <input id="nouMdp" type="password" autocomplete="new-password" minlength="8" required></div>
-      <button class="btn pri" type="submit">Enregistrer</button>
+        <input id="nouMdp" type="password" autocomplete="new-password" minlength="8" required>
+        <div class="fl2">8 caractères au minimum.</div></div>
+      <div class="champ"><label class="fl" for="nouMdp2">Répète-le</label>
+        <input id="nouMdp2" type="password" autocomplete="new-password" minlength="8" required></div>
+      <button class="btn pri" type="submit">Enregistrer et revenir à la connexion</button>
     </form>
   </div>
 
@@ -749,6 +864,7 @@ table.etapes td:last-child{width:2rem}
   <header class="mast">
     <div class="ident">
       <h1 id="titreProfil">Mon planning</h1>
+      <div class="reel" id="sousReel" hidden></div>
       <div class="sous" id="sousTitre"></div>
     </div>
     <div class="clock" id="horloge">

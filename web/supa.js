@@ -126,6 +126,8 @@ export function creerClient(url, cle) {
         return p.then(res, rej);
       },
       async insert(corps) { return ecrire("POST", corps); },
+      /** POST avec resolution=merge-duplicates : insere, ou met a jour la ligne. */
+      async upsert(corps) { return ecrire("POST", corps, "resolution=merge-duplicates"); },
       // Volontairement synchrones : il faut pouvoir enchaîner .eq() derrière,
       // l'écriture ne part qu'au moment où la requête est attendue.
       update(corps) { q._maj = corps; return q; },
@@ -139,11 +141,11 @@ export function creerClient(url, cle) {
       if (r.error) return r;
       return { data: unique ? (r.data?.[0] ?? null) : r.data, error: null };
     }
-    async function ecrire(methode, corps) {
+    async function ecrire(methode, corps, prefer) {
       const parts = f.filter(Boolean);
       const r = await requete(`${url}/rest/v1/${table}${parts.length ? "?" + parts.join("&") : ""}`, {
         method: methode,
-        headers: { ...entetes(), Prefer: "return=minimal" },
+        headers: { ...entetes(), Prefer: ["return=minimal", prefer].filter(Boolean).join(",") },
         body: corps === undefined ? undefined : JSON.stringify(corps),
       });
       return { data: null, error: r.error };
