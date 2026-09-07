@@ -1,0 +1,25 @@
+{
+  "name": "Repère — planning et disponibilités",
+  "short_name": "Repère",
+  "description": "Ton travail réparti, et tes proches qui savent quand tu es libre.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/?source=app",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#eef1f5",
+  "theme_color": "#0e141b",
+  "categories": ["productivity", "education", "lifestyle"],
+  "icons": [
+    { "src": "icones/repere-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icones/repere-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icones/repere-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Ma journée", "url": "/?onglet=today", "icons": [{ "src": "icones/repere-192.png", "sizes": "192x192" }] },
+    { "name": "Quand je suis libre", "url": "/?onglet=dispo", "icons": [{ "src": "icones/repere-192.png", "sizes": "192x192" }] }
+  ]
+}

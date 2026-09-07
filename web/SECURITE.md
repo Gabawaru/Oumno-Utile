@@ -105,6 +105,30 @@ Aucun cookie, aucune mesure d'audience, aucun traceur. Les polices sont servies
 depuis le domaine : les charger chez Google transmettait l'adresse IP de chaque
 visiteur à un tiers hors UE, sans base légale.
 
+## La couche sociale
+
+Trois règles, toutes appliquées par la base :
+
+- **S'abonner** — `s_abonner()` lit `public` sur le profil visé et décide seule :
+  acceptation immédiate chez un compte public, mise en attente chez un compte privé.
+  Le navigateur ne choisit pas. Plafond de 50 demandes en attente par compte.
+- **Lire un planning privé** exige un abonnement à l'état `accepte`. Une demande en
+  attente ne donne rien — ni le planning, ni même la ligne du profil.
+- **Demander un créneau** — `demander_creneau()` vérifie la joignabilité de l'hôte
+  avant d'insérer. Masquer le bouton n'aurait rien empêché : l'API est ouverte à qui
+  sait l'appeler. Plafond de 10 demandes en attente vers la même personne.
+
+Éprouvé par bascule de rôle réelle, 14 vérifications sur 14 : un abonnement en attente
+lit 0 ligne du planning et 0 du profil, une demande de créneau vers un compte
+« abonnés seulement » est refusée tant que l'abonnement n'est pas accepté, et un tiers
+ne lit aucune réservation qui ne le concerne pas.
+
+**Pourquoi pas de messagerie libre.** Héberger des conversations privées entre comptes
+ferait de l'éditeur — personne physique, non professionnelle — le responsable de leur
+modération et de leur conservation. Les messages sont donc attachés aux demandes de
+créneau : un motif et un mot, bornés à 500 caractères, entre deux personnes qui se
+sont déjà acceptées. C'est l'essentiel de l'usage sans la charge.
+
 ## Ce qui n'est pas défendu
 
 Le dire est plus utile que de prétendre le contraire.
@@ -149,6 +173,7 @@ et rien qui ressemble à une activité commerciale.
 | Renseigner l'URL du site dans les redirections | Supabase → Authentication → URL Configuration | gratuit |
 | Renseigner l'adresse de contact | `aide.html`, `confidentialite.html` | gratuit |
 | **Sauvegardes de la base** | Supabase Pro | ~25 $/mois |
+| Adresse de contact publiée | `aide.html`, `confidentialite.html` | gratuit |
 | Pare-feu applicatif et mode anti-attaque | Vercel Pro | ~20 $/mois |
 
 Les quatre premières lignes sont des cases à cocher et couvrent l'essentiel du

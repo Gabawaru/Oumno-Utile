@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="icones/repere.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icones/repere-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e141b">
+<link rel="stylesheet" href="polices.css">
+<link rel="stylesheet" href="pages.css">
+<title>Installer Repère</title>
+</head>
+<body>
+<div class="doc">
+<a class="retour" href="/">← Revenir au planning</a>
+
+<div class="tete tete-app">
+  <img src="icones/repere-192.png" alt="" width="64" height="64" class="logo64">
+  <div>
+    <h1>Mettre Repère sur ton écran d'accueil</h1>
+    <p>Repère n'est pas sur les magasins d'applications, et n'a pas besoin d'y être :
+       ton navigateur sait l'installer lui-même. En deux gestes, l'icône rejoint tes
+       autres applications, s'ouvre en plein écran, et fonctionne même sans réseau.</p>
+  </div>
+</div>
+
+<div class="bloc etat" id="etat" hidden></div>
+
+<div class="bloc" data-onglet="iPhone et iPad" data-cle="ios">
+  <h2>Sur iPhone et iPad</h2>
+  <p class="avert2">Il faut passer par <b>Safari</b>. Chrome et Firefox sur iPhone ne
+    savent pas installer une application : c'est une limite d'iOS, pas de Repère.</p>
+  <ol class="pas">
+    <li><b>Ouvre repère dans Safari.</b> Si tu lis ceci dans une autre application,
+      touche les trois points ou la flèche, puis « Ouvrir dans Safari ».</li>
+    <li><b>Touche le bouton Partager</b> — le carré avec une flèche vers le haut, en
+      bas de l'écran sur iPhone, en haut à droite sur iPad.</li>
+    <li><b>Fais défiler et choisis « Sur l'écran d'accueil ».</b> Si tu ne le vois pas,
+      descends jusqu'à « Modifier les actions » et ajoute-le.</li>
+    <li><b>Touche « Ajouter ».</b> L'icône apparaît avec tes autres applications.</li>
+  </ol>
+  <p class="petit">Une fois installée, l'application s'ouvre sans la barre d'adresse
+    et garde ta session : tu n'auras plus à te reconnecter à chaque fois.</p>
+</div>
+
+<div class="bloc" data-onglet="Android" data-cle="android">
+  <h2>Sur Android</h2>
+  <p>Avec Chrome, Edge, Samsung Internet ou Brave, le navigateur propose souvent
+    l'installation tout seul. Sinon :</p>
+  <ol class="pas">
+    <li><b>Touche le menu</b> — les trois points en haut à droite.</li>
+    <li><b>Choisis « Installer l'application »</b> ou « Ajouter à l'écran d'accueil ».</li>
+    <li><b>Confirme.</b> L'icône rejoint ton tiroir d'applications.</li>
+  </ol>
+  <p class="petit">Sur Firefox Android, le chemin est le même : menu, puis
+    « Ajouter à l'écran d'accueil ».</p>
+  <div class="zbouton" id="zoneAndroid" hidden>
+    <button class="btn pri" id="installer">Installer maintenant</button>
+    <span class="petit">Ton navigateur sait le faire directement.</span>
+  </div>
+</div>
+
+<div class="bloc" data-onglet="Ordinateur" data-cle="bureau">
+  <h2>Sur ordinateur</h2>
+  <h3>Chrome, Edge, Brave, Opera — Windows, Mac, Linux, Chromebook</h3>
+  <ol class="pas">
+    <li><b>Regarde la barre d'adresse</b> : une petite icône d'installation
+      (un écran avec une flèche, ou un « + ») apparaît à droite.</li>
+    <li><b>Clique dessus, puis « Installer ».</b> Repère devient une fenêtre à part,
+      avec sa propre icône dans le dock ou la barre des tâches.</li>
+  </ol>
+  <p class="petit">Sans l'icône : menu ⋮ → « Diffuser, enregistrer et partager » →
+    « Installer cette page en tant qu'application ».</p>
+
+  <h3>Safari sur Mac</h3>
+  <ol class="pas">
+    <li><b>Menu Fichier → « Ajouter au Dock ».</b> (macOS Sonoma et versions
+      suivantes.)</li>
+  </ol>
+
+  <h3>Firefox</h3>
+  <p>Firefox pour ordinateur n'installe pas les applications web. Le plus simple est
+    d'ajouter Repère aux favoris, ou d'utiliser un des navigateurs ci-dessus.</p>
+  <div class="zbouton" id="zoneBureau" hidden>
+    <button class="btn pri" id="installer2">Installer maintenant</button>
+    <span class="petit">Ton navigateur sait le faire directement.</span>
+  </div>
+</div>
+
+<div class="bloc" data-onglet="Questions" data-cle="questions">
+  <h2>Ce que ça change, et ce que ça ne change pas</h2>
+  <div class="qa">
+    <details open><summary>Est-ce que ça prend de la place ?</summary><div class="rep">
+      <p>Presque rien : moins d'un mégaoctet, polices comprises. Ce n'est pas une
+      application téléchargée, c'est un raccourci vers le site, avec une copie de
+      quoi l'afficher hors réseau.</p>
+    </div></details>
+    <details><summary>Est-ce que ça marche sans connexion ?</summary><div class="rep">
+      <p>L'application s'ouvre et affiche ton planning tel qu'il était à ta dernière
+      visite. Les modifications, elles, ont besoin du réseau pour être enregistrées :
+      un bandeau te prévient quand tu es hors ligne.</p>
+    </div></details>
+    <details><summary>Est-ce que ça peut lire mes contacts, ma position ?</summary><div class="rep">
+      <p>Non. Le site déclare explicitement n'utiliser ni caméra, ni micro, ni
+      position, ni capteurs, et le navigateur fait respecter cette déclaration.
+      Une application installée depuis un navigateur n'a pas plus de droits que
+      l'onglet dont elle vient.</p>
+    </div></details>
+    <details><summary>Comment la désinstaller ?</summary><div class="rep">
+      <p>Comme n'importe quelle application : appui long sur l'icône puis
+      « Supprimer » sur téléphone, ou clic droit sur l'icône puis « Désinstaller »
+      sur ordinateur. Ton compte et ton planning ne sont pas touchés.</p>
+    </div></details>
+    <details><summary>Faut-il réinstaller à chaque mise à jour ?</summary><div class="rep">
+      <p>Non. L'application se met à jour toute seule à l'ouverture suivante.</p>
+    </div></details>
+  </div>
+</div>
+
+<div class="pied">
+  <a href="/">Repère</a> · <a href="installer.html">Installer</a> ·
+  <a href="conditions.html">Conditions générales</a> ·
+  <a href="confidentialite.html">Confidentialité</a> ·
+  <a href="aide.html">Aide et mentions légales</a> ·
+  <a href="beta.html">bêta</a>
+</div>
+</div>
+<script type="module" src="pages.js"></script>
+<script type="module" src="installer.js"></script>
+</body>
+</html>

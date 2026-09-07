@@ -13,6 +13,16 @@ quand on est réellement libre.
   aussi partir d'une trame de révisions ou d'une page blanche et déclarer ses propres
   matières et étapes. Le moteur ne connaît que des étapes avec un volume d'heures et
   une période.
+- **Contacts** — on s'abonne à quelqu'un ; un compte public accepte tout de suite, un
+  compte privé décide. On règle qui peut vous joindre (tout le monde, ses abonnés, ou
+  personne) et on demande un créneau chez les autres, avec un motif et un mot. L'hôte
+  accepte ou refuse — ou accepte automatiquement s'il le veut. Un créneau accepté
+  devient un événement de son planning.
+- **Événements publics ou privés** — par défaut un événement est privé : les autres
+  voient « Occupé », sans titre ni lien. Cocher « titre visible » le partage.
+- **Installation** — manifeste, icônes et service worker : Repère s'ajoute à l'écran
+  d'accueil et s'ouvre sans réseau. `installer.html` explique la marche à suivre par
+  plateforme.
 - **Pseudonyme, et vrai nom sur autorisation** — le pseudonyme est public et unique ;
   le vrai nom est facultatif, rangé dans une table à part, et montré aux seules
   personnes pour lesquelles on coche ce droit.
@@ -62,6 +72,10 @@ web/
 ├── modeles.js           modèles de programme et programme sur mesure
 ├── planning.js          référentiel BTS CIEL 2A relevé sur eformation.cned.fr
 ├── SECURITE.md          modèle de menace, défenses, et ce qui n'est pas couvert
+├── manifest.webmanifest sw.js  installation et fonctionnement hors réseau
+├── icones/              logo de Repère, toutes tailles
+├── installer.html installer.js  tutoriel d'installation par plateforme
+├── beta.html            état du service, et ce que « bêta » implique
 ├── conditions.html      conditions générales
 ├── confidentialite.html politique de confidentialité et RGPD
 ├── aide.html            questions fréquentes et mentions légales
@@ -113,6 +127,10 @@ des fonctions `security definer` font le travail et n'exposent que le nécessair
 | `accepter_invitation(text)` | connecté | consomme un jeton et crée le partage |
 | `mes_invites()` | connecté | nomme les comptes que j'ai autorisés |
 | `regler_nom_reel(uuid,bool)` | connecté | accorde ou retire l'accès au vrai nom |
+| `s_abonner(uuid)` | connecté | accepte tout de suite chez un public, met en attente chez un privé |
+| `repondre_abonnement(uuid,bool)` | connecté | accepte ou refuse une demande reçue |
+| `mes_abonnes()` / `mes_abonnements()` | connecté | les deux sens de la relation |
+| `demander_creneau(...)` | connecté | applique la joignabilité avant d'insérer |
 | `supprimer_mon_compte()` | connecté | efface tout, en cascade |
 
 `prive.ciel_visible()`, le rouage interne des politiques, vit dans un schéma non
