@@ -65,7 +65,7 @@ web/
 ├── conditions.html      conditions générales
 ├── confidentialite.html politique de confidentialité et RGPD
 ├── aide.html            questions fréquentes et mentions légales
-├── pages.css            feuille commune aux trois pages ci-dessus
+├── pages.css pages.js   feuille et interactions communes aux trois pages ci-dessus
 ├── polices.css polices/ IBM Plex servi depuis le même domaine
 ├── api/cron.js          tâche quotidienne : récapitulatif aux abonnés
 └── vercel.json          planification du cron
@@ -141,9 +141,10 @@ dérivé de l'adresse et dédoublonné.
   que tu veuilles une inscription immédiate ou vérifiée.
 - **Authentication → URL Configuration** : ajouter l'URL du site aux redirections, sinon
   le lien de réinitialisation ne revient pas au bon endroit.
-- **Mentions légales** : `aide.html` et `confidentialite.html` laissent en évidence les
-  champs d'identification de l'éditeur. Ils doivent être remplis avant toute ouverture
-  au public — la loi les impose et ils ne peuvent pas être inventés.
+- **Adresse de contact** : `aide.html` et `confidentialite.html` la laissent en évidence.
+  C'est le seul champ à remplir : l'éditeur non professionnel n'a pas à publier son
+  identité (LCEN art. 6 III 2°), mais doit offrir un moyen de le joindre. Voir
+  [`SECURITE.md`](SECURITE.md).
 - **Authentication → Emails** : sans SMTP personnalisé, Supabase limite fortement le
   nombre de courriels. Pour un usage réel, brancher un expéditeur.
 

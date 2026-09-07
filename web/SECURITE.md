@@ -122,6 +122,24 @@ Le dire est plus utile que de prétendre le contraire.
 - **Une perte de la base.** Sans sauvegarde, une erreur ou un incident efface les
   plannings de tout le monde. C'est le point le plus sérieux de cette liste.
 
+## Anonymat de l'éditeur
+
+Repère est édité **à titre non professionnel** : gratuit, sans publicité, sans
+abonnement, sans aucune source de revenu. L'article 6 III 2° de la LCEN permet
+alors de ne pas publier son identité — il suffit de l'avoir communiquée à
+l'hébergeur, qui la conserve et ne la révèle qu'à l'autorité judiciaire.
+
+Concrètement, les mentions légales publient l'identité des hébergeurs (Vercel et
+Supabase) et **une adresse de contact**, rien de plus : ni état civil, ni adresse
+postale, ni téléphone. Le RGPD n'en demande pas davantage — il exige un moyen de
+contact pour exercer ses droits, pas une identité publique.
+
+Ce régime tombe dès que le service devient professionnel : un paiement, une
+publicité, un revenu quelconque, et l'identité complète doit être publiée.
+
+Pour rester protégé : une **adresse dédiée** plutôt qu'une adresse personnelle,
+et rien qui ressemble à une activité commerciale.
+
 ## À faire avant d'ouvrir au groupe
 
 | Action | Où | Coût |
@@ -129,7 +147,7 @@ Le dire est plus utile que de prétendre le contraire.
 | Activer la vérification des mots de passe compromis | Supabase → Authentication → Password | gratuit |
 | Activer un CAPTCHA à l'inscription (hCaptcha ou Turnstile) | Supabase → Authentication → Bot protection | gratuit |
 | Renseigner l'URL du site dans les redirections | Supabase → Authentication → URL Configuration | gratuit |
-| Remplir les mentions légales | `aide.html`, `confidentialite.html` | gratuit |
+| Renseigner l'adresse de contact | `aide.html`, `confidentialite.html` | gratuit |
 | **Sauvegardes de la base** | Supabase Pro | ~25 $/mois |
 | Pare-feu applicatif et mode anti-attaque | Vercel Pro | ~20 $/mois |
 
@@ -151,3 +169,17 @@ curl -s "https://hnmeefndnckqkdjjbgwe.supabase.co/rest/v1/ciel_identites?select=
 Dans Supabase, `get_advisors` liste les écarts après chaque changement de schéma.
 Il a trouvé les deux erreurs de droits décrites plus haut : le passer après toute
 migration n'est pas facultatif.
+
+## Journal des audits
+
+**7 septembre 2026 — audit global.** Deux injections trouvées et refermées (lien
+`javascript:` d'un événement, sortie d'attribut par la couleur d'une matière).
+Deux erreurs de droits corrigées après passage des conseillers Supabase. Un bug
+silencieux trouvé au passage : la copie locale sérialisait la *fonction* `etat`
+au lieu de son résultat, et stockait la chaîne `"undefined"` — la sauvegarde de
+secours annoncée dans la politique de confidentialité n'avait jamais fonctionné.
+Réparée et branchée en repli quand la base ne répond pas.
+
+Restent sans emploi après nettoyage : aucune fonction, aucun export, aucun
+identifiant orphelin. Un seul champ manque encore dans les mentions légales :
+l'adresse de contact.

@@ -17,7 +17,7 @@
   <p>Comment Repère décide, ce qu'il montre aux autres, et ce qu'il fait de vos données.</p>
 </div>
 
-<div class="bloc">
+<div class="bloc" data-onglet="Prendre en main" data-cle="demarrer">
   <h2>Prendre en main</h2>
   <div class="qa">
     <details open><summary>À quoi sert Repère, exactement ?</summary><div class="rep">
@@ -44,7 +44,7 @@
   </div>
 </div>
 
-<div class="bloc">
+<div class="bloc" data-onglet="Le planning" data-cle="planning">
   <h2>Comment le planning décide</h2>
   <div class="qa">
     <details><summary>Pourquoi mes journées s'arrêtent à 16 h ?</summary><div class="rep">
@@ -86,7 +86,7 @@
   </div>
 </div>
 
-<div class="bloc">
+<div class="bloc" data-onglet="Partage et vie privée" data-cle="partage">
   <h2>Partage et vie privée</h2>
   <div class="qa">
     <details><summary>Qui voit mon planning ?</summary><div class="rep">
@@ -149,30 +149,61 @@
   </div>
 </div>
 
-<div class="bloc">
+<div class="bloc" data-onglet="Mentions légales" data-cle="mentions">
   <h2 id="mentions">Mentions légales</h2>
-  <div class="avert"><b>À compléter avant l'ouverture au public.</b> L'article 6 de la
-    loi pour la confiance dans l'économie numérique impose d'identifier l'éditeur d'un
-    site accessible au public. Ces champs sont laissés vides à dessein : ils ne peuvent
-    pas être inventés.</div>
+
+  <p>Repère est édité <b>à titre non professionnel</b> par une personne physique.
+  Le service est gratuit : ni publicité, ni abonnement, ni revente de données, ni
+  aucune autre source de revenu.</p>
+
+  <p>L'article 6 III 2° de la loi pour la confiance dans l'économie numérique
+  permet à un éditeur non professionnel de ne pas publier son identité, à condition
+  d'avoir communiqué celle-ci à son hébergeur. C'est le cas ici. L'hébergeur est
+  tenu de conserver ces éléments et de les communiquer sur réquisition de
+  l'autorité judiciaire.</p>
+
   <table>
     <tr><th>Champ</th><th>Valeur</th></tr>
-    <tr><td>Éditeur</td><td><span class="trou">[nom ou raison sociale]</span></td></tr>
-    <tr><td>Statut</td><td><span class="trou">[particulier / association / société]</span></td></tr>
-    <tr><td>Adresse</td><td><span class="trou">[adresse postale]</span></td></tr>
-    <tr><td>Contact</td><td><span class="trou">[adresse de contact]</span></td></tr>
-    <tr><td>Directeur de publication</td><td><span class="trou">[nom]</span></td></tr>
+    <tr><td>Éditeur</td>
+        <td>Personne physique, éditeur non professionnel. Identité conservée par
+            l'hébergeur au titre de l'article 6 III 2° de la LCEN.</td></tr>
+    <tr><td>Directeur de publication</td>
+        <td>L'éditeur, sous le même régime.</td></tr>
+    <tr><td>Contact</td>
+        <td><span class="trou">[adresse de contact]</span></td></tr>
     <tr><td>Hébergeur du site</td>
-        <td>Vercel Inc., 440 N Barranca Ave #4133, Covina, CA 91723, États-Unis</td></tr>
+        <td>Vercel Inc., 440 N Barranca Ave #4133, Covina, CA 91723, États-Unis<br>
+            <span class="petit">vercel.com — support disponible depuis le site de l'éditeur</span></td></tr>
     <tr><td>Hébergeur des données</td>
-        <td>Supabase — base située dans l'Union européenne, région de Paris (eu-west-3)</td></tr>
+        <td>Supabase, Inc., 970 Toa Payoh North #07-04, Singapour 318992<br>
+            <span class="petit">Base de données située dans l'Union européenne,
+            région de Paris (eu-west-3)</span></td></tr>
   </table>
-  <p>Le programme de BTS CIEL proposé comme modèle est un relevé de l'espace de
-  formation du CNED, fourni à titre indicatif. Repère n'a aucun lien avec le CNED.
-  Les marques et noms cités appartiennent à leurs propriétaires respectifs.</p>
+
+  <div class="avert"><b>Une seule ligne reste à remplir :</b> une adresse de contact.
+    Elle est obligatoire — elle sert à exercer ses droits sur ses données et à
+    signaler un contenu. Une adresse électronique suffit : ni téléphone, ni adresse
+    postale, ni état civil ne sont exigés d'un éditeur non professionnel.</div>
+
+  <h3>Ce régime tient tant que le service reste non professionnel</h3>
+  <p>Il cesserait de s'appliquer si Repère devenait payant, affichait de la
+  publicité, ou générait un revenu de quelque nature que ce soit. L'identité
+  complète de l'éditeur devrait alors être publiée.</p>
+
+  <h3>Signaler un contenu</h3>
+  <p>Un contenu manifestement illicite peut être signalé à l'adresse de contact
+  ci-dessus. Il sera retiré sans délai après vérification. À défaut de réponse,
+  l'hébergeur peut être saisi directement.</p>
+
+  <h3>Propriété</h3>
+  <p>Le code de l'application est publié et consultable. Le programme de BTS CIEL
+  proposé comme modèle est un relevé de l'espace de formation du CNED, fourni à
+  titre indicatif : Repère n'a aucun lien avec le CNED. Les marques et noms cités
+  appartiennent à leurs propriétaires respectifs. Le contenu que chacun saisit dans
+  son planning lui appartient.</p>
 </div>
 
-<div class="bloc">
+<div class="bloc" data-onglet="Nous écrire" data-cle="contact">
   <h2>Une question qui n'est pas là ?</h2>
   <p>Écrivez au contact indiqué dans les mentions légales ci-dessus. Pour un problème
   technique, décrivez ce que vous faisiez, ce que vous attendiez et ce qui s'est passé :
@@ -184,5 +215,6 @@
   <a href="confidentialite.html">Confidentialité</a> · <a href="aide.html">Aide et mentions légales</a>
 </div>
 </div>
+<script type="module" src="pages.js"></script>
 </body>
 </html>

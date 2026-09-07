@@ -129,9 +129,6 @@ export function versGroupes(programme) {
     .map((m) => matiere(m.id, m.nom, m.couleur, m.etapes));
 }
 
-/** Programme vide, prêt à recevoir une première matière. */
-export const programmeVierge = () => ({ modele: "perso", matieres: [] });
-
 /** Un modèle tout fait, converti en programme modifiable. */
 export function depuisModele(id) {
   if (id === "cned") return { modele: "cned", matieres: [] };

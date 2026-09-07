@@ -36,7 +36,7 @@
 body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;
   font-size:14px;line-height:1.5;padding:clamp(.7rem,2vw,1.5rem)}
 .wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:.85rem}
-h1,h2,h3,.cond{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif}
+h1,h2,h3{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 a{color:var(--sig);text-decoration:none}
@@ -52,12 +52,20 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
   padding:.5rem .75rem;font-size:.76rem;color:var(--ink2);display:flex;gap:.5rem;align-items:baseline}
 .ro b{color:var(--ink)}
 
-.tabs{display:flex;gap:2px;overflow-x:auto;background:var(--card);border:1px solid var(--rule);padding:3px}
+.tabs{display:flex;gap:2px;overflow-x:auto;background:var(--card);border:1px solid var(--rule);
+  padding:3px;position:relative;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+/* Le trait glisse d'un onglet à l'autre : on voit d'où l'on vient. */
+.tabs::after{content:"";position:absolute;bottom:3px;left:0;height:2px;
+  width:var(--tw,0);transform:translateX(var(--tx,0));background:var(--sig);
+  transition:transform .28s cubic-bezier(.4,0,.2,1),width .28s cubic-bezier(.4,0,.2,1);
+  pointer-events:none}
 .tabs button{flex:1 0 auto;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.77rem;
   font-weight:600;padding:.48rem .72rem;border:none;background:transparent;color:var(--ink3);
   cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
 .tabs button:hover{color:var(--ink2);background:var(--sunk)}
-.tabs button[aria-selected="true"]{color:var(--sig);border-bottom-color:var(--sig);background:var(--sunk)}
+.tabs button[aria-selected="true"]{color:var(--sig);border-bottom-color:transparent;background:var(--sunk)}
+.tabs button:focus-visible{outline:2px solid var(--sig);outline-offset:-2px}
 
 .panel{background:var(--card);border:1px solid var(--rule);padding:.9rem 1rem 1.05rem}
 .phead{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.8rem;padding-bottom:.4rem;
@@ -89,8 +97,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 label.qitem{cursor:pointer}
 label.qitem:hover{background:color-mix(in srgb,var(--c) 9%,var(--sunk))}
 .qitem.going{opacity:0;transform:translateX(14px)}
-/*x*/.zz{font-family:"IBM Plex Mono",monospace;font-size:.61rem;color:var(--ink3);
-  min-width:14px;padding-top:.12rem}
 .qbody{flex:1;min-width:0}
 .qtitle{font-size:.78rem;font-weight:500;color:var(--ink);line-height:1.3}
 .qmeta{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--ink3);margin-top:.14rem;
@@ -217,7 +223,6 @@ label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.
 .step .hh{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--ink3);flex:none}
 
 
-svg.curve{display:block;width:100%;min-width:600px;height:auto}
 
 
 /* notes */
@@ -238,8 +243,6 @@ svg.curve{display:block;width:100%;min-width:600px;height:auto}
   padding:.18rem .45rem;border-radius:11px;border:1px solid var(--rule2);display:flex;gap:.35rem;align-items:center}
 .pill button{border:none;background:none;color:var(--ink3);cursor:pointer;font-size:.8rem;line-height:1;padding:0}
 .pill button:hover{color:var(--late)}
-textarea.digest{min-height:150px;font-family:"IBM Plex Mono",monospace;font-size:.7rem;line-height:1.5}
-.foot{font-size:.65rem;color:var(--ink3);text-align:center;padding:.1rem 0 .3rem;line-height:1.6}
 
 
 /* ── écrans d'accueil ───────────────────────────────── */
@@ -287,8 +290,8 @@ form.carte button[type=submit]{margin-top:.3rem}
 
 /* ── zone de tâche ──────────────────────────────────── */
 .jlegende{display:flex;flex-wrap:wrap;gap:.2rem 1rem;font-size:.72rem;color:var(--ink2);margin-bottom:.7rem}
-.jlegende .occ-t{color:var(--evt)}.jlegende .trv-t{color:var(--ok)}
-.jlegende .lib-t{color:var(--ink3)}.jlegende .plein-t{color:var(--late)}
+.jlegende .occ-t{color:var(--evt)}
+.jlegende .lib-t{color:var(--ink3)}
 .soustitre{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
   color:var(--ink3);margin:.7rem 0 .3rem;padding-bottom:.15rem;border-bottom:1px solid var(--rule2)}
 .impossible{font-size:.76rem;line-height:1.5;color:var(--late);background:color-mix(in srgb,var(--late) 8%,transparent);
@@ -360,7 +363,6 @@ label.cap{flex-wrap:wrap}
 .visi .opt input{margin-top:.2rem;accent-color:var(--ok)}
 .visi .opt b{display:block;font-size:.79rem;color:var(--ink)}
 .visi .opt em{display:block;font-size:.73rem;color:var(--ink3);font-style:normal;line-height:1.4;margin-top:.1rem}
-.lienpartage{margin-top:.8rem;max-width:560px}
 .lp{display:flex;gap:.4rem;align-items:center;background:var(--sunk);padding:.4rem .5rem}
 .lp code{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink2);flex:1;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -707,6 +709,54 @@ table.etapes td:last-child{width:2rem}
   .day:hover{background:var(--card)}
   .ligne.trav:hover{background:var(--sunk)}
 }
+
+/* ── mouvement ────────────────────────────────────────
+   Chaque animation dit quelque chose : d'où vient le panneau, que la ligne a
+   été validée, que le chiffre a changé. Rien de décoratif, et rien du tout si
+   le système demande la sobriété. */
+@keyframes entrePanneau{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+section[data-panel].entre{animation:entrePanneau .26s cubic-bezier(.2,.7,.3,1) both}
+section[data-panel].entre>*{animation:entrePanneau .32s cubic-bezier(.2,.7,.3,1) both}
+section[data-panel].entre>*:nth-child(2){animation-delay:.045s}
+section[data-panel].entre>*:nth-child(3){animation-delay:.09s}
+section[data-panel].entre>*:nth-child(4){animation-delay:.13s}
+
+.panel,.hero,.atout,.membre,.jourlibre,.profil{transition:border-color .18s ease,
+  background .18s ease,transform .18s ease,box-shadow .18s ease}
+.profil:hover,.jourlibre:hover{transform:translateX(2px)}
+.btn{transition:border-color .15s ease,color .15s ease,background .15s ease,
+  transform .1s ease}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible,.cb:focus-visible,input:focus-visible,select:focus-visible,
+summary:focus-visible{outline:2px solid var(--sig);outline-offset:2px}
+input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
+
+/* la ligne de travail qu'on vient de cocher s'efface vers la droite */
+.ligne.trav{transition:background .18s ease,opacity .24s ease,transform .24s ease}
+.ligne.trav.partie{opacity:0;transform:translateX(18px)}
+
+/* les blocs dépliants s'ouvrent au lieu de sauter */
+@keyframes deplie{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.mat[open] .matcorps,.qa details[open] .rep{animation:deplie .2s ease both}
+.grpblk.open .grpbody{animation:deplie .2s ease both}
+
+/* la barre d'avancement et les jauges partent de zéro à l'ouverture */
+@keyframes remplit{from{width:0}}
+.gfill,.fill,.charge i,.grphd .mini i{animation:remplit .5s cubic-bezier(.4,0,.2,1)}
+
+/* le chiffre du jour qui change */
+@keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.06)}100%{transform:scale(1)}}
+.pulse{animation:pulse .35s ease}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.001ms!important;scroll-behavior:auto!important}
+  .tabs::after{transition:none}
+}
+
+/* Visible des seuls lecteurs d'écran : l'étiquette existe sans occuper la place. */
+.horsvue{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0 0 0 0);white-space:nowrap;border:0}
 </style>
 </head>
 <body>
@@ -966,6 +1016,7 @@ table.etapes td:last-child{width:2rem}
       <div class="phead"><h2>Derniers changements</h2><div class="note" id="jNote"></div></div>
       <div id="jlist"></div>
       <form id="subf" class="subf">
+        <label class="horsvue" for="subE">Adresse électronique pour être prévenu</label>
         <input id="subE" type="email" placeholder="Ton adresse pour être prévenu" required>
         <button class="btn pri" type="submit">M'abonner</button>
       </form>
