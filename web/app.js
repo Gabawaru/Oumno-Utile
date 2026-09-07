@@ -2,6 +2,7 @@ import { creerClient } from "./supa.js";
 import { MONTHS, MFULL, DOW, DAY, TZ, CNED, EXAM, GROUPS } from "./planning.js";
 import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree,
          trouverCreneaux, creneauxTexte, plusLongCreneau, normaliserCapacites,
+         journeeType, REGLES, JOURNEE,
          hhmm as enHeure, min as enMin, iso as isoJour } from "./planificateur.js";
 
 const SUPABASE_URL = "https://hnmeefndnckqkdjjbgwe.supabase.co";
@@ -14,6 +15,7 @@ let moi = null;          // mon profil
 let vue = null;          // profil consulté
 let capacites = { 0: 2, 1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 3 };
 let reports = {};        // échéances repoussées à la main
+let partJour = null;     // { date, h } — la part de travail fixée pour le jour
 let plan = null;         // résultat du planificateur
 
 const estMoi = () => Boolean(session && vue && vue.id === session.user.id);
@@ -66,13 +68,8 @@ const sameDay=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMont
 const plural=(n,w)=>n+" "+w+(Math.abs(n)>1?"s":"");
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
-function tickClock(){
-  NOW=parisNow(); const d=new Date(NOW);
-  document.getElementById("cdate").textContent=
-    d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
-  document.getElementById("ctime").textContent=hhmm(NOW)+" Paris";
-  document.getElementById("cdN").textContent=Math.max(0,Math.ceil((EXAM-NOW)/DAY));
-}
+/** Tout est calé sur l'heure de Paris, quel que soit le fuseau du visiteur. */
+function tickClock(){ NOW = parisNow(); }
 const nowQ=()=>{const d=new Date(NOW);
   return Math.max(0,Math.min(19,(d.getFullYear()-Y0)*24+(d.getMonth()-M0)*2+(d.getDate()>15?1:0)));};
 
@@ -85,9 +82,11 @@ function saveLocal(){ if(!vue||!estMoi()) return;
   try{localStorage.setItem(LS,JSON.stringify(etat));}catch(e){} }
 function loadLocal(){ try{const r=JSON.parse(localStorage.getItem(LS)||"null");
   if(r) appliquerEtat(r);}catch(e){} }
-function setSync(k,t){const d=document.getElementById("sdot");
-  if(d) d.className="dot"+(k?" "+k:"");
-  const s=document.getElementById("stxt"); if(s) s.textContent=t;}
+/** Message d'état discret, affiché dans l'en-tête. */
+function setSync(k,t){
+  const e=$("sousTitre"); if(!e) return;
+  e.dataset.etat=k||""; e.textContent=t||"";
+}
 
 function appliquerEtat(d){
   d=d||{};
@@ -96,9 +95,10 @@ function appliquerEtat(d){
   grades    = d.notes     || d.grades || {};
   capacites = normaliserCapacites(d.capacites);
   reports   = d.reports   || {};
+  partJour  = d.partJour  || null;
   Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
 }
-const etat=()=>({done,evenements:events,notes:grades,capacites,reports});
+const etat=()=>({done,evenements:events,notes:grades,capacites,reports,partJour});
 
 function log(text){
   pendingLog.push(text);
@@ -156,53 +156,71 @@ const short=g=>g.name.split("—")[0].trim()
 
 /* ═════════ AUJOURD'HUI ═════════ */
 function renderToday(){
-  const st=status(),p=pace(),proj=p>0?Math.ceil((TOTAL_H-st.act)/p):null;
-  const hero=document.getElementById("hero");
-  hero.style.setProperty("--hc",COL[st.kind]);
-  document.getElementById("hbig").textContent=st.word+(st.detail?" "+st.detail:"");
-  document.getElementById("hsub").innerHTML= st.kind==="ontime"
-    ? `Tu es au niveau prévu pour aujourd'hui — <b>${Math.round(st.act)} h</b> validées sur les <b>${Math.round(st.exp)} h</b> attendues.`
-    : st.kind==="ahead"
-      ? `Le plan n'atteint ton niveau que le <b>${fmtDL(st.eq)}</b>. Tu as <b>${st.gap} h</b> d'avance.`
-      : `Le plan prévoyait ce niveau le <b>${fmtDL(st.eq)}</b>. Il te manque <b>${-st.gap} h</b> pour revenir sur la courbe.`;
-  document.getElementById("gfill").style.width=st.pct+"%";
-  const gm=document.getElementById("gmark");
-  gm.style.left=`calc(${st.expPct}% - 1px)`; gm.title=`Attendu aujourd'hui : ${Math.round(st.exp)} h`;
-  document.getElementById("hnums").innerHTML=`
-   <div class="hn"><div class="k">Validé</div><div class="v">${Math.round(st.act)} h</div></div>
-   <div class="hn"><div class="k">Attendu</div><div class="v">${Math.round(st.exp)} h</div></div>
-   <div class="hn"><div class="k">Écart</div><div class="v ${st.gap<0?"late":"ok"}">${st.gap>0?"+":""}${st.gap} h</div></div>
-   <div class="hn"><div class="k">Avancement</div><div class="v">${Math.round(st.pct)} %</div></div>
-   <div class="hn"><div class="k">En retard</div><div class="v ${st.late.length?"late":"ok"}">${st.late.length}</div></div>
-   <div class="hn"><div class="k">Rythme</div><div class="v">${p?p.toFixed(1):"—"} h/sem</div></div>
-   <div class="hn"><div class="k">Reste</div><div class="v">${Math.round(TOTAL_H-st.act)} h</div></div>
-   <div class="hn"><div class="k">Fin projetée</div><div class="v">${proj?plural(proj,"sem"):"—"}</div></div>`;
+  const st = status();
+  const hero = $("hero");
+  hero.style.setProperty("--hc", COL[st.kind]);
+  $("hbig").textContent = st.word + (st.detail ? " " + st.detail : "");
 
-  const pend=ALL.filter(s=>!done[s.id]&&s.t0<=NOW+30*DAY).sort((a,b)=>(a.t1-b.t1)||(b.h-a.h)).slice(0,7);
-  document.getElementById("queue").innerHTML=pend.length
-    ? pend.map((s,i)=>qRow(s,i+1)).join("") : `<div class="empty">✓ Rien d'ouvert dans les 30 prochains jours</div>`;
-  const lates=st.late.sort((a,b)=>a.t1-b.t1);
-  document.getElementById("lateq").innerHTML=lates.length
-    ? lates.slice(0,10).map(s=>qRow(s,null)).join("")+
-      (lates.length>10?`<div class="empty muted">+ ${lates.length-10} autres</div>`:"")
-    : `<div class="empty">✓ Aucune étape en retard</div>`;
-  document.getElementById("lateNote").textContent=
-    lates.length?`${lates.length} étape${lates.length>1?"s":""} dont l'échéance est passée`:"";
-}
-function qRow(s,rank){
-  const lt=isLate(s),soon=!lt&&s.t1-NOW<7*DAY;
-  const dis=canEdit?"":" disabled";
-  return `<label class="qitem" style="--c:${s.g.c}">
-    ${rank?`<span class="rank">${rank}</span>`:""}
-    <input type="checkbox" class="cb" data-cb="${s.id}"${dis}>
-    <span class="qbody"><span class="qtitle">${esc(s.row.n)} · ${esc(s.n)}</span>
-    <span class="qmeta"><span class="grp">${short(s.g)}</span><span>${s.h} h</span>
-      <span>échéance ${fmtD(s.t1)}</span>
-      ${lt?`<span class="lt">retard ${plural(lateDays(s),"jour")}</span>`:""}
-      ${soon?`<span class="so">bientôt</span>`:""}
-      ${s.date?`<span class="lt">ouvre le ${s.date}</span>`:""}
-      ${s.row.url?`<a href="${s.row.url}" target="_blank" rel="noopener">cours ↗</a>`:""}
-    </span></span></label>`;
+  $("hsub").innerHTML = st.kind === "ontime"
+    ? `Tu es au niveau prévu pour aujourd'hui.`
+    : st.kind === "ahead"
+      ? `Le plan n'atteint ton niveau que le <b>${fmtDL(st.eq)}</b>.`
+      : `Le plan prévoyait ce niveau le <b>${fmtDL(st.eq)}</b>.`;
+
+  $("gfill").style.width = st.pct + "%";
+  const gm = $("gmark");
+  gm.style.left = `calc(${st.expPct}% - 1px)`;
+  gm.title = `Attendu aujourd'hui : ${Math.round(st.exp)} h`;
+
+  const restJours = Math.max(0, Math.ceil((EXAM - NOW) / DAY));
+  $("hpied").innerHTML =
+    `<span><b>${Math.round(st.act)} h</b> faites sur ${TOTAL_H} h</span>
+     <span><b>${Math.round(st.pct)} %</b> du parcours</span>
+     <span><b>${restJours}</b> jours avant les épreuves</span>`;
+
+  // Prévenir quand la charge dépasse ce qui tient dans les heures normales.
+  const av = $("alerteJour");
+  const manque = totalManque(plan.manques);
+  const soirs = [...plan.jours.values()].slice(0, 14).reduce((a, j) => a + (j.tardif || 0), 0);
+  if (manque >= 0.1) {
+    av.hidden = false; av.className = "bandeau stop";
+    av.innerHTML = `<b>C'est devenu trop.</b> ${Math.round(manque)} h de cours ne rentrent
+      nulle part avant leur échéance, même en travaillant le soir. Valide des étapes, élargis
+      tes heures dans Réglages, ou repousse une échéance depuis le calendrier.`;
+  } else if (soirs >= 0.5) {
+    av.hidden = false; av.className = "bandeau warn";
+    av.innerHTML = `<b>Ça déborde sur tes soirées.</b> ${Math.round(soirs * 10) / 10} h de
+      rattrapage sont posées hors de tes heures normales sur les deux prochaines semaines.
+      Chaque étape validée en retire d'autant.`;
+  } else {
+    av.hidden = true;
+  }
+
+  // La journée d'aujourd'hui, heure par heure. Ce qui est coché disparaît du
+  // planning : quand il ne reste rien, la part du jour est faite.
+  const cle = isoJour(new Date(NOW));
+  const jAuj = plan.jours.get(cle);
+  const reste = jAuj ? jAuj.travailPose : 0;
+  $("dateJour").innerHTML = `${fmtDL(NOW)} — ` + (reste >= 0.05
+    ? `<b>${reste} h</b> à faire`
+    : `<b class="fini">part du jour faite</b>`);
+  $("journee").innerHTML = friseHTML(cle, { compact: true });
+
+  // Retard : on ne montre le bloc que s'il y a quelque chose dedans.
+  const lates = st.late.sort((a, b) => a.t1 - b.t1);
+  $("blocRetard").hidden = lates.length === 0;
+  if (lates.length) {
+    $("lateNote").textContent = `${lates.length} étape${lates.length > 1 ? "s" : ""} dont la date est passée`;
+    $("lateq").innerHTML = lates.slice(0, 8).map((s2) => `
+      <label class="qitem" style="--c:${s2.g.c}">
+        <input type="checkbox" class="cb" data-cb="${s2.id}"${canEdit ? "" : " disabled"}>
+        <span class="qbody"><span class="qtitle">${esc(s2.row.n)} · ${esc(s2.n)}</span>
+        <span class="qmeta"><span class="lt">${lateDays(s2) < 1 ? "échéance passée aujourd'hui" : plural(lateDays(s2), "jour") + " de retard"}</span>
+          <span>${s2.h} h</span>
+          ${s2.row.url ? `<a href="${s2.row.url}" target="_blank" rel="noopener">cours ↗</a>` : ""}
+        </span></span></label>`).join("") +
+      (lates.length > 8 ? `<div class="empty muted">+ ${lates.length - 8} autres</div>` : "");
+  }
 }
 
 /* ═════════ CALENDRIER ═════════ */
@@ -276,79 +294,9 @@ function buildAcc(){
   document.getElementById("collapseAll").onclick=()=>document.querySelectorAll(".grpblk").forEach(b=>b.classList.remove("open"));
 }
 
-/* ═════════ COURBE ═════════ */
-function renderCurve(){
-  const W=900,H=330,L=52,Rr=14,Tp=16,B=34,iw=W-L-Rr,ih=H-Tp-B;
-  const x=t=>L+iw*(t-T0)/(T1-T0), y=v=>Tp+ih*(1-v/TOTAL_H);
-  let plan="";for(let i=0;i<=120;i++){const t=T0+(T1-T0)*i/120;
-    plan+=(i?"L":"M")+x(t).toFixed(1)+" "+y(planned(t)).toFixed(1);}
-  const ev=ALL.filter(s=>done[s.id]).map(s=>({t:Date.parse(done[s.id])||T0,h:s.h})).sort((a,b)=>a.t-b.t);
-  let real="M"+x(T0).toFixed(1)+" "+y(0).toFixed(1),cum=0,lastT=T0;
-  ev.forEach(e=>{real+="L"+x(e.t).toFixed(1)+" "+y(cum).toFixed(1);cum+=e.h;
-    real+="L"+x(e.t).toFixed(1)+" "+y(cum).toFixed(1);lastT=e.t;});
-  real+="L"+x(Math.max(NOW,lastT)).toFixed(1)+" "+y(cum).toFixed(1);
-  const p=pace();let proj="";
-  if(p>0&&cum<TOTAL_H){const end=Math.min(NOW+(TOTAL_H-cum)/p*7*DAY,T1);
-    proj=`M${x(NOW).toFixed(1)} ${y(cum).toFixed(1)}L${x(end).toFixed(1)} ${y(Math.min(cum+p*(end-NOW)/(7*DAY),TOTAL_H)).toFixed(1)}`;}
-  let grid="",lbl="";
-  for(let v=0;v<=TOTAL_H;v+=200){
-    grid+=`<line x1="${L}" y1="${y(v)}" x2="${W-Rr}" y2="${y(v)}" stroke="var(--rule2)" stroke-width="1" fill="none"/>`;
-    lbl+=`<text x="${L-7}" y="${y(v)+3.5}" text-anchor="end" font-size="10" fill="var(--ink3)" font-family="IBM Plex Mono,monospace">${v}</text>`;}
-  for(let m=0;m<10;m++){const t=new Date(Y0,M0+m,1).getTime();
-    lbl+=`<text x="${x(t)}" y="${H-13}" text-anchor="middle" font-size="10" fill="var(--ink3)" font-family="IBM Plex Mono,monospace">${MONTHS[m]}</text>`;}
-  document.getElementById("chartbox").innerHTML=`
-   <svg class="curve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Heures cumulées : plan prévu contre progression réelle">
-     ${grid}${lbl}
-     <line x1="${x(NOW)}" y1="${Tp}" x2="${x(NOW)}" y2="${Tp+ih}" stroke="var(--sig)" stroke-width="1.5" fill="none"/>
-     <text x="${x(NOW)+4}" y="${Tp+11}" font-size="10" fill="var(--sig)" font-family="IBM Plex Mono,monospace">aujourd'hui</text>
-     <path d="${plan}" fill="none" stroke="var(--ink3)" stroke-width="2" stroke-dasharray="6 4"/>
-     ${proj?`<path d="${proj}" fill="none" stroke="var(--ahead)" stroke-width="2" stroke-dasharray="2 3"/>`:""}
-     <path d="${real}" fill="none" stroke="var(--ok)" stroke-width="2.5" stroke-linejoin="round"/>
-     <circle cx="${x(Math.max(NOW,lastT))}" cy="${y(cum)}" r="4" fill="var(--ok)"/>
-     <text x="${L}" y="${Tp-4}" font-size="10" fill="var(--ink3)" font-family="IBM Plex Mono,monospace">heures cumulées — objectif ${TOTAL_H} h</text>
-   </svg>`;
-  const st=status();
-  document.getElementById("curveNote").innerHTML=
-    `Rythme réel <b class="mono">${p?p.toFixed(1):"0"} h/sem</b> · plan <b class="mono">${(TOTAL_H/43).toFixed(1)} h/sem</b>`+
-    (st.kind!=="ontime"?` · <b style="color:${COL[st.kind]}">${st.word} ${st.detail}</b>`:"");
-}
-
-/* ═════════ MATRICE ═════════ */
-function classify(s){
-  const urgent=s.t0<=NOW+14*DAY||isLate(s)||!!s.date;
-  const important=s.h>=8||!!s.dev||s.g.id==="b3";
-  return urgent?(important?1:3):(important?2:4);
-}
-function mlabel(s){
-  const ctx=/^(Mission|Entrée en matière|Synthèse)/.test(s.n)
-    ? s.row.n.replace(/^(SP \d+|Activité \d+) · /,"$1 ")+" · ":"";
-  return `<b>${short(s.g)}</b> ${ctx}${esc(s.n)} — <span class="h">${s.h} h</span>`+
-    (isLate(s)?` <b class="mono" style="color:var(--late)">retard ${lateDays(s)} j</b>`:"");
-}
-const STATIC4=["Refaire les quiz d'entrée déjà réussis",
- "Parcourir la « Boîte à outils » sans objectif précis",
- "Remettre au propre des prises de notes déjà lisibles",
- "Forum entre élèves hors question bloquante — le tuteur répond sous 48 h"];
-function renderMx(){
-  const b={1:[],2:[],3:[],4:[]};
-  ALL.filter(s=>!done[s.id]).forEach(s=>b[classify(s)].push(s));
-  [1,2,3,4].forEach(k=>b[k].sort((x,y)=>(x.t1-y.t1)||(y.h-x.h)));
-  [1,2,3].forEach(k=>{
-    const l=b[k],sh=l.slice(0,6),ex=l.length-sh.length;
-    document.getElementById("n"+k).textContent=l.length;
-    document.getElementById("q"+k).innerHTML=l.length
-      ? sh.map(s=>`<li>${mlabel(s)}</li>`).join("")+(ex>0?`<li class="muted">+ ${ex} autre${ex>1?"s":""}</li>`:"")
-      : `<div class="empty">✓ Rien en attente ici</div>`;});
-  const q4=b[4];
-  document.getElementById("n4").textContent=q4.length+STATIC4.length;
-  document.getElementById("q4").innerHTML=STATIC4.map(t=>`<li>${t}</li>`).join("")+
-    q4.slice(0,3).map(s=>`<li>${mlabel(s)}</li>`).join("")+
-    (q4.length>3?`<li class="muted">+ ${q4.length-3} étapes non prioritaires</li>`:"");
-  const nb=ALL.filter(s=>done[s.id]).length;
-  document.getElementById("mxnote").innerHTML=
-    `Recalculée à l'heure de Paris · <b class="mono" style="color:var(--ok)">${nb}</b> sortie${nb>1?"s":""} de la matrice`;
-}
-
+/* La courbe et la matrice d'Eisenhower ont ete retirees : le statut en toutes
+   lettres dit deja si l'on est dans les temps, et c'est le planificateur qui
+   arbitre les priorites, en placant chaque etape a une heure precise. */
 /* ═════════ NOTES ═════════ */
 function renderGrades(){
   const vals=DEVS.map(s=>({s,v:grades[s.id]})).filter(x=>typeof x.v==="number"&&!isNaN(x.v));
@@ -371,7 +319,6 @@ function renderGrades(){
 
 /* ═════════ JOURNAL ═════════ */
 function renderJournal(){
-  document.getElementById("tnJ").textContent=journal.length||"";
   document.getElementById("jNote").textContent=
     journal.length?`${journal.length} entrée${journal.length>1?"s":""} — la plus récente en haut`:"";
   document.getElementById("jlist").innerHTML=journal.length
@@ -385,28 +332,6 @@ function renderJournal(){
         : `<span class="muted" style="font-size:.73rem">Aucun abonné pour l'instant.</span>`)
     : `<span class="muted" style="font-size:.73rem">${subCount} personne${subCount>1?"s":""} ${subCount>1?"suivent":"suit"} ce planning.</span>`;
 }
-function makeDigest(){
-  const st=status();
-  const since=NOW-7*DAY;
-  const recent=journal.filter(j=>Date.parse(j.ts)>=since);
-  const L=[];
-  L.push(`Point hebdomadaire — BTS CIEL 2A (Gabriel)`);
-  L.push(new Date(NOW).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"}));
-  L.push("");
-  L.push(`Statut : ${st.word}${st.detail?" "+st.detail:""}`);
-  L.push(`Avancement : ${Math.round(st.act)} h sur ${TOTAL_H} h (${Math.round(st.pct)} %)`);
-  L.push(`Rythme : ${pace().toFixed(1)} h par semaine`);
-  L.push(`Étapes en retard : ${st.late.length}`);
-  L.push(`Jours avant la session 2027 : ${Math.max(0,Math.ceil((EXAM-NOW)/DAY))}`);
-  L.push("");
-  L.push(recent.length?`Changements des 7 derniers jours (${recent.length}) :`:"Aucun changement cette semaine.");
-  recent.slice(0,25).forEach(j=>L.push("  · "+new Date(j.ts).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})+" — "+j.text));
-  const next=ALL.filter(s=>!done[s.id]&&s.t0<=NOW+14*DAY).sort((a,b)=>a.t1-b.t1).slice(0,5);
-  if(next.length){L.push("");L.push("À venir :");
-    next.forEach(s=>L.push(`  · ${s.row.n} · ${s.n} — ${s.h} h, échéance ${fmtD(s.t1)}`));}
-  return L.join("\n");
-}
-
 /* ═════════ ORCHESTRATION ═════════ */
 function applyMode(){
   const r=$("robar"); if(r) r.hidden=canEdit;
@@ -425,41 +350,70 @@ let painting=false;
 function renderAll(){
   painting=true;
   replanifier();
-  renderToday();paintGantt();renderMx();renderGrades();renderJournal();
+  renderToday();paintGantt();renderGrades();renderJournal();
   renderCapacites();renderProfil();
   if(!document.querySelector('[data-panel="cal"]').hidden) renderCal();
-  if(!document.querySelector('[data-panel="curve"]').hidden) renderCurve();
   syncChecks();applyMode();
-  const nd=ALL.filter(s=>done[s.id]).length;
-  document.getElementById("tnTodo").textContent=ALL.length-nd;
   painting=false;
 }
 /* Les gestionnaires d'interface sont définis plus bas, avec le planificateur. */
-document.getElementById("mkDigest").onclick=()=>{
-  const txt=makeDigest();
-  document.getElementById("digest").value=txt;
-  document.getElementById("mailDigest").href=
-    "mailto:?bcc="+encodeURIComponent(subs.join(","))+
-    "&subject="+encodeURIComponent("Point hebdomadaire — BTS CIEL 2A")+
-    "&body="+encodeURIComponent(txt);
-};
-document.getElementById("cpDigest").onclick=async()=>{
-  const ta=document.getElementById("digest");
-  if(!ta.value) ta.value=makeDigest();
-  try{await navigator.clipboard.writeText(ta.value);
-    document.getElementById("cpDigest").textContent="Copié ✓";
-    setTimeout(()=>document.getElementById("cpDigest").textContent="Copier",1600);}
-  catch(err){ta.select();}
-};
 
+/* ═════════ DIALOGUE PLEIN ÉCRAN ═════════
+   Un refus ne se murmure pas en bas de page : il s'affiche devant, et il faut
+   le fermer. */
+function dialogue({ titre, corps, actions, ton = "stop" }) {
+  const m = $("modal");
+  if (!m) return;
+  $("modalT").textContent = titre;
+  $("modalC").innerHTML = corps || "";
+  m.className = "modal " + ton;
+  const zone = $("modalA");
+  zone.innerHTML = "";
+  for (const a of (actions && actions.length ? actions : [{ texte: "J'ai compris", pri: true }])) {
+    const b = document.createElement("button");
+    b.className = "btn" + (a.pri ? " pri" : "");
+    b.textContent = a.texte;
+    b.onclick = () => { fermerDialogue(); a.faire && a.faire(); };
+    zone.appendChild(b);
+  }
+  m.hidden = false;
+  zone.querySelector("button").focus();
+}
+function fermerDialogue() { const m = $("modal"); if (m) m.hidden = true; }
+$("modal").addEventListener("click", (e) => { if (e.target.id === "modal" || e.target.dataset.fermer) fermerDialogue(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") fermerDialogue(); });
 
 /* ═════════ PLANIFICATEUR ═════════ */
 const FIN_ANNEE = new Date(2027, 5, 30).getTime();
 
+/** Heures validées un jour donné, d'après l'horodatage posé à la validation. */
+function heuresFaitesLe(cle) {
+  let h = 0;
+  for (const id in done) {
+    const q = byId[id];
+    if (q && String(done[id]).slice(0, 10) === cle) h += q.h;
+  }
+  return Math.round(h * 100) / 100;
+}
+
+/**
+ * La part du jour est arrêtée au premier calcul de la journée, puis elle ne
+ * fait que décroître à mesure qu'on valide. Sans ça, terminer sa journée la
+ * remplirait aussitôt avec le travail des jours suivants — l'inverse de ce
+ * qu'on attend d'un planning.
+ */
 function replanifier() {
+  const cle = isoJour(new Date(NOW));
+  const base = { etapes: ALL, done, evenements: events, capacites, reports,
+                 maintenant: NOW, fin: FIN_ANNEE };
+  if (!partJour || partJour.date !== cle) {
+    const brut = planifier(base);
+    partJour = { date: cle, h: brut.jours.get(cle)?.travailPose ?? 0 };
+    if (canEdit) saveState();
+  }
   plan = planifier({
-    etapes: ALL, done, evenements: events, capacites, reports,
-    maintenant: NOW, fin: FIN_ANNEE,
+    ...base,
+    plafonds: { [cle]: Math.max(0, partJour.h - heuresFaitesLe(cle)) },
   });
   return plan;
 }
@@ -496,8 +450,8 @@ function renderCal() {
     const b = bilanJour(plan.jours, cle);
     const evs = evOn(t, tE), scans = scanOn(t, tE);
     const passe = t < minuitLocal(NOW);
-    const pleine = b && b.cap > 0 && b.libre <= 0.01;
-    const deborde = b && b.surcharge > 0;
+    const pleine = b && b.plein;
+    const deborde = b && b.tardif > 0;
 
     h += `<div class="day${d.getMonth() !== calCur.getMonth() ? " out" : ""}${
       sameDay(d, auj) ? " today" : ""}${calSel && sameDay(d, calSel) ? " sel" : ""}${
@@ -522,90 +476,92 @@ function renderCal() {
 
 const minuitLocal = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 
-/* ═════════ ZONE DE TÂCHE D'UN JOUR ═════════ */
+/* ═════════ LA JOURNÉE, HEURE PAR HEURE ═════════ */
+/** Construit la frise d'un jour : événements, travail et temps libre dans l'ordre. */
+function friseHTML(cle, { compact = false } = {}) {
+  const b = bilanJour(plan.jours, cle);
+  if (!b) return `<div class="empty muted">Rien pour ce jour.</div>`;
+
+  const items = [
+    ...b.evenements.map((e) => ({ d: e.plage[0], f: e.plage[1], type: e.pause ? "pausep" : e.urgent ? "urgent" : "ev", ev: e })),
+    ...b.blocs.map((x) => ({ d: x.debut, f: x.fin, type: "trav", bloc: x })),
+    ...(b.pauses || []).map((s2) => ({ d: s2[0], f: s2[1], type: "pause" })),
+    ...(b.creneaux || []).filter((s2) => s2[1] - s2[0] >= 30).map((s2) => ({ d: s2[0], f: s2[1], type: "libre" })),
+  ].sort((x, y) => x.d - y.d);
+
+  if (!items.length) return `<div class="empty">Journée entièrement libre.</div>`;
+
+  return `<div class="frise">` + items.map((x) => {
+    const plage = `${enHeure(x.d)} – ${enHeure(x.f)}`;
+    const dur = ((x.f - x.d) / 60).toFixed(1).replace(".0", "");
+    if (x.type === "libre") {
+      return `<div class="ligne libre"><span class="hh">${plage}</span>
+        <span class="quoi">Libre · ${dur} h</span></div>`;
+    }
+    if (x.type === "pause") {
+      return `<div class="ligne pause"><span class="hh">${plage}</span>
+        <span class="quoi">Pause</span></div>`;
+    }
+    if (x.type === "trav") {
+      const e = x.bloc.etape;
+      const part = Math.round(((x.f - x.d) / 60 / e.h) * 100);
+      return `<label class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}" style="--c:${e.g.c}">
+        <span class="hh">${plage}</span>
+        <span class="quoi"><input type="checkbox" class="cb" data-cb="${e.id}"${canEdit ? "" : " disabled"}>
+          <b>${esc(e.n)}</b> <em>${esc(e.row.n)}</em>
+          ${compact ? "" : `<span class="part">${dur} h sur ${e.h} h${part < 100 ? ` · ${part} %` : ""}</span>`}
+          ${x.bloc.tard ? `<span class="lt">hors horaires</span>` : x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
+          ${e.row.url ? `<a href="${e.row.url}" target="_blank" rel="noopener">cours ↗</a>` : ""}
+        </span></label>`;
+    }
+    const e = x.ev;
+    return `<div class="ligne ${x.type}"><span class="hh">${plage}</span>
+      <span class="quoi"><b>${esc(e.titre || e.title || "")}</b>
+        ${e.urgent ? `<span class="urg">urgent</span>` : ""}
+        ${e.lien ? `<a href="${esc(e.lien)}" target="_blank" rel="noopener">ouvrir ↗</a>` : ""}
+        ${canEdit ? `<button class="btn mini" data-del="${e.id}" title="Supprimer">✕</button>` : ""}
+      </span></div>`;
+  }).join("") + `</div>`;
+}
+
+/** Le jour choisi dans le calendrier. */
 function renderZone() {
   const d = calSel || new Date(NOW);
-  const t = minuitLocal(d.getTime()), cle = isoJour(d);
+  const cle = isoJour(d);
   const b = bilanJour(plan.jours, cle);
   const auj = sameDay(d, new Date(NOW));
-  const scans = scanOn(t, t + DAY);
-
-  let h = `<div class="dph">${fmtDL(t)}${auj ? " — aujourd'hui" : ""}</div>`;
-
+  let h = `<div class="dph">${fmtDL(d.getTime())}${auj ? " — aujourd'hui" : ""}</div>`;
   if (b) {
     const libres = creneauxTexte(b);
     h += `<div class="jlegende">
-      <span><b class="mono">${b.travail} h</b> de travail placé</span>
+      <span><b class="mono">${b.travail} h</b> de travail</span>
       ${b.occupe > 0 ? `<span class="occ-t"><b class="mono">${b.occupe} h</b> d'événements</span>` : ""}
-      ${b.perdu > 0 ? `<span class="plein-t">${b.perdu} h de travail déplacées ailleurs</span>` : ""}
+      ${b.tardif > 0 ? `<span class="tard-t"><b class="mono">${b.tardif} h</b> hors horaires</span>` : ""}
       <span class="lib-t">Libre : ${libres.length ? libres.join(" · ") : "rien"}</span>
     </div>`;
   }
-
-  h += `<div id="alerte"></div>`;
-
-  // Frise de la journée : événements, travail, temps libre, dans l'ordre.
-  if (b) {
-    const items = [
-      ...b.evenements.map((e) => ({ d: e.plage[0], f: e.plage[1], type: e.urgent ? "urgent" : "ev", ev: e })),
-      ...b.blocs.map((x) => ({ d: x.debut, f: x.fin, type: "trav", bloc: x })),
-      ...(b.creneaux || []).filter((s2) => s2[1] - s2[0] >= 30).map((s2) => ({ d: s2[0], f: s2[1], type: "libre" })),
-    ].sort((x, y) => x.d - y.d);
-
-    h += `<div class="soustitre">La journée, heure par heure</div><div class="frise">`;
-    if (scans.length) {
-      h += `<div class="ligne sys"><span class="hh">09:00</span>
-        <span class="quoi"><b>Rafraîchir le scan CNED</b>
-        <a href="https://eformation.cned.fr/my/courses.php" target="_blank" rel="noopener">ouvrir ↗</a></span></div>`;
-    }
-    h += items.map((x) => {
-      const plage = `${enHeure(x.d)} – ${enHeure(x.f)}`;
-      const dur = ((x.f - x.d) / 60).toFixed(1).replace(".0", "");
-      if (x.type === "libre") {
-        return `<div class="ligne libre"><span class="hh">${plage}</span>
-          <span class="quoi">Libre · ${dur} h</span></div>`;
-      }
-      if (x.type === "trav") {
-        const e = x.bloc.etape;
-        const part = Math.round(((x.f - x.d) / 60 / e.h) * 100);
-        return `<label class="ligne trav${x.bloc.retard ? " retard" : ""}" style="--c:${e.g.c}">
-          <span class="hh">${plage}</span>
-          <span class="quoi"><input type="checkbox" class="cb" data-cb="${e.id}"${canEdit ? "" : " disabled"}>
-            <b>${esc(e.n)}</b> <em>${esc(e.row.n)}</em>
-            <span class="part">${dur} h sur ${e.h} h${part < 100 ? ` · ${part} % de l'étape` : ""}</span>
-            ${x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
-            ${e.row.url ? `<a href="${e.row.url}" target="_blank" rel="noopener">cours ↗</a>` : ""}
-          </span></label>`;
-      }
-      const e = x.ev;
-      return `<div class="ligne ${x.type}"><span class="hh">${plage}</span>
-        <span class="quoi"><b>${esc(e.titre || e.title)}</b>
-          ${e.urgent ? `<span class="urg">urgent</span>` : ""}
-          ${e.lien ? `<a href="${esc(e.lien)}" target="_blank" rel="noopener">ouvrir ↗</a>` : ""}
-          ${canEdit ? `<button class="btn mini" data-del="${e.id}">✕</button>` : ""}
-        </span></div>`;
-    }).join("");
-    h += `</div>`;
-  }
+  h += `<div id="alerte"></div>` + friseHTML(cle);
 
   if (plan.manques.length) {
     const tot = totalManque(plan.manques);
-    h += `<div class="soustitre">Ne rentre pas dans le planning</div>
-      <div class="impossible"><b>${tot} h</b> sur ${plan.manques.length} étape${plan.manques.length > 1 ? "s" : ""}
-        ne trouvent pas de place avant leur échéance.</div>
-      <div class="queue">` + plan.manques.slice(0, 5).map((m) => `
+    h += `<div class="soustitre">Ne rentre pas avant l'échéance</div>
+      <div class="impossible"><b>${tot} h</b> sur ${plan.manques.length} étape${plan.manques.length > 1 ? "s" : ""}.</div>
+      <div class="queue">` + plan.manques.slice(0, 4).map((m) => `
         <div class="qitem" style="--c:var(--late)"><span class="qbody">
           <span class="qtitle">${esc(m.etape.row.n)} · ${esc(m.etape.n)}</span>
           <span class="qmeta"><span class="lt">${m.h} h sans créneau</span>
             <span>échéance ${fmtD(m.ech)}</span></span></span>
-          ${canEdit ? `<button class="btn" data-tard="${m.etape.id}">Remettre à plus tard</button>` : ""}
+          ${canEdit ? `<button class="btn" data-tard="${m.etape.id}">Plus tard</button>` : ""}
         </div>`).join("") + `</div>`;
   }
-
   $("daypanel").innerHTML = h;
 }
 
-/* ═════════ AJOUT D'UN ÉVÉNEMENT ═════════ */
+/* ═════════ AJOUT D'UN ÉVÉNEMENT ═════════
+   Un événement passe toujours avant le travail : la vie d'abord, le planning
+   s'arrange. Il n'est refusé que dans un seul cas — quand des heures de cours
+   ne retrouveraient de place nulle part, ni le jour même, ni le soir, ni les
+   jours suivants. Ce refus-là s'affiche en plein écran. */
 function nouvelEvenement() {
   return {
     id: "e" + Date.now().toString(36),
@@ -615,49 +571,100 @@ function nouvelEvenement() {
     fin: $("evF").value,
     lien: $("evL").value.trim(),
     urgent: $("evU").checked,
+    pause: $("evP").checked,
   };
 }
 function baseplan() {
-  return { etapes: ALL, done, evenements: events, capacites, reports, maintenant: NOW, fin: FIN_ANNEE };
+  const cle = isoJour(new Date(NOW));
+  return {
+    etapes: ALL, done, evenements: events, capacites, reports,
+    plafonds: partJour && partJour.date === cle
+      ? { [cle]: Math.max(0, partJour.h - heuresFaitesLe(cle)) } : {},
+    maintenant: NOW, fin: FIN_ANNEE,
+  };
 }
+const leJour = (d) => new Date(d + "T00:00").toLocaleDateString("fr-FR",
+  { weekday: "long", day: "numeric", month: "long" });
+
+/** Aperçu discret sous le calendrier, pendant qu'il remplit le formulaire. */
 function verifier() {
   const ev = nouvelEvenement();
   const zone = $("alerte");
-  if (!ev.date || !ev.debut || !ev.fin || !zone) return null;
-  const d = duree(ev);
-  if (d <= 0) {
+  if (!zone) return null;
+  if (!ev.date || !ev.debut || !ev.fin) { zone.innerHTML = ""; return null; }
+  if (duree(ev) <= 0) {
     zone.innerHTML = `<div class="impossible">L'heure de fin doit suivre l'heure de début.</div>`;
     return null;
   }
   const t = testerAjout(baseplan(), ev);
-  zone.innerHTML = t.possible
-    ? `<div class="ok-zone">Ça rentre. ${t.deplace > 0
-        ? `<b>${t.deplace} h</b> de travail se reportent sur les jours suivants, sans faire sauter d'échéance.`
-        : `Ce créneau ne croise aucun travail prévu.`}</div>`
-    : `<div class="impossible">
-        <b>Ça ne rentre pas.</b> ${t.deplace > 0 ? `<b>${t.deplace} h</b> de travail seraient chassées de ce jour, ` : ""}
-        et <b>${t.supplement} h</b> ne retrouveraient de place nulle part avant leur échéance
-        (${t.manqueApres} h au total).
-        <div class="zbtn"><button class="btn" id="forcer">Ajouter quand même et décaler</button></div>
-      </div>`;
-  const f = $("forcer");
-  if (f) f.onclick = () => ajouter(true);
+  zone.innerHTML = !t.possible
+    ? `<div class="impossible"><b>Journée pleine.</b> ${t.supplement} h de cours n'auraient
+        plus de place nulle part.</div>`
+    : t.tardif >= 0.1
+      ? `<div class="attention">Ça rentre, mais <b>${t.tardif} h</b> de travail passeraient
+          en dehors de tes heures normales, le soir.</div>`
+      : t.deplace > 0
+        ? `<div class="ok-zone">Ça rentre. <b>${t.deplace} h</b> de travail se reportent sur les
+            jours suivants, sans faire sauter d'échéance.</div>`
+        : `<div class="ok-zone">Ça rentre. Ce créneau ne croise aucun travail prévu.</div>`;
   return t;
 }
+
 function ajouter(force) {
   if (!canEdit) return;
   const ev = nouvelEvenement();
-  if (!ev.titre || !ev.date || duree(ev) <= 0) return;
+  if (!ev.titre || !ev.date) return;
+  if (duree(ev) <= 0) {
+    dialogue({ titre: "Ces horaires ne tiennent pas debout",
+      corps: `<p>L'heure de fin doit venir après l'heure de début.</p>` });
+    return;
+  }
   const t = testerAjout(baseplan(), ev);
-  if (!t.possible && !force) { verifier(); return; }
+
+  // Le seul refus possible : plus une heure de libre, nulle part.
+  if (!t.possible && !force) {
+    const bl = t.bloquant;
+    dialogue({
+      titre: "Ce n'est pas possible",
+      corps: `<p>Ton emploi du temps ${bl && bl.cle !== ev.date
+          ? `du <b>${leJour(bl.cle)}</b>` : `du <b>${leJour(ev.date)}</b>`} remplit déjà
+          toute la journée, et les jours suivants aussi.</p>
+        <p><b>${t.supplement} h</b> de cours ne retrouveraient de place nulle part —
+        ni dans tes heures de travail, ni le soir.</p>
+        <p class="petit">Pour caler « ${esc(ev.titre)} » quand même, il faut d'abord valider des
+        étapes, élargir tes heures dans Réglages, ou repousser une échéance depuis le
+        calendrier.</p>`,
+      actions: [
+        { texte: "J'ai compris", pri: true },
+        { texte: "Ajouter quand même", faire: () => ajouter(true) },
+      ],
+    });
+    return;
+  }
+
   events.push(ev);
   events.sort((a, b) => (a.date + (a.debut || "")).localeCompare(b.date + (b.debut || "")));
-  log(`a ajouté « ${ev.titre} » le ${new Date(ev.date + "T00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} de ${ev.debut} à ${ev.fin}`);
+  log(`a ajouté « ${ev.titre} » le ${leJour(ev.date)} de ${ev.debut} à ${ev.fin}`);
   saveEvents();
-  $("evT").value = ""; $("evL").value = "";
+  $("evT").value = ""; $("evL").value = ""; $("evU").checked = false; $("evP").checked = false;
   const z = $("alerte"); if (z) z.innerHTML = "";
   calSel = new Date(ev.date + "T00:00");
   renderAll();
+
+  // Prévenir quand ça devient trop : le travail chassé retombe le soir.
+  if (!t.possible) {
+    dialogue({ ton: "warn", titre: "Ajouté, mais tu perds des heures",
+      corps: `<p><b>${t.supplement} h</b> de cours n'ont plus de place avant leur échéance.
+        Elles apparaissent en rouge dans l'onglet Calendrier, avec un bouton pour repousser
+        l'échéance.</p>` });
+  } else if (t.tardif >= 0.1) {
+    dialogue({ ton: "warn", titre: "C'est calé, mais ça déborde sur tes soirées",
+      corps: `<p>« ${esc(ev.titre)} » est ajouté${t.deplace > 0
+          ? ` et <b>${t.deplace} h</b> de travail se sont décalées` : ""}.</p>
+        <p><b>${t.tardif} h</b> de cours se retrouvent en dehors de tes heures normales,
+        après ${(capacites[new Date(ev.date + "T00:00").getDay()] || []).slice(-1)[0]?.[1] || "16:00"}.
+        Les pauses sont conservées.</p>` });
+  }
 }
 
 /* ═════════ CAPACITÉS ═════════ */
@@ -673,8 +680,28 @@ function renderCapacites() {
       <input type="text" data-cap="${j}" value="${txt}" placeholder="09:00-12:00, 14:00-18:00"
         ${canEdit ? "" : "disabled"}> <em>${h ? h.toFixed(1).replace(".0","") + " h" : "—"}</em></label>`;
   }).join("") +
-    `<div class="captot">Soit <b class="mono">${total.toFixed(1).replace(".0","")} h</b> de travail par semaine.
-      Le reste de la journée (${"08:00"}–${"22:00"}) apparaît comme temps libre pour ton entourage.</div>`;
+    `<div class="captot">Soit <b class="mono">${total.toFixed(1).replace(".0","")} h</b> déclarées
+      par semaine — un peu moins une fois les pauses déduites : ${REGLES.pause} min après chaque
+      ${REGLES.session / 60} h de travail, jamais négociables.
+      <div class="petit">Ce qui n'y tient pas glisse sur des heures inhabituelles
+      (jusqu'à ${JOURNEE[1]}), et seulement en rattrapage. Le reste de la journée
+      ${JOURNEE[0]}–${JOURNEE[1]} apparaît comme temps libre pour ton entourage.</div>
+      ${canEdit ? `<button class="btn" id="capType">Revenir à la journée type 9 h – 16 h</button>` : ""}
+    </div>`;
+  const bt = $("capType");
+  if (bt) bt.onclick = () => dialogue({
+    ton: "warn", titre: "Revenir à la journée type ?",
+    corps: `<p>Lundi au vendredi 9 h – 12 h 15 et 13 h 15 – 16 h, samedi matin,
+      dimanche au repos. Tes plages actuelles seront remplacées.</p>`,
+    actions: [
+      { texte: "Annuler", pri: true },
+      { texte: "Remplacer", faire: () => {
+          capacites = journeeType();
+          log("a repris la journée type 9 h – 16 h");
+          saveState(); renderAll();
+        } },
+    ],
+  });
 }
 
 /** « 09:00-12:00, 14:00-18:00 » → plages. Ignore ce qui n'est pas lisible. */
@@ -691,15 +718,22 @@ function lirePlages(txt) {
 /* ═════════ DISPONIBILITÉS ═════════ */
 let dureeCherchee = 3;
 
-/** Densité du planning sur les `n` prochains jours. */
+/** Densité du planning sur les `n` prochains jours.
+ *  Les heures de rattrapage sont comptées à part : elles ne sont pas prises sur
+ *  la capacité déclarée, donc les additionner donnerait des « 119 % pris ». */
 function densite(n) {
-  let cap = 0, trav = 0, i = 0;
+  let cap = 0, trav = 0, tard = 0, i = 0;
   for (const j of plan.jours.values()) {
     if (i++ >= n) break;
     cap += j.cap;
-    trav += j.travailPose || 0;
+    tard += j.tardif || 0;
+    trav += Math.max(0, (j.travailPose || 0) - (j.tardif || 0));
   }
-  return { cap, trav, libre: Math.max(0, cap - trav), pc: cap ? Math.round((trav / cap) * 100) : 0 };
+  return {
+    cap, trav, tard,
+    libre: Math.max(0, cap - trav),
+    pc: cap ? Math.min(100, Math.round((trav / cap) * 100)) : 0,
+  };
 }
 
 const joliJour = (t) => {
@@ -736,8 +770,9 @@ function renderDispo() {
     // Explique la forme du planning, pas seulement une moyenne.
     if (proche.pc >= 95) {
       phrase += ` Les <b>deux prochaines semaines sont pleines</b> : chaque heure déclarée est
-        déjà prise. Ça se desserre ensuite — il reste <b>${Math.round(large.libre)} h</b> de marge
-        sur huit semaines.`;
+        déjà prise${proche.tard >= 0.5 ? `, et <b>${Math.round(proche.tard)} h</b> de rattrapage
+        débordent sur les soirées` : ""}. Ça se desserre ensuite — il reste
+        <b>${Math.round(large.libre)} h</b> de marge sur huit semaines.`;
     } else if (proche.pc >= 80) {
       phrase += ` Les deux prochaines semaines sont <b>chargées à ${proche.pc} %</b>, avec
         <b>${Math.round(proche.libre)} h</b> de marge.`;
@@ -1061,7 +1096,6 @@ $("tabs").addEventListener("click", (e) => {
   document.querySelectorAll("#tabs button").forEach((x) => x.setAttribute("aria-selected", x === b));
   document.querySelectorAll("section[data-panel]").forEach((s) => (s.hidden = s.dataset.panel !== b.dataset.tab));
   if (b.dataset.tab === "cal") renderCal();
-  if (b.dataset.tab === "curve") renderCurve();
   if (b.dataset.tab === "regl") { renderCapacites(); renderProfil(); }
   if (b.dataset.tab === "dispo") renderDispo();
 });

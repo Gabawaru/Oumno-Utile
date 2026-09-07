@@ -46,24 +46,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 
 .mast{background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--sig);
   padding:.8rem 1.05rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.3rem}
-.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.61rem;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--sig);margin-bottom:.18rem}
 .mast h1{font-size:clamp(1.1rem,2.5vw,1.55rem);font-weight:700;letter-spacing:-.015em;line-height:1.1}
-.clock{margin-left:auto;text-align:right;font-family:"IBM Plex Mono",monospace;
-  font-variant-numeric:tabular-nums;line-height:1.25}
-.clock .d{font-size:.78rem;color:var(--ink2);font-weight:500}
-.clock .t{font-size:1.2rem;font-weight:600}
-.clock .s{font-size:.57rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);
-  display:flex;align-items:center;gap:.28rem;justify-content:flex-end;margin-top:.08rem}
-.dot{width:6px;height:6px;border-radius:50%;background:var(--ink3);flex:none}
-.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}
-.cd{font-family:"IBM Plex Mono",monospace;text-align:right;line-height:1.15}
-.cd .n{font-size:1.2rem;font-weight:600;color:var(--sig)}
-.cd .k{font-size:.57rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)}
 
-.auth{display:flex;gap:.35rem;align-items:center}
-.auth form{display:flex;gap:.3rem}
-.auth input{width:118px;font-size:.72rem;padding:.28rem .4rem}
 .ro{background:var(--sunk);border:1px solid var(--rule);border-left:3px solid var(--ink3);
   padding:.5rem .75rem;font-size:.76rem;color:var(--ink2);display:flex;gap:.5rem;align-items:baseline}
 .ro b{color:var(--ink)}
@@ -74,7 +58,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
   cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
 .tabs button:hover{color:var(--ink2);background:var(--sunk)}
 .tabs button[aria-selected="true"]{color:var(--sig);border-bottom-color:var(--sig);background:var(--sunk)}
-.tabs .n{font-family:"IBM Plex Mono",monospace;font-size:.61rem;opacity:.75;margin-left:.28rem}
 
 .panel{background:var(--card);border:1px solid var(--rule);padding:.9rem 1rem 1.05rem}
 .phead{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.8rem;padding-bottom:.4rem;
@@ -86,8 +69,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .hero{background:var(--card);border:1px solid var(--rule);border-left:5px solid var(--hc,var(--ink3));
   padding:.95rem 1.1rem;display:grid;grid-template-columns:1fr;gap:.8rem}
 @media(min-width:780px){.hero{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
-.hlab{font-family:"IBM Plex Mono",monospace;font-size:.59rem;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--ink3);margin-bottom:.22rem}
 .hbig{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:clamp(1.45rem,4vw,2.2rem);
   font-weight:700;line-height:1.05;color:var(--hc,var(--ink));letter-spacing:-.02em}
 .hsub{font-size:.79rem;color:var(--ink2);margin-top:.28rem;line-height:1.45}
@@ -108,7 +89,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 label.qitem{cursor:pointer}
 label.qitem:hover{background:color-mix(in srgb,var(--c) 9%,var(--sunk))}
 .qitem.going{opacity:0;transform:translateX(14px)}
-.qitem .rank{font-family:"IBM Plex Mono",monospace;font-size:.61rem;color:var(--ink3);
+/*x*/.zz{font-family:"IBM Plex Mono",monospace;font-size:.61rem;color:var(--ink3);
   min-width:14px;padding-top:.12rem}
 .qbody{flex:1;min-width:0}
 .qtitle{font-size:.78rem;font-weight:500;color:var(--ink);line-height:1.3}
@@ -149,14 +130,9 @@ label.qitem:hover{background:color-mix(in srgb,var(--c) 9%,var(--sunk))}
 .day.today .num{color:var(--sig);font-weight:700}
 .chip{font-size:.57rem;line-height:1.25;padding:.07rem .22rem;border-radius:2px;color:#fff;
   background:var(--c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chip.done{background:transparent;color:var(--ink3);text-decoration:line-through;
-  box-shadow:inset 0 0 0 1px var(--rule)}
-.chip.late{outline:1.5px solid var(--late);outline-offset:-1.5px}
 .chip.ev{background:transparent;color:var(--evt);box-shadow:inset 0 0 0 1px var(--evt);font-weight:600}
 .chip.ev.sys{color:var(--warn);box-shadow:inset 0 0 0 1px var(--warn)}
 .day .more{font-family:"IBM Plex Mono",monospace;font-size:.55rem;color:var(--ink3)}
-.dots{display:flex;gap:2px;flex-wrap:wrap;margin-top:auto}
-.dots i{width:5px;height:5px;border-radius:50%;background:var(--c);display:block;opacity:.8}
 .daypanel{margin-top:.7rem;border-top:1px solid var(--rule);padding-top:.6rem}
 .dph{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:.81rem;
   margin-bottom:.42rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
@@ -235,41 +211,9 @@ label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.
 .step .lbl{flex:1;min-width:0}
 .step .hh{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--ink3);flex:none}
 
-.dlist{display:flex;flex-direction:column;gap:.2rem}
-.drow{display:flex;align-items:baseline;gap:.55rem;padding:.32rem .48rem;background:var(--sunk);
-  border-left:3px solid var(--c);font-size:.755rem}
-.drow .dt{font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--ink3);flex:none;min-width:52px}
-.drow .nmm{flex:1;min-width:0;color:var(--ink2)}
-.drow .hh{font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--ok);flex:none}
-.dday{font-family:"IBM Plex Mono",monospace;font-size:.59rem;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--ink3);margin:.5rem 0 .16rem;padding-bottom:.14rem;border-bottom:1px solid var(--rule2)}
 
-.chartbox{width:100%;overflow-x:auto}
 svg.curve{display:block;width:100%;min-width:600px;height:auto}
-.ckey{display:flex;flex-wrap:wrap;gap:.3rem 1.05rem;margin-top:.55rem;font-size:.7rem;color:var(--ink2)}
-.ckey i{width:16px;height:0;border-top-width:2.5px;border-top-style:solid;display:inline-block;
-  vertical-align:middle;margin-right:.33rem}
 
-.mx{display:grid;grid-template-columns:14px 1fr;gap:.4rem}
-.ylab{writing-mode:vertical-rl;transform:rotate(180deg);font-family:"IBM Plex Mono",monospace;
-  font-size:.57rem;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3);
-  text-align:center;align-self:center}
-.mxr{display:flex;flex-direction:column;gap:.4rem;min-width:0}
-.xlab{display:grid;grid-template-columns:1fr 1fr;gap:.4rem;font-family:"IBM Plex Mono",monospace;
-  font-size:.57rem;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3);text-align:center}
-.quads{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
-@media(max-width:600px){.quads,.xlab{grid-template-columns:1fr}.mx{grid-template-columns:1fr}
-  .ylab{writing-mode:horizontal-tb;transform:none;text-align:left}}
-.q{background:var(--sunk);border-left:3px solid var(--qc);padding:.52rem .62rem .62rem;min-width:0}
-.q h3{font-size:.69rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--qc);
-  margin-bottom:.38rem;display:flex;align-items:baseline;gap:.4rem}
-.q h3 .n{font-family:"IBM Plex Mono",monospace;font-size:.59rem;opacity:.7;margin-left:auto}
-.q ul{list-style:none;display:flex;flex-direction:column;gap:.22rem}
-.q li{font-size:.72rem;line-height:1.33;color:var(--ink2);padding-left:.56rem;position:relative}
-.q li::before{content:"";position:absolute;left:0;top:.5em;width:3px;height:3px;border-radius:50%;
-  background:var(--qc);opacity:.55}
-.q li b{color:var(--ink);font-weight:600}
-.q li .h{font-family:"IBM Plex Mono",monospace;font-size:.65rem;color:var(--qc);font-weight:600}
 
 /* notes */
 .gtab{width:100%;border-collapse:collapse;font-size:.75rem}
@@ -337,10 +281,6 @@ form.carte button[type=submit]{margin-top:.3rem}
 .hcount{font-family:"IBM Plex Mono",monospace;font-size:.55rem;color:var(--ink3)}
 
 /* ── zone de tâche ──────────────────────────────────── */
-.jauge{display:flex;height:12px;background:var(--sunk);position:relative;margin:.3rem 0 .4rem;overflow:hidden}
-.jauge i{position:absolute;top:0;bottom:0;display:block}
-.jauge .occ{left:0;background:var(--evt)}
-.jauge .trv{background:var(--ok)}
 .jlegende{display:flex;flex-wrap:wrap;gap:.2rem 1rem;font-size:.72rem;color:var(--ink2);margin-bottom:.7rem}
 .jlegende .occ-t{color:var(--evt)}.jlegende .trv-t{color:var(--ok)}
 .jlegende .lib-t{color:var(--ink3)}.jlegende .plein-t{color:var(--late)}
@@ -351,7 +291,6 @@ form.carte button[type=submit]{margin-top:.3rem}
 .impossible b{color:var(--late)}
 .ok-zone{font-size:.76rem;color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent);
   border-left:3px solid var(--ok);padding:.5rem .7rem;margin:.35rem 0}
-.zbtn{margin-top:.45rem}
 .qitem.retard{box-shadow:inset 3px 0 0 var(--late)}
 
 /* ── réglages ───────────────────────────────────────── */
@@ -361,7 +300,6 @@ label.cap{display:flex;align-items:center;gap:.4rem;font-size:.76rem;color:var(-
 label.cap span{flex:1}
 label.cap input{width:62px;text-align:right;font-family:"IBM Plex Mono",monospace}
 label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ink3);font-style:normal}
-.chercheur{margin:.9rem 0 .7rem}
 .durees{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem}
 .durees .btn{font-size:.72rem;text-transform:none;letter-spacing:0;padding:.35rem .7rem}
 .resume{display:flex;flex-wrap:wrap;gap:.5rem 1.6rem;background:var(--sunk);padding:.7rem .8rem;
@@ -423,6 +361,77 @@ label.cap{flex-wrap:wrap}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .captot{grid-column:1/-1;font-size:.76rem;color:var(--ink2);margin-top:.3rem}
 
+
+/* ── bandeau d'alerte ─────────────────────────────────── */
+.bandeau{font-size:.79rem;line-height:1.5;padding:.6rem .8rem;background:var(--card);
+  border:1px solid var(--rule);border-left:4px solid var(--ink3);color:var(--ink2)}
+.bandeau b{color:var(--ink)}
+.bandeau.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,var(--card))}
+.bandeau.warn b{color:var(--warn)}
+.bandeau.stop{border-left-color:var(--late);background:color-mix(in srgb,var(--late) 8%,var(--card))}
+.bandeau.stop b{color:var(--late)}
+
+/* ── dialogue plein écran ─────────────────────────────── */
+.modal{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:1rem;
+  background:color-mix(in srgb,var(--ink) 55%,transparent);backdrop-filter:blur(2px)}
+.mbox{width:min(480px,100%);background:var(--card);border:1px solid var(--rule);
+  border-top:4px solid var(--ink3);padding:1.1rem 1.2rem 1rem;
+  box-shadow:0 18px 48px color-mix(in srgb,var(--ink) 30%,transparent);
+  animation:pose .16s cubic-bezier(.2,.8,.3,1)}
+.modal.stop .mbox{border-top-color:var(--late)}
+.modal.warn .mbox{border-top-color:var(--warn)}
+.modal.info .mbox{border-top-color:var(--ok)}
+@keyframes pose{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.mbox{animation:none}}
+.mbox h2{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.15rem;font-weight:700;
+  letter-spacing:-.01em;line-height:1.2}
+.modal.stop .mbox h2{color:var(--late)}
+.modal.warn .mbox h2{color:var(--warn)}
+.mtxt{margin-top:.55rem;display:flex;flex-direction:column;gap:.45rem;
+  font-size:.81rem;line-height:1.55;color:var(--ink2)}
+.mtxt b{color:var(--ink)}
+.mact{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:1rem;padding-top:.75rem;
+  border-top:1px solid var(--rule2)}
+.mact .btn{padding:.42rem .8rem}
+.petit{font-size:.74rem;color:var(--ink3);line-height:1.5}
+
+/* ── pauses et heures de rattrapage dans la frise ─────── */
+.ligne.pause{border-left-color:var(--rule2);background:transparent;color:var(--ink3);
+  font-size:.72rem;padding-top:.18rem;padding-bottom:.18rem}
+.ligne.pause .quoi{color:var(--ink3);font-style:italic}
+.ligne.pausep{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 7%,var(--sunk))}
+.ligne.trav.tardif{background:color-mix(in srgb,var(--warn) 9%,var(--sunk))}
+.ligne.trav.tardif .lt{color:var(--warn)}
+.ligne .lt{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--late);font-weight:600}
+.jlegende .tard-t{color:var(--warn)}
+.attention{font-size:.76rem;line-height:1.5;color:var(--warn);
+  background:color-mix(in srgb,var(--warn) 9%,transparent);
+  border-left:3px solid var(--warn);padding:.5rem .65rem;margin-bottom:.5rem}
+.attention b{color:var(--warn)}
+
+/* ── en-tête, formulaire d'événement, abonnement ──────── */
+.ident{min-width:0}
+.sous{font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--ink3);margin-top:.15rem}
+.hpied{display:flex;flex-wrap:wrap;gap:.2rem 1.2rem;margin-top:.6rem;padding-top:.5rem;
+  border-top:1px solid var(--rule2);font-size:.74rem;color:var(--ink3)}
+.hpied b{font-family:"IBM Plex Mono",monospace;color:var(--ink);font-weight:600}
+.evf{display:flex;flex-direction:column;gap:.4rem;margin-top:.75rem;padding-top:.7rem;
+  border-top:1px solid var(--rule)}
+.evf .ligne1,.evf .ligne2{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center}
+.evf .ligne1 #evT{flex:1 1 190px;min-width:0}
+.evf .ligne2 #evL{flex:1 1 190px;min-width:0}
+.evf #evD{flex:0 0 auto;width:9.5rem}
+.evf #evH,.evf #evF{flex:0 0 auto;width:6.5rem}
+.evf input{font-size:.78rem;padding:.32rem .45rem}
+.evf .fleche{color:var(--ink3);font-size:.8rem}
+.subf{display:flex;gap:.35rem;margin-top:.6rem;flex-wrap:wrap}
+.subf input{flex:1 1 200px;min-width:0}
+.captot .petit{margin-top:.25rem}
+.captot .btn{margin-top:.5rem}
+.phead .note b{color:var(--ink)}
+.phead .note b.fini{color:var(--ok)}
+#evP{accent-color:var(--ok)}
 </style>
 </head>
 <body>
@@ -488,214 +497,154 @@ label.cap{flex-wrap:wrap}
 
 <section id="appli" class="wrap" hidden>
 
-  <div class="mast">
-    <div>
-      <div class="eyebrow">CNED · BTS CIEL 2<sup>e</sup> année · Session 2027</div>
-      <h1 id="titreProfil">Pilote de formation</h1>
+  <header class="mast">
+    <div class="ident">
+      <h1 id="titreProfil">Mon planning</h1>
+      <div class="sous" id="sousTitre"></div>
     </div>
-    <div class="cd"><div class="n" id="cdN">—</div><div class="k">jours avant la session</div></div>
     <div class="quisuisje" id="quiSuisJe"></div>
-    <div class="clock">
-      <div class="d" id="cdate">—</div>
-      <div class="t" id="ctime">—</div>
-      <div class="s"><i class="dot" id="sdot"></i><span id="stxt">chargement</span></div>
-    </div>
-  </div>
+  </header>
 
   <div class="ro" id="robar" hidden>
-    <b>Vue publique.</b><span>Tu consultes le planning de Gabriel en lecture seule. Tu peux t'abonner
-      à la lettre d'information depuis l'onglet Journal.</span>
+    <b>Vue publique.</b><span>Tu consultes ce planning en lecture seule.</span>
   </div>
 
   <nav class="tabs" role="tablist" id="tabs">
     <button role="tab" data-tab="today" aria-selected="true">Aujourd'hui</button>
     <button role="tab" data-tab="cal"   aria-selected="false">Calendrier</button>
-    <button role="tab" data-tab="dispo" aria-selected="false">Disponibilités</button>
-    <button role="tab" data-tab="gantt" aria-selected="false">Gantt</button>
-    <button role="tab" data-tab="todo"  aria-selected="false">Étapes<span class="n" id="tnTodo"></span></button>
-    <button role="tab" data-tab="curve" aria-selected="false">Courbe</button>
-    <button role="tab" data-tab="mx"    aria-selected="false">Matrice</button>
-    <button role="tab" data-tab="notes" aria-selected="false">Notes</button>
-    <button role="tab" data-tab="jrnl"  aria-selected="false">Journal<span class="n" id="tnJ"></span></button>
+    <button role="tab" data-tab="dispo" aria-selected="false">Quand je suis libre</button>
+    <button role="tab" data-tab="todo"  aria-selected="false">Étapes</button>
     <button role="tab" data-tab="regl"  aria-selected="false">Réglages</button>
   </nav>
 
+  <!-- ─────────── AUJOURD'HUI ─────────── -->
   <section data-panel="today" class="stack">
+    <div class="bandeau" id="alerteJour" hidden></div>
     <div class="hero" id="hero">
-      <div>
-        <div class="hlab">Statut</div>
-        <div class="hbig" id="hbig">—</div>
-        <div class="hsub" id="hsub"></div>
-        <div class="gtrack"><div class="gfill" id="gfill"></div><div class="gmark" id="gmark"></div></div>
-      </div>
-      <div class="hnums" id="hnums"></div>
+      <div class="hbig" id="hbig">—</div>
+      <div class="hsub" id="hsub"></div>
+      <div class="gtrack"><div class="gfill" id="gfill"></div><div class="gmark" id="gmark"></div></div>
+      <div class="hpied" id="hpied"></div>
     </div>
+
     <div class="panel">
-      <div class="phead"><h2>À faire maintenant</h2>
-        <div class="note">Coche une tâche : la suivante prend sa place</div></div>
-      <div class="queue" id="queue"></div>
+      <div class="phead"><h2>Ma journée</h2><div class="note" id="dateJour"></div></div>
+      <div id="journee"></div>
     </div>
-    <div class="panel">
+
+    <div class="panel" id="blocRetard" hidden>
       <div class="phead"><h2>En retard</h2><div class="note" id="lateNote"></div></div>
       <div class="queue" id="lateq"></div>
     </div>
   </section>
 
+  <!-- ─────────── CALENDRIER ─────────── -->
   <section data-panel="cal" hidden>
     <div class="panel">
-      <div class="phead"><h2>Calendrier</h2>
-        <div class="note">Échéances calculées depuis le plan · heure de Paris</div></div>
-      <form class="evf" id="evf" hidden>
-        <div><label class="fl" for="evT">Titre de l'événement</label>
-          <input id="evT" required maxlength="90" placeholder="Révision Stormshield, RDV tuteur…"></div>
-        <div><label class="fl" for="evD">Date</label><input id="evD" type="date" required></div>
-        <div><label class="fl" for="evH">De</label><input id="evH" type="time" value="14:00"></div>
-        <div><label class="fl" for="evF">À</label><input id="evF" type="time" value="17:00"></div>
-        <div style="display:flex;align-items:flex-end"><button class="btn pri" type="submit">Ajouter</button></div>
-        <div class="full" style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:flex-end">
-          <div style="flex:1 1 260px"><label class="fl" for="evL">Lien (facultatif)</label>
-            <input id="evL" type="url" placeholder="https://eformation.cned.fr/…"></div>
-          <label class="urgcase"><input type="checkbox" id="evU"><span>Urgent</span></label>
-        </div>
-      </form>
       <div class="calbar">
         <button class="btn" id="prevM" aria-label="Mois précédent">◀</button>
         <div class="m" id="calM">—</div>
         <button class="btn" id="nextM" aria-label="Mois suivant">▶</button>
-        <button class="btn" id="todayM" style="margin-left:auto">Aujourd'hui</button>
+        <button class="btn" id="todayM">Aujourd'hui</button>
       </div>
       <div class="cal" id="cal"></div>
-      <div class="daypanel" id="daypanel"></div>
+
+      <form class="evf" id="evf" hidden>
+        <div class="ligne1">
+          <input id="evT" required maxlength="90" placeholder="Ajouter un événement…">
+          <input id="evD" type="date" required>
+          <input id="evH" type="time" value="14:00" aria-label="De">
+          <span class="fleche">→</span>
+          <input id="evF" type="time" value="17:00" aria-label="À">
+          <button class="btn pri" type="submit">Ajouter</button>
+        </div>
+        <div class="ligne2">
+          <input id="evL" type="url" placeholder="Lien (facultatif)">
+          <label class="urgcase"><input type="checkbox" id="evU"><span>Urgent</span></label>
+          <label class="urgcase"><input type="checkbox" id="evP"><span>C'est une pause</span></label>
+        </div>
+      </form>
+
+      <div id="daypanel"></div>
     </div>
   </section>
 
-  <section data-panel="dispo" hidden>
+  <!-- ─────────── QUAND JE SUIS LIBRE ─────────── -->
+  <section data-panel="dispo" class="stack" hidden>
     <div class="panel">
-      <div class="phead"><h2>Quand suis-je disponible&nbsp;?</h2>
-        <div class="note">Les jours où l'on peut caler quelque chose sans faire dérailler le planning</div></div>
-      <div id="resume"></div>
-      <div class="chercheur">
-        <span class="fl">Je cherche un créneau de</span>
-        <div class="durees" id="durees">
-          <button class="btn" data-h="1">1 h</button>
-          <button class="btn" data-h="2">2 h</button>
-          <button class="btn pri" data-h="3">3 h</button>
-          <button class="btn" data-h="4">une après-midi</button>
-          <button class="btn" data-h="8">une journée</button>
-        </div>
+      <div class="phead"><h2>Quand je suis libre</h2>
+        <div class="note">Les jours où l'on peut caler quelque chose</div></div>
+      <div class="durees" id="durees">
+        <button class="btn" data-h="1">1 h</button>
+        <button class="btn" data-h="2">2 h</button>
+        <button class="btn pri" data-h="3">3 h</button>
+        <button class="btn" data-h="4">Une après-midi</button>
+        <button class="btn" data-h="8">Une journée</button>
       </div>
+      <div id="resume"></div>
       <div id="creneaux"></div>
     </div>
+
+    <div class="panel">
+      <div class="phead"><h2>Derniers changements</h2><div class="note" id="jNote"></div></div>
+      <div id="jlist"></div>
+      <form id="subf" class="subf">
+        <input id="subE" type="email" placeholder="Ton adresse pour être prévenu" required>
+        <button class="btn pri" type="submit">M'abonner</button>
+      </form>
+      <div class="subs" id="subs"></div>
+    </div>
   </section>
 
-  <section data-panel="gantt" hidden>
+  <!-- ─────────── ÉTAPES ─────────── -->
+  <section data-panel="todo" class="stack" hidden>
     <div class="panel">
-      <div class="phead"><h2>Diagramme de Gantt</h2>
-        <div class="note">Remplissage proportionnel aux heures validées</div></div>
+      <div class="phead"><h2>Toutes les étapes</h2>
+        <div class="note">
+          <button class="btn" id="expandAll">Tout déplier</button>
+          <button class="btn" id="collapseAll">Tout replier</button>
+        </div></div>
+      <div class="acc" id="acc"></div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2>Vue d'ensemble de l'année</h2></div>
       <div class="scroll"><div class="grid" id="gantt"></div></div>
       <div class="legend" id="legend"></div>
     </div>
   </section>
 
-  <section data-panel="todo" hidden>
+  <!-- ─────────── RÉGLAGES ─────────── -->
+  <section data-panel="regl" class="stack" hidden>
     <div class="panel">
-      <div class="phead"><h2>Toutes les étapes</h2>
-        <div class="note"><button class="btn" id="expandAll">Tout déplier</button>
-          <button class="btn" id="collapseAll">Tout replier</button></div></div>
-      <div class="acc" id="acc"></div>
+      <div class="phead"><h2>Mon profil</h2><div class="note">Qui peut consulter ce planning</div></div>
+      <div id="profilBox"></div>
     </div>
-  </section>
-
-  <section data-panel="curve" hidden>
     <div class="panel">
-      <div class="phead"><h2>Courbe de croissance</h2><div class="note" id="curveNote"></div></div>
-      <div class="chartbox" id="chartbox"></div>
-      <div class="ckey">
-        <span><i style="border-color:var(--ink3);border-top-style:dashed"></i>Plan prévu</span>
-        <span><i style="border-color:var(--ok)"></i>Ta progression réelle</span>
-        <span><i style="border-color:var(--ahead);border-top-style:dotted"></i>Projection à ton rythme</span>
-      </div>
+      <div class="phead"><h2>Mes heures de travail</h2>
+        <div class="note">Le planning place les étapes dans ces plages</div></div>
+      <div class="caps" id="caps"></div>
     </div>
-  </section>
-
-  <section data-panel="mx" hidden>
     <div class="panel">
-      <div class="phead"><h2>Matrice d'Eisenhower</h2><div class="note" id="mxnote"></div></div>
-      <div class="mx">
-        <div class="ylab">← moins urgent · urgent →</div>
-        <div class="mxr">
-          <div class="xlab"><div>Important</div><div>Moins important</div></div>
-          <div class="quads">
-            <div class="q" style="--qc:var(--sig)"><h3>Faire maintenant<span class="n" id="n1">0</span></h3><ul id="q1"></ul></div>
-            <div class="q" style="--qc:var(--gen)"><h3>Minuter / cadrer<span class="n" id="n3">0</span></h3><ul id="q3"></ul></div>
-            <div class="q" style="--qc:var(--b1)"><h3>Planifier<span class="n" id="n2">0</span></h3><ul id="q2"></ul></div>
-            <div class="q" style="--qc:var(--ink3)"><h3>Éliminer<span class="n" id="n4">0</span></h3><ul id="q4"></ul></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section data-panel="notes" hidden>
-    <div class="panel">
-      <div class="phead"><h2>Notes obtenues</h2>
-        <div class="note">Saisis tes notes sur 20 à mesure que les devoirs reviennent</div></div>
-      <div class="hnums" id="gsum" style="margin-bottom:.9rem"></div>
+      <div class="phead"><h2>Mes notes</h2><div class="note">Sur 20, à mesure que les devoirs reviennent</div></div>
+      <div class="hnums" id="gsum" style="margin-bottom:.8rem"></div>
       <div class="scroll"><table class="gtab" id="gtab"></table></div>
     </div>
   </section>
 
-  <section data-panel="jrnl" class="stack" hidden>
-    <div class="panel">
-      <div class="phead"><h2>Journal d'activité</h2><div class="note" id="jNote"></div></div>
-      <div id="jlist"></div>
-    </div>
-    <div class="panel">
-      <div class="phead"><h2>Lettre d'information</h2>
-        <div class="note">Un courriel part automatiquement dès qu'il y a du nouveau</div></div>
-      <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.6rem;max-width:62ch">
-        Chaque changement — étape terminée, événement ajouté, note saisie — part en récapitulatif
-        aux abonnés. Le 1<sup>er</sup> de chaque mois, le courriel rappelle aussi de rafraîchir le
-        scan de l'espace CNED, au cas où de nouveaux devoirs y auraient été publiés.</p>
-      <form id="subf" style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.6rem">
-        <div style="flex:1 1 220px"><label class="fl" for="subE">Recevoir les mises à jour</label>
-          <input id="subE" type="email" placeholder="prenom@exemple.fr" required></div>
-        <button class="btn pri" type="submit">M'abonner</button>
-      </form>
-      <div class="subs" id="subs"></div>
-      <div style="margin-top:.9rem;display:flex;gap:.4rem;flex-wrap:wrap">
-        <button class="btn" id="mkDigest">Composer le récapitulatif</button>
-        <button class="btn" id="cpDigest">Copier</button>
-        <a class="btn" id="mailDigest" href="#" style="display:inline-block">Ouvrir dans ma messagerie</a>
-      </div>
-      <div style="margin-top:.5rem"><textarea class="digest" id="digest"
-        placeholder="Clique sur « Composer le récapitulatif » pour générer le texte des changements récents."></textarea></div>
-    </div>
-  </section>
-
-  <section data-panel="regl" hidden>
-    <div class="panel">
-      <div class="phead"><h2>Mon profil</h2>
-        <div class="note">Qui peut consulter ton planning</div></div>
-      <div id="profilBox"></div>
-    </div>
-    <div class="panel" style="margin-top:.85rem">
-      <div class="phead"><h2>Heures de travail par jour</h2>
-        <div class="note">Le planning répartit tes étapes dans ces heures-là</div></div>
-      <div class="caps" id="caps"></div>
-      <p class="aide" style="margin-top:.8rem;max-width:64ch">
-        Quand tu poses un événement, les heures qu'il occupe sont retirées de la journée et
-        le travail prévu se redistribue sur les jours suivants. Une étape dont l'échéance est
-        déjà passée repart sur les premiers créneaux libres : le retard se rattrape tout seul.
-      </p>
-    </div>
-  </section>
-
   <div class="foot">
-    Arborescence relevée sur <span class="mono">eformation.cned.fr</span> — 104 sections de cours.<br>
-    L'espace « Dépôt des devoirs » n'est pas consulté par cette application.
+    Référentiel relevé sur <span class="mono">eformation.cned.fr</span>.
+    L'espace « Dépôt des devoirs » n'est jamais consulté.
   </div>
 </section>
+
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalT">
+  <div class="mbox">
+    <h2 id="modalT">—</h2>
+    <div class="mtxt" id="modalC"></div>
+    <div class="mact" id="modalA"></div>
+  </div>
+</div>
+
 <script type="module" src="app.js"></script>
 </body>
 </html>
