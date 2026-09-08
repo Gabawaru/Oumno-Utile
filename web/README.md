@@ -4,6 +4,9 @@ Un planificateur de travail personnel : il répartit les heures, garde les pause
 rattrape le retard le soir plutôt que de le laisser filer, et dit à qui l'on veut
 quand on est réellement libre.
 
+Autour de ce planning, un petit réseau : on suit des gens, on voit ce qu'ils
+publient, et surtout on repère les moments où l'on est libres en même temps.
+
 ## Ce que fait l'application
 
 - **Comptes** — chacun crée le sien (adresse + mot de passe). Une seule inscription
@@ -13,11 +16,31 @@ quand on est réellement libre.
   aussi partir d'une trame de révisions ou d'une page blanche et déclarer ses propres
   matières et étapes. Le moteur ne connaît que des étapes avec un volume d'heures et
   une période.
+- **Une porte, pas une brochure** — à l'arrivée, un seul écran et trois chemins :
+  créer un compte, se connecter, ou regarder sans compte. Chacun mène à un écran
+  différent, et l'application se parcourt ensuite par une barre de cinq destinations
+  en bas de l'écran — jour, planning, fil, messages, contacts.
 - **Contacts** — on s'abonne à quelqu'un ; un compte public accepte tout de suite, un
-  compte privé décide. On règle qui peut vous joindre (tout le monde, ses abonnés, ou
-  personne) et on demande un créneau chez les autres, avec un motif et un mot. L'hôte
-  accepte ou refuse — ou accepte automatiquement s'il le veut. Un créneau accepté
-  devient un événement de son planning.
+  compte privé décide. On règle qui peut vous joindre (tout le monde, ses contacts, ou
+  personne) et on **propose un moment** aux autres, avec un motif. L'hôte accepte ou
+  refuse — ou accepte automatiquement s'il le veut. Un moment accepté devient un
+  événement de son planning.
+- **Le fil** — publications de texte et de photos, commentaires, « j'aime ». Chaque
+  publication porte sa portée : ses contacts, ou tout le monde. Une publication
+  ouverte à tous depuis un profil privé reste invisible : la visibilité du profil
+  l'emporte.
+- **Conversations** — messagerie entre comptes. Qui n'a pas le droit de vous écrire
+  ne peut vous adresser **qu'une** chose : une proposition de moment, avec son motif.
+  Répondre ou accepter ouvre la conversation. Blocage réciproque et signalement d'un
+  contenu à l'éditeur.
+- **Photo de profil** — redimensionnée et reconvertie par le navigateur avant l'envoi,
+  ce qui efface au passage les métadonnées EXIF, position GPS comprise.
+- **Fuseau horaire et région** — le profil de quelqu'un affiche l'heure qu'il est chez
+  lui et l'écart avec la vôtre. « Libre à 14 h » ne veut pas dire la même chose à
+  Paris et à Hanoï. La région est un texte libre, facultatif, masqué par défaut.
+- **Moments communs et classement** — l'intersection de vos plages libres avec celles
+  des gens que vous suivez, et un classement des heures de la semaine où l'on ne
+  figure qu'après l'avoir demandé.
 - **Événements publics ou privés** — par défaut un événement est privé : les autres
   voient « Occupé », sans titre ni lien. Cocher « titre visible » le partage.
 - **Installation** — manifeste, icônes et service worker : Repère s'ajoute à l'écran
@@ -114,8 +137,15 @@ L'application elle-même n'en a besoin d'aucune.
 ## Base de données
 
 Projet Supabase **« CNED link »** (`hnmeefndnckqkdjjbgwe`, `eu-west-3`).
-Tables `ciel_profiles`, `ciel_state`, `ciel_journal`, `ciel_subs`, `ciel_partages`,
-`ciel_invitations`.
+
+Le planning : `ciel_profiles`, `ciel_state`, `ciel_journal`, `ciel_subs`,
+`ciel_partages`, `ciel_invitations`, `ciel_identites`, `ciel_reservations`.
+
+Le réseau : `ciel_posts`, `ciel_commentaires`, `ciel_jaime`, `ciel_fils`,
+`ciel_messages`, `ciel_blocages`, `ciel_signalements`, `ciel_dispos`, `ciel_scores`.
+
+Deux seaux de stockage : `avatars` (public, 1 Mo) et `photos` (privé, 3 Mo, servi par
+adresse signée). L'écriture est bornée au dossier `<uuid>/` de chacun.
 
 Le navigateur n'accède jamais aux jetons d'invitation ni aux noms des comptes privés :
 des fonctions `security definer` font le travail et n'exposent que le nécessaire.
@@ -130,8 +160,15 @@ des fonctions `security definer` font le travail et n'exposent que le nécessair
 | `s_abonner(uuid)` | connecté | accepte tout de suite chez un public, met en attente chez un privé |
 | `repondre_abonnement(uuid,bool)` | connecté | accepte ou refuse une demande reçue |
 | `mes_abonnes()` / `mes_abonnements()` | connecté | les deux sens de la relation |
-| `demander_creneau(...)` | connecté | applique la joignabilité avant d'insérer |
-| `supprimer_mon_compte()` | connecté | efface tout, en cascade |
+| `identifiant_disponible(text)` | connecté | dit si un identifiant public est libre |
+| `proposer_creneau(...)` | connecté | applique la joignabilité, exige un motif d'un inconnu, dépose le message |
+| `envoyer_message(uuid,text)` | connecté | seule écriture possible dans une conversation |
+| `marquer_lu(uuid)` | connecté | efface la pastille des non-lus |
+| `mes_fils()` | connecté | les conversations, avec le pseudonyme d'en face |
+| `fil_actualite(...)` / `publications_de(...)` | tout le monde | le fil, en `security invoker` — ce sont les politiques qui filtrent |
+| `classement()` | connecté | les heures de la semaine, des seuls volontaires |
+| `moments_communs()` | connecté | l'intersection des plages libres |
+| `supprimer_mon_compte()` | connecté | efface tout, en cascade, fichiers compris |
 
 `prive.ciel_visible()`, le rouage interne des politiques, vit dans un schéma non
 exposé par PostgREST. **Attention :** `CREATE OR REPLACE FUNCTION` remet les droits
@@ -143,12 +180,15 @@ prévu. La protection repose entièrement sur les politiques de sécurité.
 
 | Rôle | Peut | Ne peut pas |
 |---|---|---|
-| visiteur | lire les profils publics, leur planning et leur journal ; s'abonner à une lettre | écrire quoi que ce soit, lire un profil privé, lire la liste des abonnés |
-| compte connecté | tout ce qui précède, plus écrire **son** planning et lire ceux qu'on lui a partagés | toucher au planning d'un autre, même partagé |
+| visiteur | lire les profils publics, leur planning, leur journal et leurs publications ouvertes à tous ; s'abonner à une lettre | écrire quoi que ce soit, lire un profil privé, une publication réservée, un message, la liste des abonnés |
+| compte connecté | tout ce qui précède, plus écrire **son** planning, publier, commenter, converser selon la joignabilité d'en face | toucher au planning d'un autre, publier sous son nom, lire une conversation dont il n'est pas |
 
 Éprouvé par bascule de rôle réelle en base : un visiteur anonyme et un tiers connecté
 lisent 0 ligne d'un planning privé, l'invité en lit 1 et n'y écrit rien, et les jetons
-d'invitation ne sont lisibles par personne.
+d'invitation ne sont lisibles par personne. Côté réseau : une publication réservée
+reste invisible à qui n'est pas abonné, commenter ce qu'on ne peut pas lire est
+refusé, publier sous le nom d'un autre aussi, et un blocage coupe tout dans les deux
+sens. Le détail est dans [`SECURITE.md`](SECURITE.md).
 
 Un déclencheur crée le profil et le planning vide à l'inscription, avec un identifiant
 dérivé de l'adresse et dédoublonné.

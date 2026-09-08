@@ -50,28 +50,9 @@ a:hover{text-decoration:underline}
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
   outline:2px solid var(--sig);outline-offset:2px}
 
-.mast{background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--sig);
-  padding:.8rem 1.05rem;display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1.3rem}
-.mast h1{font-size:clamp(1.1rem,2.5vw,1.55rem);font-weight:700;letter-spacing:-.015em;line-height:1.1}
-
 .ro{background:var(--sunk);border:1px solid var(--rule);border-left:3px solid var(--ink3);
   padding:.5rem .75rem;font-size:.76rem;color:var(--ink2);display:flex;gap:.5rem;align-items:baseline}
 .ro b{color:var(--ink)}
-
-.tabs{display:flex;gap:2px;overflow-x:auto;background:var(--card);border:1px solid var(--rule);
-  padding:3px;position:relative;scrollbar-width:none}
-.tabs::-webkit-scrollbar{display:none}
-/* Le trait glisse d'un onglet à l'autre : on voit d'où l'on vient. */
-.tabs::after{content:"";position:absolute;bottom:3px;left:0;height:2px;
-  width:var(--tw,0);transform:translateX(var(--tx,0));background:var(--sig);
-  transition:transform .28s cubic-bezier(.4,0,.2,1),width .28s cubic-bezier(.4,0,.2,1);
-  pointer-events:none}
-.tabs button{flex:1 0 auto;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.77rem;
-  font-weight:600;padding:.48rem .72rem;border:none;background:transparent;color:var(--ink3);
-  cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
-.tabs button:hover{color:var(--ink2);background:var(--sunk)}
-.tabs button[aria-selected="true"]{color:var(--sig);border-bottom-color:transparent;background:var(--sunk)}
-.tabs button:focus-visible{outline:2px solid var(--sig);outline-offset:-2px}
 
 .panel{background:var(--card);border:1px solid var(--rule);padding:.9rem 1rem 1.05rem}
 .phead{display:flex;align-items:baseline;gap:.7rem;margin-bottom:.8rem;padding-bottom:.4rem;
@@ -166,9 +147,6 @@ label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.
 
 .scroll{overflow-x:auto;padding-bottom:.25rem}
 .grid{min-width:800px;display:grid;grid-template-columns:236px repeat(20,minmax(22px,1fr))}
-.mcell{grid-column:span 2;font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.07em;
-  text-transform:uppercase;color:var(--ink3);text-align:center;padding:.1rem 0 .25rem;
-  border-left:1px solid var(--rule);border-bottom:1px solid var(--rule)}
 .mcell.now{color:var(--sig);font-weight:700}
 .corner{border-bottom:1px solid var(--rule)}
 .glabel{grid-column:1;font-size:.73rem;color:var(--ink2);padding:.13rem .55rem .13rem 0;
@@ -228,9 +206,6 @@ label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.
 .step .lbl{flex:1;min-width:0}
 .step .hh{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--ink3);flex:none}
 
-
-
-
 /* notes */
 .gtab{width:100%;border-collapse:collapse;font-size:.75rem}
 .gtab th{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;
@@ -250,7 +225,6 @@ label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.
 .pill button{border:none;background:none;color:var(--ink3);cursor:pointer;font-size:.8rem;line-height:1;padding:0}
 .pill button:hover{color:var(--late)}
 
-
 /* ── écrans d'accueil ───────────────────────────────── */
 .centre{max-width:460px;margin:6vh auto;display:flex;flex-direction:column;gap:.9rem}
 .marque{text-align:center;margin-bottom:.4rem}
@@ -258,11 +232,6 @@ label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.
   text-transform:uppercase;color:var(--sig)}
 .marque h1{font-size:1.7rem;font-weight:700;letter-spacing:-.02em;margin-top:.2rem}
 .marque p{font-size:.82rem;color:var(--ink2);margin-top:.3rem}
-.onglets-auth{display:flex;gap:2px;background:var(--card);border:1px solid var(--rule);padding:3px}
-.onglets-auth button{flex:1;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.76rem;
-  font-weight:600;padding:.44rem;border:none;background:transparent;color:var(--ink3);cursor:pointer;
-  border-bottom:2px solid transparent}
-.onglets-auth button[aria-selected="true"]{color:var(--sig);border-bottom-color:var(--sig);background:var(--sunk)}
 form.carte{background:var(--card);border:1px solid var(--rule);padding:1rem 1.1rem 1.1rem;
   display:flex;flex-direction:column;gap:.55rem}
 form.carte .champ{display:flex;flex-direction:column;gap:.18rem}
@@ -279,9 +248,6 @@ form.carte button[type=submit]{margin-top:.3rem}
   font-family:"IBM Plex Mono",monospace;font-size:.72rem;font-weight:600;color:var(--sig)}
 .profil b{display:block;font-size:.82rem}
 .profil em{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink3);font-style:normal}
-.sep{display:flex;align-items:center;gap:.6rem;font-family:"IBM Plex Mono",monospace;font-size:.6rem;
-  letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin:.3rem 0}
-.sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--rule)}
 .quisuisje{margin-left:auto;display:flex;align-items:center;gap:.5rem}
 .quisuisje .moi{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink3)}
 
@@ -374,7 +340,6 @@ label.cap{flex-wrap:wrap}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .captot{grid-column:1/-1;font-size:.76rem;color:var(--ink2);margin-top:.3rem}
 
-
 /* ── bandeau d'alerte ─────────────────────────────────── */
 .bandeau{font-size:.79rem;line-height:1.5;padding:.6rem .8rem;background:var(--card);
   border:1px solid var(--rule);border-left:4px solid var(--ink3);color:var(--ink2)}
@@ -445,9 +410,6 @@ label.cap{flex-wrap:wrap}
 .phead .note b{color:var(--ink)}
 .phead .note b.fini{color:var(--ok)}
 
-/* ── horloge de Paris ─────────────────────────────────── */
-.clock{margin-left:auto;text-align:right;font-family:"IBM Plex Mono",ui-monospace,monospace;
-  line-height:1.2;flex:none}
 .clock .d{font-size:.68rem;color:var(--ink3)}
 .clock .t{font-size:1.3rem;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .clock .t .sec{font-size:.78rem;color:var(--ink3);font-weight:400}
@@ -482,56 +444,14 @@ label.cap{flex-wrap:wrap}
 .ckey i{width:15px;height:2.5px;border-radius:1px;display:block;flex:none}
 #evP{accent-color:var(--ok)}
 
-/* ── page d'accueil ───────────────────────────────────── */
-.accueil{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:clamp(1.4rem,4vw,2.6rem)}
-.enseigne{display:flex;align-items:center;gap:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--rule)}
-.enseigne .logo{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:1.15rem;
-  letter-spacing:-.01em;color:var(--ink)}
-.enseigne .logo::before{content:"";display:inline-block;width:9px;height:9px;background:var(--sig);
-  border-radius:50%;margin-right:.45rem;vertical-align:middle}
-.enseigne nav{margin-left:auto;font-size:.8rem}
-.enseigne nav a{color:var(--ink3)}
-.enseigne nav a:hover{color:var(--sig)}
-
-.heros{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.92fr);gap:clamp(1.2rem,4vw,2.6rem);
-  align-items:center}
 @media(max-width:820px){.heros{grid-template-columns:1fr}}
-.argu h1{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:clamp(1.8rem,5.2vw,3rem);
-  font-weight:700;letter-spacing:-.025em;line-height:1.08;text-wrap:balance}
-.argu h1 em{font-style:normal;color:var(--sig)}
-.chapo{font-size:clamp(.92rem,1.6vw,1.02rem);color:var(--ink2);line-height:1.6;margin-top:.85rem;
-  max-width:34rem}
-.chapo b{color:var(--ink)}
-.hbtn{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.15rem}
 .btn.gros{font-size:.74rem;padding:.62rem 1.15rem}
 .argu .petit{margin-top:.7rem;font-size:.75rem;color:var(--ink3)}
 
-/* l'aperçu montre le produit : une vraie journée, pas une capture décorative */
-.apercu{background:var(--card);border:1px solid var(--rule);padding:.75rem .8rem .85rem;
-  display:flex;flex-direction:column;gap:3px;
-  box-shadow:0 14px 40px color-mix(in srgb,var(--ink) 10%,transparent)}
-.apbar{display:flex;align-items:center;gap:.35rem;padding:0 .2rem .5rem;margin-bottom:.15rem;
-  border-bottom:1px solid var(--rule2)}
-.apbar span{width:8px;height:8px;border-radius:50%;background:var(--rule)}
-.apbar b{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:.63rem;color:var(--ink3);
-  font-weight:500}
-.apligne{display:flex;gap:.65rem;align-items:baseline;padding:.36rem .5rem;font-size:.76rem;
-  background:var(--sunk);border-left:3px solid transparent}
-.apligne span{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--ink3);flex:none;
-  min-width:92px;font-variant-numeric:tabular-nums}
-.apligne b{color:var(--ink);font-weight:600}
-.apligne i{color:var(--ink3);font-size:.72rem}
 .apligne.trav{border-left-color:var(--c)}
 .apligne.pause,.apligne.repas{background:transparent;padding-top:.16rem;padding-bottom:.16rem}
 .apligne.libre{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 9%,var(--sunk))}
 .apligne.libre b{color:var(--ok)}
-
-.atouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px;
-  background:var(--rule2);border:1px solid var(--rule2)}
-.atout{background:var(--card);padding:.9rem 1rem 1rem}
-.atout .an{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:.88rem;
-  color:var(--ink);margin-bottom:.32rem}
-.atout p{font-size:.8rem;color:var(--ink2);line-height:1.55}
 
 .boite{max-width:31rem;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:.7rem}
 .fl2{font-size:.7rem;color:var(--ink3);margin-top:.22rem}
@@ -551,14 +471,6 @@ label.cap{flex-wrap:wrap}
 .consent{display:flex;gap:.55rem;align-items:flex-start;font-size:.78rem;color:var(--ink2);
   line-height:1.5;cursor:pointer}
 .consent input{margin-top:.18rem;accent-color:var(--ok);width:16px;height:16px;flex:none}
-.vitrine{display:flex;flex-direction:column;gap:.5rem;max-width:31rem;width:100%;margin:0 auto}
-
-.pieds{display:flex;flex-wrap:wrap;gap:.4rem 1.1rem;justify-content:center;align-items:center;
-  padding:1rem 0 .5rem;margin-top:.5rem;border-top:1px solid var(--rule);
-  font-size:.73rem;color:var(--ink3)}
-.pieds span{font-weight:600;color:var(--ink2)}
-.pieds a{color:var(--ink3)}
-.pieds a:hover{color:var(--sig)}
 
 /* ── réglages : membres, invitations, compte ──────────── */
 .btn.danger{border-color:var(--late);color:var(--late)}
@@ -604,19 +516,12 @@ table.etapes td:last-child{width:2rem}
   body{padding:.55rem}
   .wrap{gap:.6rem}
   .panel{padding:.75rem .7rem .85rem}
-  .mast{flex-wrap:wrap;gap:.5rem;padding:.7rem .8rem}
-  .mast h1{font-size:1.15rem}
   .ident{flex:1 1 100%}
-  .clock{margin-left:0;text-align:left;display:flex;align-items:baseline;gap:.45rem;
-    flex:1 1 100%;order:3;border-top:1px solid var(--rule2);padding-top:.45rem}
   .clock .d{font-size:.66rem}
   .clock .t{font-size:.95rem}
   .clock .s{margin-top:0;margin-left:auto;justify-content:flex-end}
   .quisuisje{margin-left:auto;order:2}
   .quisuisje .moi{max-width:11rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-  .tabs{padding:2px;gap:0}
-  .tabs button{font-size:.7rem;padding:.5rem .3rem;letter-spacing:0;min-height:40px}
 
   .hbig{font-size:1.5rem}
   .hero{padding:.8rem .85rem;border-left-width:4px}
@@ -682,20 +587,9 @@ table.etapes td:last-child{width:2rem}
   .jourlibre{flex-wrap:wrap}
   .jourlibre .quand{flex:1 1 100%}
   .resume{gap:.4rem .9rem}
-  .pieds{gap:.3rem .7rem;font-size:.7rem}
 
-  /* accueil */
-  .accueil{gap:1.3rem}
-  .heros{gap:1.1rem}
-  .apercu{padding:.6rem .55rem .65rem}
-  .apligne{flex-wrap:wrap;gap:.05rem .5rem;padding:.3rem .4rem}
-  .apligne span{min-width:0;flex:1 1 100%}
-  .atouts{grid-template-columns:1fr}
   .boite,.vitrine{max-width:none}
   .modele{padding:.6rem .55rem}
-}
-@media (max-width:380px){
-  .tabs button{font-size:.65rem;padding:.5rem .18rem}
 }
 /* Pas d'effet de survol là où il n'y a pas de souris. */
 @media (hover:none){
@@ -744,22 +638,12 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
     transition-duration:.001ms!important;scroll-behavior:auto!important}
-  .tabs::after{transition:none}
 }
 
 /* Visible des seuls lecteurs d'écran : l'étiquette existe sans occuper la place. */
 .horsvue{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
   clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
-/* ── installation et mention bêta ─────────────────────── */
-.pose{display:flex;align-items:center;gap:.7rem;max-width:31rem;width:100%;margin:0 auto;
-  background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--sig);
-  padding:.6rem .7rem}
-.pose img{flex:none;border-radius:8px}
-.pose div{flex:1;min-width:0}
-.pose b{display:block;font-size:.82rem;color:var(--ink)}
-.pose em{display:block;font-style:normal;font-size:.74rem;color:var(--ink3);line-height:1.45;
-  margin-top:.1rem}
 .pose .btn{flex:none}
 .pose .btn.mini{padding:.2rem .4rem;border-color:transparent;color:var(--ink3)}
 .pieds .beta{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.6rem;
@@ -821,106 +705,320 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
   .pers{gap:.4rem}.pers .act{margin-left:0;width:100%}
   .rform{grid-template-columns:1fr}
 }
+
+/* ═════════════════════════════════════════════════════════════════════
+   RÉSEAU — la porte, le socle, le fil, les conversations
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* ── La porte ────────────────────────────────────────────────────────
+   Trois boutons, rien d'autre. Ce qu'on n'affiche pas ici, on ne le lit
+   pas non plus : c'était tout le problème de l'ancienne page. */
+.porte{min-height:calc(100svh - 5.5rem);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;gap:.2rem;
+  max-width:24rem;margin:0 auto;padding:1rem 0}
+.porte .sceau{filter:drop-shadow(0 6px 18px rgba(0,0,0,.16));
+  animation:poser .6s cubic-bezier(.2,.8,.3,1) both}
+@keyframes poser{from{opacity:0;transform:translateY(10px) scale(.94)}to{opacity:1;transform:none}}
+.porte h1{font-size:2.4rem;font-weight:700;letter-spacing:-.035em;margin-top:.5rem;
+  animation:poser .6s .06s cubic-bezier(.2,.8,.3,1) both}
+.porte .accroche{font-size:1rem;line-height:1.45;color:var(--ink2);margin-top:.5rem;
+  text-wrap:balance;animation:poser .6s .12s cubic-bezier(.2,.8,.3,1) both}
+.porte .choix{display:flex;flex-direction:column;gap:.5rem;width:100%;margin-top:2rem;
+  animation:poser .6s .2s cubic-bezier(.2,.8,.3,1) both}
+.porte .choix .btn{width:100%;justify-content:center;text-align:center}
+.btn.plat{border-color:transparent;color:var(--ink3);background:transparent}
+.btn.plat:hover{color:var(--sig);border-color:transparent;background:var(--sunk)}
+
+.souspied{display:flex;flex-wrap:wrap;gap:.15rem .9rem;justify-content:center;
+  font-size:.68rem;color:var(--ink3);padding:1rem 0 .3rem}
+.souspied a{color:var(--ink3)}
+.souspied a:hover{color:var(--sig)}
+.souspied .beta{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.1em;
+  border:1px solid var(--rule);padding:.02rem .3rem;opacity:.7}
+.souspied.dansappli{padding:.9rem 0 .2rem;opacity:.55}
+
+/* ── Écran de compte ─────────────────────────────────────────────── */
+#ecranAuth{max-width:31rem;margin:0 auto;padding-top:clamp(1rem,7vh,4rem);position:relative}
+#ecranAuth .entete{display:flex;align-items:center;gap:.65rem;margin-bottom:.2rem}
+#ecranAuth .entete h1{font-size:1.35rem;font-weight:700;letter-spacing:-.02em}
+.rev{width:34px;height:34px;flex:none;display:grid;place-content:center;font-size:1.5rem;
+  line-height:1;background:var(--card);border:1px solid var(--rule);color:var(--ink2);
+  cursor:pointer;padding:0 0 .18rem}
+.rev:hover{border-color:var(--sig);color:var(--sig)}
+#ecranAuth .rev{margin-bottom:.4rem}
+.carte .btn{width:100%}
+
+/* ── Barre du haut ───────────────────────────────────────────────── */
+.barre{position:sticky;top:calc(-1 * clamp(.7rem,2vw,1.5rem));z-index:30;
+  background:color-mix(in srgb,var(--paper) 88%,transparent);
+  backdrop-filter:saturate(1.4) blur(10px);
+  border-bottom:1px solid var(--rule);margin:calc(-1 * clamp(.7rem,2vw,1.5rem)) 0 0;
+  padding:.55rem 0;display:flex;align-items:center;gap:.7rem}
+.barre .ident{min-width:0;flex:1}
+.barre h1{font-size:1.15rem;font-weight:700;letter-spacing:-.02em;line-height:1.15;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.barre .sous,.barre .reel{font-size:.68rem;color:var(--ink3);line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.horlogette{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15;flex:none}
+.horlogette .d{font-size:.6rem;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
+.horlogette .t{font-size:.92rem;font-weight:600;font-variant-numeric:tabular-nums}
+.horlogette .sec{font-size:.66rem;color:var(--ink3)}
+.quisuisje{flex:none}
+
+/* ── Vignettes de profil ─────────────────────────────────────────── */
+.av{width:36px;height:36px;flex:none;border-radius:50%;object-fit:cover;background:var(--sunk);
+  display:grid;place-content:center;font-family:"IBM Plex Sans Condensed",sans-serif;
+  font-size:.78rem;font-weight:700;color:var(--ink2);border:1px solid var(--rule);
+  overflow:hidden;text-transform:uppercase;letter-spacing:.02em}
+.av.gr{width:64px;height:64px;font-size:1.3rem}
+.av.pt{width:28px;height:28px;font-size:.64rem}
+button.av{cursor:pointer;padding:0}
+button.av:hover{border-color:var(--sig)}
+.av img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* ── Socle de navigation ─────────────────────────────────────────── */
+.socle{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;
+  background:color-mix(in srgb,var(--card) 94%,transparent);
+  backdrop-filter:saturate(1.4) blur(12px);
+  border-top:1px solid var(--rule);
+  padding-bottom:env(safe-area-inset-bottom)}
+.socle button{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;
+  gap:.14rem;padding:.42rem .1rem .38rem;background:none;border:none;cursor:pointer;
+  color:var(--ink3);font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.62rem;
+  letter-spacing:.01em;min-height:52px}
+.socle button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round;transition:transform .2s cubic-bezier(.3,1.4,.5,1)}
+.socle button[aria-current="page"]{color:var(--sig)}
+.socle button[aria-current="page"] svg{transform:translateY(-2px) scale(1.06)}
+.socle button[aria-current="page"]::before{content:"";position:absolute;top:0;left:26%;right:26%;
+  height:2px;background:var(--sig)}
+.socle button:active svg{transform:scale(.9)}
+.socle .pastille{position:absolute;top:.3rem;left:calc(50% + .42rem);margin:0}
+
+/* ── Interrupteur segmenté ───────────────────────────────────────── */
+.segs{display:flex;gap:2px;background:var(--sunk);border:1px solid var(--rule);padding:2px;
+  position:relative;overflow-x:auto;scrollbar-width:none}
+.segs::-webkit-scrollbar{display:none}
+.segs button{flex:1 0 auto;position:relative;font-family:"IBM Plex Sans Condensed",sans-serif;
+  font-size:.75rem;font-weight:600;padding:.42rem .8rem;border:none;background:transparent;
+  color:var(--ink3);cursor:pointer;white-space:nowrap;transition:color .2s ease}
+.segs button[aria-selected="true"]{color:var(--ink);background:var(--card);
+  box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.segs button:hover{color:var(--ink2)}
+
+/* ── Replis ──────────────────────────────────────────────────────── */
+.repli{background:var(--card);border:1px solid var(--rule)}
+.repli>summary{cursor:pointer;padding:.6rem .8rem;font-family:"IBM Plex Sans Condensed",sans-serif;
+  font-size:.8rem;font-weight:600;list-style:none;display:flex;align-items:center;gap:.5rem}
+.repli>summary::-webkit-details-marker{display:none}
+.repli>summary::before{content:"›";color:var(--ink3);font-size:1.1rem;line-height:1;
+  transition:transform .2s ease;display:inline-block}
+.repli[open]>summary::before{transform:rotate(90deg)}
+.repli>summary:hover{color:var(--sig)}
+.repli>summary .note{margin-left:auto;font-size:.66rem;color:var(--ink3);font-weight:400}
+.repli>*:not(summary){padding:0 .8rem .8rem;animation:deplier .22s ease}
+@keyframes deplier{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.chercher{max-width:100%;margin-bottom:.6rem}
+
+/* ── Le fil ──────────────────────────────────────────────────────── */
+.ecrire{background:var(--card);border:1px solid var(--rule);padding:.7rem .8rem;
+  display:flex;gap:.6rem;align-items:flex-start}
+.ecrire textarea{flex:1;min-height:2.4rem;max-height:11rem;resize:vertical;font:inherit;
+  font-size:.85rem;background:var(--sunk);border:1px solid var(--rule);color:var(--ink);
+  padding:.5rem .6rem}
+.ecrire .outils{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.5rem}
+.ecrire .outils .btn{flex:none}
+.ecrire .apercuimg{position:relative;margin-top:.5rem;max-width:14rem}
+.ecrire .apercuimg img{display:block;border:1px solid var(--rule)}
+.ecrire .apercuimg button{position:absolute;top:.25rem;right:.25rem}
+.ecrire .col{flex:1;min-width:0}
+
+.post{background:var(--card);border:1px solid var(--rule);margin-bottom:.6rem;
+  animation:monter .3s cubic-bezier(.2,.8,.3,1) both}
+@keyframes monter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.post .tete{display:flex;align-items:center;gap:.55rem;padding:.6rem .8rem .45rem}
+.post .tete .qui{min-width:0;flex:1}
+.post .tete b{display:block;font-size:.83rem;line-height:1.2}
+.post .tete em{font-style:normal;font-family:"IBM Plex Mono",monospace;font-size:.63rem;
+  color:var(--ink3)}
+.post .quand{font-size:.65rem;color:var(--ink3);white-space:nowrap}
+.post .corps{padding:0 .8rem .6rem;font-size:.88rem;line-height:1.55;white-space:pre-wrap;
+  overflow-wrap:anywhere}
+.post .cliche{display:block;width:100%;background:var(--sunk);border-top:1px solid var(--rule2);
+  border-bottom:1px solid var(--rule2)}
+.post .actions{display:flex;align-items:center;gap:.2rem;padding:.35rem .5rem}
+.post .actions .bta{display:flex;align-items:center;gap:.32rem;padding:.35rem .55rem;
+  background:none;border:none;cursor:pointer;color:var(--ink3);font-size:.72rem;
+  font-family:inherit}
+.post .actions .bta:hover{color:var(--sig)}
+.post .actions .bta svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round;transition:transform .2s cubic-bezier(.3,1.5,.5,1)}
+.post .actions .bta.actif{color:var(--sig)}
+.post .actions .bta.actif svg{fill:var(--sig);stroke:var(--sig);transform:scale(1.1)}
+.post .actions .fin{margin-left:auto}
+.post .fils{border-top:1px solid var(--rule2);padding:.5rem .8rem .6rem}
+.post .com{display:flex;gap:.5rem;padding:.28rem 0;font-size:.8rem;line-height:1.45}
+.post .com b{font-weight:600}
+.post .com .txt{min-width:0;overflow-wrap:anywhere}
+.post .com .sup{margin-left:auto;opacity:0;transition:opacity .15s}
+.post .com:hover .sup{opacity:1}
+.post .repondre{display:flex;gap:.35rem;margin-top:.45rem}
+.post .repondre input{flex:1;min-width:0;font-size:.8rem}
+.portee{font-family:"IBM Plex Mono",monospace;font-size:.58rem;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink3);border:1px solid var(--rule);padding:.02rem .28rem}
+
+/* ── Conversations ───────────────────────────────────────────────── */
+.filrang{display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;background:var(--card);
+  border:1px solid var(--rule);margin-bottom:.3rem;cursor:pointer;width:100%;text-align:left;
+  font:inherit;color:inherit;transition:transform .15s ease,border-color .15s ease}
+.filrang:hover{border-color:var(--sig);transform:translateX(2px)}
+.filrang .qui{min-width:0;flex:1}
+.filrang b{display:block;font-size:.83rem}
+.filrang em{font-style:normal;font-size:.74rem;color:var(--ink3);display:block;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.filrang .quand{font-size:.63rem;color:var(--ink3);white-space:nowrap;align-self:flex-start}
+.filrang.neuf b::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--sig);margin-left:.4rem;vertical-align:middle}
+
+.conv{display:flex;flex-direction:column;gap:.5rem;min-height:60svh}
+.convcorps{display:flex;flex-direction:column;gap:.3rem;padding:.2rem 0}
+.mot{max-width:min(78%,30rem);padding:.45rem .7rem;font-size:.85rem;line-height:1.5;
+  background:var(--card);border:1px solid var(--rule);align-self:flex-start;
+  overflow-wrap:anywhere;white-space:pre-wrap;
+  animation:bullir .25s cubic-bezier(.2,.8,.3,1) both}
+@keyframes bullir{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.mot.moi{align-self:flex-end;background:var(--sig);color:#fff;border-color:var(--sig)}
+.mot .h{display:block;font-size:.6rem;opacity:.65;margin-top:.2rem;text-align:right}
+.mot.creneau{border-left:3px solid var(--evt);background:var(--sunk);color:var(--ink)}
+.mot.creneau.moi{border-left-color:#fff}
+.mot.creneau .quoi{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
+  font-size:.8rem;display:block;margin-bottom:.15rem}
+.convpied{display:flex;gap:.4rem;position:sticky;bottom:calc(56px + env(safe-area-inset-bottom));
+  background:var(--paper);padding:.5rem 0}
+.convpied input{flex:1;min-width:0}
+.convferme{font-size:.76rem;color:var(--ink2);background:var(--sunk);border:1px solid var(--rule);
+  border-left:3px solid var(--warn);padding:.55rem .7rem}
+
+/* ── Fiche de quelqu'un ──────────────────────────────────────────── */
+.fiche{background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--sig);
+  padding:1rem}
+.fiche .haut{display:flex;gap:.85rem;align-items:flex-start}
+.fiche h2{font-size:1.25rem;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+.fiche .arobase{font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink3)}
+.fiche .bio{font-size:.84rem;color:var(--ink2);margin-top:.5rem;overflow-wrap:anywhere}
+.fiche .traits{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.6rem}
+.trait{display:inline-flex;align-items:center;gap:.3rem;font-size:.7rem;color:var(--ink2);
+  background:var(--sunk);border:1px solid var(--rule);padding:.15rem .45rem}
+.trait .mono{font-size:.72rem}
+.fiche .actes{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.85rem}
+
+/* ── Classement ──────────────────────────────────────────────────── */
+.rang{display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;background:var(--card);
+  border:1px solid var(--rule);margin-bottom:.25rem}
+.rang.moi{border-color:var(--sig);background:color-mix(in srgb,var(--sig) 5%,var(--card))}
+.rang .n{font-family:"IBM Plex Mono",monospace;font-size:.8rem;color:var(--ink3);
+  width:1.6rem;text-align:right;flex:none;font-variant-numeric:tabular-nums}
+.rang .qui{flex:1;min-width:0}
+.rang b{display:block;font-size:.82rem}
+.rang em{font-style:normal;font-size:.66rem;color:var(--ink3)}
+.rang .h{font-family:"IBM Plex Mono",monospace;font-size:.84rem;font-weight:600;
+  font-variant-numeric:tabular-nums}
+.rang.podium .n{color:var(--sig);font-weight:700}
+
+/* ── Moments communs ─────────────────────────────────────────────── */
+.commun{display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;background:var(--card);
+  border:1px solid var(--rule);border-left:3px solid var(--ok);margin-bottom:.3rem}
+.commun .qui{flex:1;min-width:0}
+.commun b{display:block;font-size:.82rem}
+.commun em{font-style:normal;font-size:.7rem;color:var(--ink2)}
+
+/* ── Petits écrans : c'est là que ça se joue ─────────────────────── */
+body{padding-bottom:calc(56px + env(safe-area-inset-bottom) + .8rem)}
+#appli{max-width:640px}
+#appli[data-large]{max-width:1180px}
+
+@media (max-width:640px){
+  body{padding-left:.55rem;padding-right:.55rem}
+  .barre h1{font-size:1.02rem}
+  .horlogette .t{font-size:.82rem}
+  .horlogette .sec{display:none}
+  .post .corps{font-size:.86rem}
+  .socle button span:not(.pastille){font-size:.58rem}
+}
+
+.ecrire .outils select{width:auto;flex:1 1 6rem;min-width:0;font-size:.75rem;padding:.3rem .35rem}
+.ecrire .outils{gap:.4rem;justify-content:flex-end}
+.ecrire .outils .btn:first-of-type{margin-right:auto}
+#appli{min-height:calc(100svh - 2rem - 56px);justify-content:flex-start}
+.souspied.dansappli{margin-top:auto}
+.porte{gap:0}
+.fiche .actes .btn{flex:0 1 auto}
+
+.repli.plie{border:none;background:transparent}
+.repli.plie>summary{padding:.35rem 0;font-size:.72rem;color:var(--ink3);font-weight:400}
+.repli.plie>*:not(summary){padding:0}
+
+.vide{font-size:.8rem;color:var(--ink3);padding:.7rem .8rem;background:var(--card);
+  border:1px solid var(--rule);display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.gens .vide{background:transparent;border:none;padding:.3rem 0;font-style:italic}
+
+@media (min-width:900px){
+  #appli[data-large]{max-width:1180px}
+  /* Barre fixe : il faut la laisser calée sur le viewport et resserrer les
+     boutons dedans. Lui donner une largeur la décalerait sur sa position
+     statique, c'est-à-dire au milieu de nulle part. */
+  .socle{justify-content:center}
+  .socle button{flex:0 1 9.5rem}
+  .barre{padding:.7rem 0}
+}
 </style>
 </head>
 <body>
+<!-- ═════════ LA PORTE ═════════
+     Un seul écran, une seule décision. Tout le reste vient après, et seulement
+     si on l'a demandé. -->
+<section id="porte" hidden>
+  <div class="porte">
+    <img src="icones/repere.svg" alt="" width="76" height="76" class="sceau">
+    <h1>Repère</h1>
+    <p class="accroche">Ton travail réparti.<br>Tes proches qui savent quand tu es libre.</p>
+    <div class="choix">
+      <button class="btn pri gros" data-porte="inscription">Créer un compte</button>
+      <button class="btn gros" data-porte="connexion">J'ai déjà un compte</button>
+      <button class="btn plat" data-porte="visite">Regarder sans compte</button>
+    </div>
+  </div>
+  <div class="souspied">
+    <a href="aide.html">Aide</a><a href="installer.html">Installer</a>
+    <a href="conditions.html">Conditions</a><a href="confidentialite.html">Confidentialité</a>
+    <a class="beta" href="beta.html" title="Ce que « bêta » implique">bêta</a>
+  </div>
+</section>
+
+<!-- ═════════ COMPTE ═════════ -->
 <section id="ecranAuth" hidden>
- <div class="accueil">
-
-  <header class="enseigne">
-    <div class="logo">Repère</div>
-    <nav><a href="aide.html">Comment ça marche</a></nav>
-  </header>
-
-  <div class="heros">
-    <div class="argu">
-      <h1>Ton travail réparti,<br>et tes proches qui savent<br><em>quand tu es libre</em>.</h1>
-      <p class="chapo">Tu déclares ce que tu as à faire et les heures dont tu disposes.
-        Repère place le travail dedans, garde les pauses, rattrape le retard le soir
-        plutôt que de le laisser filer — et répond enfin à la question qu'on te pose
-        tout le temps : <b>« tu es libre quand ? »</b></p>
-      <div class="hbtn">
-        <button class="btn pri gros" data-aller="inscription">Créer mon compte</button>
-        <button class="btn gros" data-aller="connexion">J'ai déjà un compte</button>
-      </div>
-      <p class="petit">Gratuit. Sans publicité, sans traceur, sans cookie.
-        Ton planning est privé par défaut.</p>
-    </div>
-
-    <div class="apercu" aria-hidden="true">
-      <div class="apbar"><span></span><span></span><span></span><b>Lundi 7 septembre</b></div>
-      <div class="apligne trav" style="--c:var(--b1)"><span>09:00 – 10:30</span><b>Suites numériques</b></div>
-      <div class="apligne pause"><span>10:30 – 10:45</span><i>Pause</i></div>
-      <div class="apligne trav" style="--c:var(--b3)"><span>10:45 – 12:15</span><b>Analyse de risque</b></div>
-      <div class="apligne repas"><span>12:15 – 13:15</span><i>Repas</i></div>
-      <div class="apligne trav" style="--c:var(--stg)"><span>13:15 – 14:45</span><b>Rapport de stage</b></div>
-      <div class="apligne libre"><span>14:45 – 22:00</span><b>Libre · 7 h 15</b></div>
-    </div>
-  </div>
-
-  <div class="atouts">
-    <div class="atout">
-      <div class="an">Des heures, pas des cases</div>
-      <p>« Libre samedi de 14 h à 18 h », pas « chargé cette semaine ». Ceux qui veulent
-      caler quelque chose avec toi voient de vraies plages horaires.</p>
-    </div>
-    <div class="atout">
-      <div class="an">Les pauses sont non négociables</div>
-      <p>15 minutes après chaque 1 h 30, le repas intouchable, et jamais plus de
-      2 h 30 de rattrapage par jour. Au-delà, on te prévient au lieu de t'aligner
-      des journées de quatorze heures.</p>
-    </div>
-    <div class="atout">
-      <div class="an">Ta journée finie est vraiment finie</div>
-      <p>La part du jour est fixée le matin et ne fait que décroître. Quand tu as tout
-      coché, la journée se libère — elle ne se remplit pas avec le travail de demain.</p>
-    </div>
-    <div class="atout">
-      <div class="an">Un imprévu ? Ça se décale</div>
-      <p>Tu ajoutes une sortie de 14 h à 17 h : le travail se replace autour. Repère ne
-      refuse que si plus rien ne tient nulle part — et il te dit alors quel jour bloque.</p>
-    </div>
-    <div class="atout">
-      <div class="an">Ton programme, pas le mien</div>
-      <p>Pars du référentiel BTS CIEL, d'une trame de révisions, ou d'une page blanche
-      où tu déclares tes propres matières.</p>
-    </div>
-    <div class="atout">
-      <div class="an">Tu choisis qui regarde</div>
-      <p>Privé par défaut. Autorise des comptes un par un, envoie un lien d'invitation,
-      ou ouvre le planning à tous. Toujours en lecture seule.</p>
-    </div>
-  </div>
-
   <div class="boite" id="boiteAuth">
-    <div class="onglets-auth" role="tablist">
-      <button role="tab" data-auth="inscription" aria-selected="true">Créer un compte</button>
-      <button role="tab" data-auth="connexion" aria-selected="false">Connexion</button>
-      <button role="tab" data-auth="oubli" aria-selected="false">Mot de passe oublié</button>
+    <button class="rev" data-porte="retour" aria-label="Revenir">&lsaquo;</button>
+    <div class="entete">
+      <img src="icones/repere.svg" alt="" width="40" height="40">
+      <h1 id="titreAuth">Créer un compte</h1>
     </div>
     <div id="authMsg" class="authmsg" hidden></div>
 
     <form class="carte" id="formInscription">
       <div class="champ"><label class="fl" for="insNom">Nom affiché</label>
-        <input id="insNom" type="text" maxlength="40" placeholder="Comment on t'appelle" required>
+        <input id="insNom" type="text" maxlength="40" placeholder="Un pseudonyme suffit" required>
         <div class="dispo" id="nomDispo"></div></div>
       <div class="champ"><label class="fl" for="insEmail">Adresse électronique</label>
         <input id="insEmail" type="email" autocomplete="email" required></div>
       <div class="champ"><label class="fl" for="insMdp">Mot de passe</label>
         <input id="insMdp" type="password" autocomplete="new-password" minlength="8" required>
         <div class="fl2">8 caractères au minimum.</div></div>
-
-      <div class="champ"><span class="fl">Par quoi commencer</span>
-        <div class="modeles" id="insModeles"></div></div>
-
       <label class="consent"><input type="checkbox" id="insCgu" required>
-        <span>J'ai lu et j'accepte les <a href="conditions.html" target="_blank" rel="noopener">conditions
-        générales</a> et la <a href="confidentialite.html" target="_blank" rel="noopener">politique de
-        confidentialité</a>.</span></label>
-
+        <span>J'accepte les <a href="conditions.html" target="_blank" rel="noopener">conditions</a>
+        et la <a href="confidentialite.html" target="_blank" rel="noopener">confidentialité</a>.</span></label>
       <button class="btn pri" type="submit">Créer mon compte</button>
-      <p class="aide">Une seule inscription par adresse. Ton planning est privé tant que
-        tu ne décides pas le contraire.</p>
+      <button class="btn plat" type="button" data-auth="connexion">J'ai déjà un compte</button>
     </form>
 
     <form class="carte" id="formConnexion" hidden>
@@ -929,13 +1027,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
       <div class="champ"><label class="fl" for="conMdp">Mot de passe</label>
         <input id="conMdp" type="password" autocomplete="current-password" required></div>
       <button class="btn pri" type="submit">Se connecter</button>
+      <button class="btn plat" type="button" data-auth="oubli">Mot de passe oublié</button>
     </form>
 
     <form class="carte" id="formOubli" hidden>
       <div class="champ"><label class="fl" for="oubEmail">Adresse électronique</label>
         <input id="oubEmail" type="email" autocomplete="email" required></div>
-      <p class="aide">Tu recevras un lien pour choisir un nouveau mot de passe.</p>
       <button class="btn pri" type="submit">Envoyer le lien</button>
+      <button class="btn plat" type="button" data-auth="connexion">Revenir</button>
     </form>
 
     <form class="carte" id="formNouveau" hidden>
@@ -944,34 +1043,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
         <div class="fl2">8 caractères au minimum.</div></div>
       <div class="champ"><label class="fl" for="nouMdp2">Répète-le</label>
         <input id="nouMdp2" type="password" autocomplete="new-password" minlength="8" required></div>
-      <button class="btn pri" type="submit">Enregistrer et revenir à la connexion</button>
+      <button class="btn pri" type="submit">Enregistrer</button>
     </form>
   </div>
-
-  <div class="pose" id="pose" hidden>
-    <img src="icones/repere-192.png" alt="" width="44" height="44">
-    <div><b>Mets Repère sur ton écran d'accueil</b>
-      <em>Deux gestes, moins d'un mégaoctet, et ça s'ouvre comme une vraie application
-        — même sans réseau.</em></div>
-    <a class="btn" href="installer.html">Comment faire</a>
-    <button class="btn mini" id="poseNon" aria-label="Masquer">✕</button>
-  </div>
-
-  <div class="vitrine" id="vitrine" hidden>
-    <div class="sep">Des plannings ouverts à consulter</div>
-    <div class="profils" id="listeProfils"></div>
-  </div>
-
-  <div class="pieds">
-    <span>Repère</span>
-    <a href="installer.html">Installer l'application</a>
-    <a href="aide.html">Aide</a>
-    <a href="conditions.html">Conditions</a>
-    <a href="confidentialite.html">Confidentialité</a>
-    <a href="aide.html#mentions">Mentions légales</a>
-    <a class="beta" href="beta.html" title="Ce que « bêta » implique">bêta</a>
-  </div>
- </div>
 </section>
 
 <section id="ecranProfils" class="centre" hidden>
@@ -986,32 +1060,29 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
 
 <section id="appli" class="wrap" hidden>
 
-  <header class="mast">
+  <header class="barre">
+    <button class="rev" id="revenir" hidden aria-label="Revenir">&lsaquo;</button>
     <div class="ident">
-      <h1 id="titreProfil">Mon planning</h1>
+      <h1 id="titreProfil">Aujourd'hui</h1>
       <div class="reel" id="sousReel" hidden></div>
       <div class="sous" id="sousTitre"></div>
     </div>
-    <div class="clock" id="horloge">
-      <div class="d" id="clkD">—</div>
-      <div class="t" id="clkT">--:--<span class="sec" id="clkS">:--</span></div>
-      <div class="s"><span class="dot ok"></span>heure de Paris</div>
+    <div class="horlogette" id="horloge">
+      <span class="d" id="clkD">—</span>
+      <span class="t mono" id="clkT">--:--<span class="sec" id="clkS">:--</span></span>
     </div>
     <div class="quisuisje" id="quiSuisJe"></div>
   </header>
 
   <div class="ro" id="robar" hidden>
-    <b>Vue publique.</b><span>Tu consultes ce planning en lecture seule.</span>
+    <b>Vue publique.</b><span>Lecture seule.</span>
   </div>
 
-  <nav class="tabs" role="tablist" id="tabs">
-    <button role="tab" data-tab="today" aria-selected="true">Aujourd'hui</button>
-    <button role="tab" data-tab="cal"   aria-selected="false">Calendrier</button>
-    <button role="tab" data-tab="dispo" aria-selected="false">Quand je suis libre</button>
-    <button role="tab" data-tab="social" aria-selected="false">Contacts<span class="pastille" id="pastille" hidden></span></button>
-    <button role="tab" data-tab="todo"  aria-selected="false">Étapes</button>
-    <button role="tab" data-tab="regl"  aria-selected="false">Réglages</button>
-  </nav>
+  <div class="segs" data-segs="planning" id="segPlanning" hidden>
+    <button data-seg="cal" aria-selected="true">Calendrier</button>
+    <button data-seg="dispo">Quand je suis libre</button>
+    <button data-seg="todo">Étapes</button>
+  </div>
 
   <!-- ─────────── AUJOURD'HUI ─────────── -->
   <section data-panel="today" class="stack">
@@ -1028,10 +1099,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
       <div id="journee"></div>
     </div>
 
-    <div class="panel" id="blocRetard" hidden>
-      <div class="phead"><h2>En retard</h2><div class="note" id="lateNote"></div></div>
+    <details class="repli" id="blocRetard" hidden>
+      <summary>En retard <span class="note" id="lateNote"></span></summary>
       <div class="queue" id="lateq"></div>
-    </div>
+    </details>
   </section>
 
   <!-- ─────────── CALENDRIER ─────────── -->
@@ -1082,54 +1153,77 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
       <div id="creneaux"></div>
     </div>
 
-    <div class="panel">
-      <div class="phead"><h2>Derniers changements</h2><div class="note" id="jNote"></div></div>
-      <div id="jlist"></div>
-      <form id="subf" class="subf">
-        <label class="horsvue" for="subE">Adresse électronique pour être prévenu</label>
-        <input id="subE" type="email" placeholder="Ton adresse pour être prévenu" required>
-        <button class="btn pri" type="submit">M'abonner</button>
-      </form>
-      <div class="subs" id="subs"></div>
+    <details class="repli"><summary>Derniers changements <span class="note" id="jNote"></span></summary>
+      <div id="jlist"></div></details>
+  </section>
+
+  <!-- ─────────── LE FIL ─────────── -->
+  <section data-panel="fil" class="stack" hidden>
+    <div class="segs" data-segs="fil">
+      <button data-seg="fil" aria-selected="true">Le fil</button>
+      <button data-seg="decouvrir">Découvrir</button>
+      <button data-seg="classement">Classement</button>
     </div>
+    <div data-vol="fil">
+      <div class="ecrire" id="ecrire"></div>
+      <div id="posts"></div>
+    </div>
+    <div data-vol="decouvrir" hidden>
+      <div class="champ chercher">
+        <label class="horsvue" for="chercheP">Chercher quelqu'un</label>
+        <input id="chercheP" type="search" placeholder="Chercher un pseudonyme…">
+      </div>
+      <div id="annuaire"></div>
+    </div>
+    <div data-vol="classement" hidden>
+      <div id="classement"></div>
+    </div>
+  </section>
+
+  <!-- ─────────── MESSAGES ─────────── -->
+  <section data-panel="messages" class="stack" hidden>
+    <div id="fils"></div>
+  </section>
+
+  <section data-panel="conv" class="conv" hidden>
+    <div class="convcorps" id="convCorps"></div>
+    <form class="convpied" id="convPied" hidden>
+      <label class="horsvue" for="convTexte">Message</label>
+      <input id="convTexte" maxlength="2000" placeholder="Écrire un message…" autocomplete="off">
+      <button class="btn pri" type="submit" aria-label="Envoyer">Envoyer</button>
+    </form>
+    <div class="convferme" id="convFerme" hidden></div>
+  </section>
+
+  <!-- ─────────── QUELQU'UN ─────────── -->
+  <section data-panel="personne" class="stack" hidden>
+    <div id="fichePersonne"></div>
   </section>
 
   <!-- ─────────── CONTACTS ─────────── -->
   <section data-panel="social" class="stack" hidden>
-    <div class="panel" id="pDemandes" hidden>
-      <div class="phead"><h2>À traiter</h2>
-        <div class="note">Demandes qui attendent une réponse de ta part</div></div>
-      <div id="demandes"></div>
+    <div class="segs" data-segs="contacts">
+      <button data-seg="gens" aria-selected="true">Mes contacts</button>
+      <button data-seg="demandes">À traiter<span class="pastille" id="pastDem" hidden></span></button>
+      <button data-seg="communs">Moments communs</button>
     </div>
 
-    <div class="panel">
-      <div class="phead"><h2>Réserver un créneau</h2>
-        <div class="note">Chez quelqu'un qui t'a accepté</div></div>
-      <div id="resaForm"></div>
-      <div class="soustitre" style="margin-top:1rem">Mes demandes envoyées</div>
+    <div data-vol="gens">
+      <div id="abonnements"></div>
+      <div class="soustitre">Ils me suivent</div>
+      <div id="abonnes"></div>
+      <details class="repli"><summary>Inviter par lien</summary>
+        <div id="inviterBox"></div></details>
+    </div>
+
+    <div data-vol="demandes" hidden>
+      <div id="demandes"></div>
+      <div class="soustitre">Mes demandes envoyées</div>
       <div id="mesResa"></div>
     </div>
 
-    <div class="panel">
-      <div class="phead"><h2>Je suis abonné à</h2>
-        <div class="note">Leur planning, quand ils l'autorisent</div></div>
-      <div id="abonnements"></div>
-    </div>
-
-    <div class="panel">
-      <div class="phead"><h2>Abonnés à mon planning</h2>
-        <div class="note">Coche « vrai nom » pour ceux qui peuvent savoir qui tu es</div></div>
-      <div id="abonnes"></div>
-    </div>
-
-    <div class="panel">
-      <div class="phead"><h2>Trouver quelqu'un</h2>
-        <div class="note">Les plannings ouverts à la consultation</div></div>
-      <div class="champ" style="max-width:320px;margin-bottom:.6rem">
-        <label class="horsvue" for="chercheP">Chercher un pseudonyme</label>
-        <input id="chercheP" type="search" placeholder="Chercher un pseudonyme…">
-      </div>
-      <div id="annuaire"></div>
+    <div data-vol="communs" hidden>
+      <div id="communs"></div>
     </div>
   </section>
 
@@ -1156,47 +1250,65 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
     </div>
   </section>
 
-  <!-- ─────────── RÉGLAGES ─────────── -->
+  <!-- ─────────── MOI ─────────── -->
   <section data-panel="regl" class="stack" hidden>
-    <div class="panel">
-      <div class="phead"><h2>Mon profil</h2><div class="note">Qui peut consulter ce planning</div></div>
-      <div id="profilBox"></div>
+    <div class="segs" data-segs="moi">
+      <button data-seg="profil" aria-selected="true">Profil</button>
+      <button data-seg="travail">Mon travail</button>
+      <button data-seg="compte">Compte</button>
     </div>
-    <div class="panel">
-      <div class="phead"><h2>Être joignable</h2>
-        <div class="note">Qui peut te demander un créneau</div></div>
+
+    <div data-vol="profil">
+      <div id="profilBox"></div>
+      <div class="soustitre">Qui peut te joindre</div>
       <div id="joignableBox"></div>
     </div>
-    <div class="panel">
-      <div class="phead"><h2>Mon programme</h2>
-        <div class="note">Ce que le planning a à répartir</div></div>
+
+    <div data-vol="travail" hidden>
       <div id="progBox"></div>
-    </div>
-    <div class="panel">
-      <div class="phead"><h2>Mes heures de travail</h2>
-        <div class="note">Le planning place les étapes dans ces plages</div></div>
+      <div class="soustitre">Mes heures de travail</div>
       <div class="caps" id="caps"></div>
+      <details class="repli"><summary>Mes notes</summary>
+        <div class="hnums" id="gsum"></div>
+        <div class="scroll"><table class="gtab" id="gtab"></table></div></details>
     </div>
-    <div class="panel">
-      <div class="phead"><h2>Mes notes</h2><div class="note">Sur 20, à mesure que les devoirs reviennent</div></div>
-      <div class="hnums" id="gsum" style="margin-bottom:.8rem"></div>
-      <div class="scroll"><table class="gtab" id="gtab"></table></div>
-    </div>
-    <div class="panel">
-      <div class="phead"><h2>Mon compte</h2><div class="note">Adresse, données, suppression</div></div>
+
+    <div data-vol="compte" hidden>
       <div id="compteBox"></div>
+      <details class="repli"><summary>Être prévenu par courriel</summary>
+        <form id="subf" class="subf">
+          <label class="horsvue" for="subE">Adresse pour être prévenu</label>
+          <input id="subE" type="email" placeholder="Adresse électronique" required>
+          <button class="btn pri" type="submit">M'abonner</button>
+        </form>
+        <div class="subs" id="subs"></div></details>
     </div>
   </section>
 
-  <div class="pieds">
-    <span>Repère</span>
-    <a href="installer.html">Installer l'application</a>
-    <a href="aide.html">Aide</a>
-    <a href="conditions.html">Conditions</a>
-    <a href="confidentialite.html">Confidentialité</a>
-    <a href="aide.html#mentions">Mentions légales</a>
+  <div class="souspied dansappli">
+    <a href="aide.html">Aide</a><a href="installer.html">Installer</a>
+    <a href="conditions.html">Conditions</a><a href="confidentialite.html">Confidentialité</a>
+    <a href="aide.html#mentions">Mentions</a>
     <a class="beta" href="beta.html" title="Ce que « bêta » implique">bêta</a>
   </div>
+
+  <nav class="socle" id="socle" aria-label="Sections">
+    <button data-vue="jour" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.3l3.4 2"/></svg>
+      <span>Jour</span></button>
+    <button data-vue="planning">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8.5 3.5v4M15.5 3.5v4"/></svg>
+      <span>Planning</span></button>
+    <button data-vue="fil">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m3.6 15.5 4.6-3.8 3.6 2.7 3-2.2 5.6 4.6"/><circle cx="9" cy="9.2" r="1.5"/></svg>
+      <span>Fil</span></button>
+    <button data-vue="messages">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 12.2c0 4.2-3.8 7.6-8.5 7.6a10 10 0 0 1-2.5-.3l-5 1.9 1.6-4A7.2 7.2 0 0 1 3.5 12.2c0-4.2 3.8-7.6 8.5-7.6s8.5 3.4 8.5 7.6Z"/></svg>
+      <span>Messages</span><span class="pastille" id="pastMsg" hidden></span></button>
+    <button data-vue="contacts">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9.2" cy="8.4" r="3.3"/><path d="M3 19.5a6.2 6.2 0 0 1 12.4 0"/><path d="M16 5.4a3.3 3.3 0 0 1 0 6M17.6 14a6.2 6.2 0 0 1 3.9 5.5"/></svg>
+      <span>Contacts</span><span class="pastille" id="pastille" hidden></span></button>
+  </nav>
 </section>
 
 <div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalT">

@@ -118,6 +118,9 @@ export function creerClient(url, cle) {
     const q = {
       select(c = "*") { colonnes = c; return q; },
       eq(col, val) { f.push(`${col}=eq.${encodeURIComponent(val)}`); return q; },
+      neq(col, val) { f.push(`${col}=neq.${encodeURIComponent(val)}`); return q; },
+      gte(col, val) { f.push(`${col}=gte.${encodeURIComponent(val)}`); return q; },
+      in(col, vals) { f.push(`${col}=in.(${vals.map(encodeURIComponent).join(",")})`); return q; },
       order(col, o = {}) { tri = `order=${col}.${o.ascending === false ? "desc" : "asc"}`; return q; },
       limit(n) { limite = `limit=${n}`; return q; },
       maybeSingle() { unique = true; return q.then(undefined); },
@@ -125,7 +128,7 @@ export function creerClient(url, cle) {
         const p = executer();
         return p.then(res, rej);
       },
-      async insert(corps) { return ecrire("POST", corps); },
+      async insert(corps, opt = {}) { return ecrire("POST", corps, null, opt.retour); },
       /** POST avec resolution=merge-duplicates : insere, ou met a jour la ligne. */
       async upsert(corps) { return ecrire("POST", corps, "resolution=merge-duplicates"); },
       // Volontairement synchrones : il faut pouvoir enchaîner .eq() derrière,
@@ -141,14 +144,19 @@ export function creerClient(url, cle) {
       if (r.error) return r;
       return { data: unique ? (r.data?.[0] ?? null) : r.data, error: null };
     }
-    async function ecrire(methode, corps, prefer) {
+    async function ecrire(methode, corps, prefer, retour) {
       const parts = f.filter(Boolean);
-      const r = await requete(`${url}/rest/v1/${table}${parts.length ? "?" + parts.join("&") : ""}`, {
+      const sel = retour ? `select=${colonnes}` : "";
+      const tous = [sel, ...parts].filter(Boolean);
+      const r = await requete(`${url}/rest/v1/${table}${tous.length ? "?" + tous.join("&") : ""}`, {
         method: methode,
-        headers: { ...entetes(), Prefer: ["return=minimal", prefer].filter(Boolean).join(",") },
+        headers: {
+          ...entetes(),
+          Prefer: [retour ? "return=representation" : "return=minimal", prefer].filter(Boolean).join(","),
+        },
         body: corps === undefined ? undefined : JSON.stringify(corps),
       });
-      return { data: null, error: r.error };
+      return { data: retour ? (unique ? r.data?.[0] ?? null : r.data) : null, error: r.error };
     }
     return q;
   }
@@ -175,5 +183,52 @@ export function creerClient(url, cle) {
     return { data: r.data, error: r.error };
   }
 
-  return { auth, from, rpc };
+  /* ── Stockage de fichiers ───────────────────────────────────────────
+     Deux seaux : « avatars » est public — une vignette suit le pseudonyme
+     partout où il s'affiche. « photos » ne l'est pas : chaque image y est
+     servie par une adresse signée, que la base ne délivre qu'à qui a le
+     droit de voir la publication qui la porte. */
+  const stockage = {
+    async televerser(seau, chemin, fichier) {
+      const r = await fetch(`${url}/storage/v1/object/${seau}/${chemin}`, {
+        method: "POST",
+        headers: {
+          apikey: cle,
+          Authorization: `Bearer ${session ? session.access_token : cle}`,
+          "Content-Type": fichier.type || "application/octet-stream",
+          "x-upsert": "true",
+        },
+        body: fichier,
+      }).catch(() => null);
+      if (!r) return { error: { message: "Réseau indisponible" } };
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        return { error: { message: d.message || d.error || `Erreur ${r.status}` } };
+      }
+      return { error: null };
+    },
+    urlPublique(seau, chemin) {
+      return `${url}/storage/v1/object/public/${seau}/${chemin}`;
+    },
+    /** Adresses signées, en un seul appel pour toute une page de publications. */
+    async signer(seau, chemins, secondes = 3600) {
+      if (!chemins.length) return {};
+      const r = await requete(`${url}/storage/v1/object/sign/${seau}`, {
+        method: "POST", headers: entetes(),
+        body: JSON.stringify({ paths: chemins, expiresIn: secondes }),
+      });
+      const m = {};
+      (r.data || []).forEach((x) => {
+        if (x.signedURL) m[x.path] = url + "/storage/v1" + x.signedURL;
+      });
+      return m;
+    },
+    async supprimer(seau, chemins) {
+      return requete(`${url}/storage/v1/object/${seau}`, {
+        method: "DELETE", headers: entetes(), body: JSON.stringify({ prefixes: chemins }),
+      });
+    },
+  };
+
+  return { auth, from, rpc, stockage };
 }
