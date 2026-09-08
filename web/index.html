@@ -561,15 +561,6 @@ label.cap{flex-wrap:wrap}
 .pieds a:hover{color:var(--sig)}
 
 /* ── réglages : membres, invitations, compte ──────────── */
-.membres{display:flex;flex-direction:column;gap:.28rem;margin-top:.35rem}
-.membre{display:flex;align-items:center;gap:.6rem;padding:.45rem .6rem;background:var(--sunk);
-  border-left:3px solid var(--ok)}
-.membre .pav{width:28px;height:28px;flex:none;display:grid;place-content:center;background:var(--card);
-  font-family:"IBM Plex Mono",monospace;font-size:.66rem;font-weight:600;color:var(--ink2)}
-.membre .mn{flex:1;min-width:0}
-.membre .mn b{display:block;font-size:.8rem}
-.membre .mn em{display:block;font-family:"IBM Plex Mono",monospace;font-size:.64rem;color:var(--ink3);
-  font-style:normal}
 .btn.danger{border-color:var(--late);color:var(--late)}
 .btn.danger:hover{background:var(--late);color:#fff}
 .zdanger{display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;margin-top:.8rem;padding:.75rem .85rem;
@@ -663,11 +654,7 @@ table.etapes td:last-child{width:2rem}
   .deuxchamps{grid-template-columns:1fr}
   .zdanger,.zaction{flex-direction:column;align-items:stretch}
   .zdanger .btn,.zaction .btn{margin-left:0;width:100%;min-height:40px}
-  .membre{flex-wrap:wrap;gap:.35rem .5rem}
-  .membre .mn{flex:1 1 calc(100% - 3rem)}
-  .membre .mreel{order:3}
-  .membre .btn{order:4;margin-left:auto}
-  .lp{flex-wrap:wrap}
+    .lp{flex-wrap:wrap}
   .lp code{flex:1 1 100%;white-space:normal;word-break:break-all;font-size:.66rem}
 
   /* l'éditeur de programme : chaque étape devient une fiche */
