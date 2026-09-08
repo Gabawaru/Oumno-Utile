@@ -12,6 +12,15 @@ const TOK = "ciel.session";
 export function creerClient(url, cle) {
   let session = charger();
   const abonnes = [];
+  // Une requête qui n'arrive pas à partir n'est pas une requête qui répond
+  // « non ». L'application doit pouvoir faire la différence entre « ce compte
+  // n'existe pas » et « le réseau est coupé ».
+  const reseau = { ok: true, echecs: 0, depuis: null };
+  function noterEchec() {
+    if (reseau.ok) reseau.depuis = Date.now();
+    reseau.ok = false; reseau.echecs++;
+  }
+  function noterSucces() { reseau.ok = true; reseau.echecs = 0; reseau.depuis = null; }
 
   function charger() {
     try {
@@ -35,9 +44,16 @@ export function creerClient(url, cle) {
   };
 
   async function appelAuth(chemin, corps, methode = "POST") {
-    const r = await fetch(`${url}/auth/v1/${chemin}`, {
-      method: methode, headers: entetes(), body: corps ? JSON.stringify(corps) : undefined,
-    });
+    let r;
+    try {
+      r = await fetch(`${url}/auth/v1/${chemin}`, {
+        method: methode, headers: entetes(), body: corps ? JSON.stringify(corps) : undefined,
+      });
+    } catch {
+      noterEchec();
+      return { data: null, error: { message: "Réseau indisponible", reseau: true } };
+    }
+    noterSucces();
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return { data: null, error: { message: d.msg || d.error_description || d.message || `Erreur ${r.status}`, code: d.error_code || d.code } };
     return { data: d, error: null };
@@ -165,7 +181,11 @@ export function creerClient(url, cle) {
   async function requete(u, init, reessai = true) {
     let r;
     try { r = await fetch(u, init); }
-    catch { return { data: null, error: { message: "Réseau indisponible" } }; }
+    catch {
+      noterEchec();
+      return { data: null, error: { message: "Réseau indisponible", reseau: true } };
+    }
+    noterSucces();
     if (r.status === 401 && reessai && (await rafraichir())) {
       return requete(u, { ...init, headers: { ...init.headers, Authorization: `Bearer ${session.access_token}` } }, false);
     }
@@ -230,5 +250,5 @@ export function creerClient(url, cle) {
     },
   };
 
-  return { auth, from, rpc, stockage };
+  return { auth, from, rpc, stockage, reseau };
 }

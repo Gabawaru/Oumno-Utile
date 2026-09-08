@@ -125,13 +125,19 @@ const LS="ciel.v4";
 /** Copie de secours dans le navigateur, pour survivre à une coupure réseau. */
 function saveLocal(){
   if(!vue||!estMoi()) return;
-  try{ localStorage.setItem(LS, JSON.stringify({ id: vue.id, data: etat() })); }catch(e){}
+  // Le profil est gardé avec le planning : sans lui, une ouverture hors réseau
+  // n'a rien à ouvrir, et la copie de secours ne sert à rien.
+  try{ localStorage.setItem(LS, JSON.stringify({ id: vue.id, profil: vue, data: etat() })); }catch(e){}
 }
-function loadLocal(id){
+function lireLocal(id){
   try{
     const r = JSON.parse(localStorage.getItem(LS) || "null");
-    return r && r.id === id && r.data ? r.data : null;
+    return r && r.id === id ? r : null;
   }catch(e){ return null; }
+}
+function loadLocal(id){
+  const r = lireLocal(id);
+  return r && r.data ? r.data : null;
 }
 /** Message d'état discret, affiché dans l'en-tête. */
 function setSync(k,t){
@@ -1518,6 +1524,11 @@ function renderCompte() {
       Le détail est dans la
       <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</p>
     <div class="zaction">
+      <div><b>Se déconnecter</b>
+        <em>Ferme la session sur cet appareil. Ton planning n'est pas touché.</em></div>
+      <button class="btn" id="deco">Se déconnecter</button>
+    </div>
+    <div class="zaction">
       <div><b>Changer mon mot de passe</b>
         <em>Un lien part vers ${esc(session.user.email)}. Il n'y a pas d'autre chemin :
           personne, pas même l'éditeur, ne peut lire ni fixer ton mot de passe.</em></div>
@@ -1532,6 +1543,13 @@ function renderCompte() {
     </div>
     <div id="blocages"></div>`;
   renderBlocages();
+  $("deco").onclick = async () => {
+    await sb.auth.signOut();
+    session = null; moi = null; vue = null; canEdit = false;
+    try { sessionStorage.removeItem("ciel.vue"); } catch {}
+    history.replaceState(null, "", location.pathname);
+    await lancer();
+  };
   $("mdpLien").onclick = async () => {
     const b = $("mdpLien");
     b.disabled = true; b.textContent = "Envoi…";
@@ -1908,7 +1926,7 @@ async function repondreResa(id, etat) {
 
 /* ═════════ AUTHENTIFICATION ═════════ */
 function montrer(ecran) {
-  ["porte", "ecranAuth", "ecranProfils", "appli"].forEach((k) => {
+  ["chargement", "porte", "ecranAuth", "ecranProfils", "appli"].forEach((k) => {
     const e = $(k); if (e) e.hidden = k !== ecran;
   });
 }
@@ -2042,15 +2060,101 @@ async function demarrer() {
   if (slug) {
     if (session) moi = await chargerProfil(null);
     const p = await chargerProfil(slug);
-    if (p) return ouvrir(p);
-    montrer("ecranProfils"); chargerProfils(); return;
+    if (p) { await ouvrir(p); return true; }
+    // Une requête qui n'est pas partie ne veut pas dire « ce profil n'existe
+    // pas ». Sans cette distinction, une coupure réseau ressemblait à un refus.
+    if (!sb.reseau.ok) return false;
+    montrer("ecranProfils"); chargerProfils(); return true;
   }
   if (session) {
     moi = await chargerProfil(null);
-    if (moi) return ouvrir(moi);
+    if (moi) { await ouvrir(moi); return true; }
+    if (!sb.reseau.ok) {
+      // Le réseau manque, mais la dernière copie est là : autant ouvrir le
+      // planning tel qu'on l'a laissé plutôt que de renvoyer sur un mur.
+      const copie = lireLocal(session.user.id);
+      if (copie && copie.profil) { moi = copie.profil; await ouvrir(moi); return true; }
+      return false;
+    }
   }
   montrer("porte");
+  return true;
 }
+
+/* ═════════ L'ATTENTE ═════════
+   Une page blanche pendant que la base répond ne dit rien ; une page blanche
+   qui ne finit jamais ment. Le bras du logo tourne, et s'il ne se passe rien
+   il décroche : on sait alors que ce n'est pas la peine d'attendre, et qu'un
+   geste suffit à relancer. */
+
+const RECULS = [5000, 8000, 13000, 21000, 30000];
+let essais = 0, chargeEnCours = false, tPatience = null, tReprise = null;
+
+function direAttente(titre, aide) {
+  $("etatCh").textContent = titre;
+  $("aideCh").textContent = aide || "";
+}
+
+/** Le bras décroche. Rien n'est perdu : on repart au toucher, ou tout seul. */
+function attenteCassee() {
+  chargeEnCours = false;
+  clearTimeout(tPatience);
+  montrer("chargement");
+  $("chargement").classList.add("casse");
+  const horsLigne = navigator.onLine === false;
+  direAttente(horsLigne ? "Pas de réseau ici" : "Repère ne répond pas",
+    horsLigne
+      ? "Ton appareil n'est connecté à rien. Touche l'écran pour réessayer — ça repart aussi tout seul dès que la connexion revient."
+      : "Le serveur n'a pas répondu. Touche l'écran pour réessayer.");
+  essais++;
+  clearTimeout(tReprise);
+  tReprise = setTimeout(lancer, RECULS[Math.min(essais - 1, RECULS.length - 1)]);
+}
+
+async function lancer() {
+  if (chargeEnCours) return;
+  chargeEnCours = true;
+  clearTimeout(tReprise); clearTimeout(tPatience);
+  $("chargement").classList.remove("casse");
+  montrer("chargement");
+  direAttente(essais ? "Nouvelle tentative" : "Repère", "");
+  // Au-delà, ce n'est plus un chargement : c'est une attente sans fin.
+  tPatience = setTimeout(attenteCassee, 9000);
+  const debut = Date.now();
+  let abouti = false;
+  try { abouti = (await demarrer()) !== false; }
+  catch (e) { abouti = false; }
+  clearTimeout(tPatience);
+  chargeEnCours = false;
+  // C'est demarrer() qui sait si elle a abouti : une requête échouée en chemin
+  // n'est pas un échec si la copie locale a pris le relais.
+  if (!abouti) {
+    // Un échec instantané rendrait le geste invisible : on laisse le bras
+    // tourner le temps qu'on voie qu'il s'est passé quelque chose.
+    const reste = 900 - (Date.now() - debut);
+    if (reste > 0) await new Promise((r) => setTimeout(r, reste));
+    return attenteCassee();
+  }
+  essais = 0;
+}
+
+// Un geste sur l'écran cassé relance. Le clavier aussi : rien ne doit
+// dépendre du seul toucher.
+$("chargement").addEventListener("click", () => {
+  if ($("chargement").classList.contains("casse")) lancer();
+});
+document.addEventListener("keydown", (e) => {
+  if (!$("chargement").hidden && $("chargement").classList.contains("casse")
+      && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); lancer(); }
+});
+// Et le navigateur prévient lui-même quand la connexion revient.
+addEventListener("online", () => {
+  if (!$("chargement").hidden && $("chargement").classList.contains("casse")) lancer();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && !$("chargement").hidden
+      && $("chargement").classList.contains("casse")) lancer();
+});
 
 /** Consomme un lien d'invitation et ouvre le planning auquel il donne accès. */
 async function consommerInvitation(jeton) {
@@ -2175,7 +2279,7 @@ $("formConnexion").addEventListener("submit", async (e) => {
   });
   if (error) return messageAuth("Adresse ou mot de passe incorrect.");
   messageAuth("");
-  await demarrer();
+  await lancer();
 });
 
 $("formOubli").addEventListener("submit", async (e) => {
@@ -2285,12 +2389,22 @@ function majBoutonCompte() {
   $("btnMoi").onclick = () => aller("moi");
 }
 
+/** Une attente à l'intérieur de l'application : même figure, même langage. */
+function enAttente(texte) {
+  return `<div class="vide" role="status">
+    <svg class="releve mini" viewBox="0 0 100 100" aria-hidden="true">
+      <line class="ref" x1="44" y1="10" x2="44" y2="90"/>
+      <g class="tourne"><g class="chute"><path class="bras" d="M13 81 L44 68 L88 27"/></g></g>
+      <circle class="pivot" cx="44" cy="68" r="9.5"/>
+    </svg><span>${esc(texte)}</span></div>`;
+}
+
 /* ═════════ LE FIL ═════════ */
 
 async function chargerFil() {
   const box = $("posts");
   if (!box) return;
-  if (!box.dataset.pret) box.innerHTML = `<div class="vide">Chargement…</div>`;
+  if (!box.dataset.pret) box.innerHTML = enAttente("On regarde ce qui est nouveau…");
   renderEcrire();
   const { data, error } = await sb.rpc("fil_actualite", { taille: 25 });
   posts = Array.isArray(data) ? data : [];
@@ -2528,8 +2642,10 @@ async function chargerFils() {
   const box = $("fils");
   if (!box) return;
   if (!session) { box.innerHTML = `<div class="vide">Crée un compte pour écrire à quelqu'un.</div>`; return; }
+  if (!box.dataset.pret) box.innerHTML = enAttente("Chargement des conversations…");
   const { data } = await sb.rpc("mes_fils");
   fils = Array.isArray(data) ? data : [];
+  box.dataset.pret = "1";
   majPastilleMsg();
   box.innerHTML = fils.length ? fils.map((f) => `
     <button class="filrang${f.non_lus > 0 ? " neuf" : ""}" data-fil="${esc(f.fil)}">
@@ -2617,7 +2733,7 @@ $("convPied").addEventListener("submit", async (e) => {
 async function ouvrirFiche(slug) {
   const box = $("fichePersonne");
   if (!box) return;
-  box.innerHTML = `<div class="vide">Chargement…</div>`;
+  box.innerHTML = enAttente("Ouverture du profil…");
   const p = await chargerProfil(slug);
   if (!p) { box.innerHTML = `<div class="vide">Ce profil n'existe pas, ou ne t'est pas ouvert.</div>`; return; }
   titreFiche = p.nom;
@@ -3126,4 +3242,4 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
   addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
 }
 
-demarrer();
+lancer();

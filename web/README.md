@@ -46,6 +46,11 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
 - **Installation** — manifeste, icônes et service worker : Repère s'ajoute à l'écran
   d'accueil et s'ouvre sans réseau. `installer.html` explique la marche à suivre par
   plateforme.
+- **L'attente** — le bras du logo tourne autour de son pivot pendant le chargement.
+  Sans réponse, il décroche et tombe : « Pas de réseau ici ». Un toucher relance, un
+  ré-essai part tout seul avec un recul croissant, et l'événement `online` du
+  navigateur reprend la main dès que la connexion revient. Quand une copie locale
+  existe, elle est ouverte plutôt que l'écran d'erreur.
 - **Pseudonyme, et vrai nom sur autorisation** — le pseudonyme est public et unique ;
   le vrai nom est facultatif, rangé dans une table à part, et montré aux seules
   personnes pour lesquelles on coche ce droit.
