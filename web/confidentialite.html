@@ -91,6 +91,42 @@
     <tr><td>Adresse d'abonnement à la lettre</td>
         <td>Envoyer le récapitulatif des changements</td>
         <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
+    <tr><td>Photo de profil <i>(facultative)</i></td>
+        <td>Vous reconnaître d'un coup d'œil. Elle accompagne le pseudonyme partout
+            où il s'affiche, et suit donc la visibilité de votre profil</td>
+        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
+    <tr><td>Publications, photos, commentaires</td>
+        <td>Le fil. Chaque publication porte la portée que vous lui donnez :
+            vos contacts, ou tout le monde</td>
+        <td>Exécution du service</td></tr>
+    <tr><td>Messages privés</td>
+        <td>Les conversations, et les propositions de moment qui les ouvrent</td>
+        <td>Exécution du service</td></tr>
+    <tr><td>Fuseau horaire</td>
+        <td>Afficher l'heure qu'il est chez vous à ceux qui consultent votre profil.
+            Proposé d'après votre navigateur, modifiable, jamais deviné autrement</td>
+        <td>Exécution du service</td></tr>
+    <tr><td>Région <i>(facultative)</i></td>
+        <td>Un texte libre que vous écrivez vous-même, affiché seulement si vous
+            cochez la case. Ce n'est pas une géolocalisation : le service ne demande
+            jamais votre position au navigateur</td>
+        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
+    <tr><td>Plages libres publiées</td>
+        <td>Répondre à « tu es libre quand ? » sans ouvrir le planning. Ces lignes
+            disent <b>quand</b>, jamais <b>quoi</b> : ni titre, ni matière, ni
+            événement. Elles suivent la visibilité de votre planning</td>
+        <td>Exécution du service</td></tr>
+    <tr><td>Heures de la semaine <i>(facultatif)</i></td>
+        <td>Le classement. Rien n'y figure tant que vous ne l'avez pas demandé,
+            et décocher la case vous en retire aussitôt</td>
+        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
+    <tr><td>Signalements</td>
+        <td>Traiter les contenus illicites. Un signalement contient le motif que vous
+            écrivez et l'objet visé ; il n'est pas visible par la personne signalée</td>
+        <td>Obligation légale (LCEN art. 6-I-2)</td></tr>
+    <tr><td>Blocages</td>
+        <td>Couper tout échange entre deux comptes</td>
+        <td>Exécution du service</td></tr>
     <tr><td>Date d'acceptation des conditions</td>
         <td>Prouver que le consentement a bien été recueilli</td>
         <td>Obligation légale (art. 7.1)</td></tr>
@@ -99,6 +135,10 @@
   <p>Ni adresse IP conservée, ni empreinte de navigateur, ni géolocalisation, ni
   cookie publicitaire, ni mesure d'audience. Aucune donnée sensible au sens de
   l'article 9 du RGPD n'est demandée.</p>
+  <p>Les photos déposées sont <b>redessinées par votre navigateur avant l'envoi</b> :
+  elles arrivent au serveur réduites, reconverties en JPEG, et débarrassées de leurs
+  métadonnées — dont la position GPS que les téléphones inscrivent dans les clichés.
+  Le serveur ne reçoit donc jamais ces informations.</p>
 </div>
 
 <div class="bloc">
@@ -116,6 +156,17 @@
   <p>Ces règles ne sont pas seulement appliquées par l'interface : elles sont posées
   au niveau de la base de données, ligne par ligne. Un planning privé n'est pas
   seulement caché, il est inaccessible.</p>
+  <h3>Le réseau suit les mêmes règles</h3>
+  <p>Une publication réservée à vos contacts n'est lisible que par les comptes que
+  vous avez acceptés — la base refuse la ligne aux autres, l'affichage n'y est pour
+  rien. Une publication ouverte à tous depuis un profil privé reste invisible :
+  la visibilité du profil l'emporte toujours.</p>
+  <p>Vos <b>plages libres</b> sont publiées à part, dans une table qui ne contient
+  que des horaires. Quelqu'un qui a le droit de voir votre planning voit quand vous
+  êtes libre ; personne ne voit ce que vous y faites.</p>
+  <p><b>Bloquer</b> quelqu'un coupe tout dans les deux sens, immédiatement :
+  publications, commentaires, messages, plages libres, classement.</p>
+
   <h3>Pseudonyme et vrai nom</h3>
   <p>Le <b>pseudonyme</b> est ce que tout le monde voit. Le <b>vrai nom</b> est
   facultatif, vit dans une table séparée, et n'est montré qu'aux personnes pour
@@ -140,6 +191,21 @@
 </div>
 
 <div class="bloc">
+  <h2>4 bis. Où vivent les photos</h2>
+  <p>Les images sont déposées chez le même hébergeant que la base, en Europe
+  (Paris), dans deux espaces séparés :</p>
+  <ul>
+    <li><b>Les photos de profil</b> sont servies par une adresse publique. C'est
+    volontaire : une vignette accompagne un pseudonyme, qui est déjà public. Ne mettez
+    pas en photo de profil ce que vous ne montreriez pas à un inconnu.</li>
+    <li><b>Les images de publication</b> ne sont accessibles par aucune adresse
+    permanente. Chaque affichage demande à la base une adresse signée, valable une
+    heure, et la base ne la délivre qu'aux personnes autorisées à voir la publication
+    qui porte l'image.</li>
+  </ul>
+</div>
+
+<div class="bloc">
   <h2>5. Combien de temps</h2>
   <table>
     <tr><th>Donnée</th><th>Durée</th></tr>
@@ -148,7 +214,19 @@
     <tr><td>Journal des changements</td><td>Supprimé avec le compte.</td></tr>
     <tr><td>Abonnement à la lettre</td><td>Jusqu'à la désinscription.</td></tr>
     <tr><td>Liens d'invitation</td><td>30 jours, ou 25 utilisations.</td></tr>
+    <tr><td>Publications, photos, commentaires</td><td>Tant que vous ne les supprimez
+      pas. Supprimés avec le compte, fichiers compris.</td></tr>
+    <tr><td>Messages</td><td>Tant que la conversation existe. Supprimés avec le compte
+      de l'un ou l'autre des participants.</td></tr>
+    <tr><td>Plages libres publiées</td><td>Réécrites à chaque enregistrement du
+      planning ; seuls les quinze prochains jours sont conservés.</td></tr>
+    <tr><td>Heures de la semaine</td><td>Une ligne par personne, remplacée chaque
+      semaine. Décocher le classement l'en retire.</td></tr>
+    <tr><td>Signalements</td><td>Conservés le temps du traitement, puis un an, pour
+      pouvoir répondre d'une décision de retrait.</td></tr>
   </table>
+  <p class="petit">Un signalement survit à la suppression du compte de son auteur,
+  mais il est alors anonymisé : l'identifiant de la personne qui l'a déposé est effacé.</p>
 </div>
 
 <div class="bloc">
@@ -157,10 +235,11 @@
   directement dans l'application, sans écrire à personne :</p>
   <ul>
     <li><b>Accès et rectification</b> — tout ce qui est enregistré est affiché et
-    modifiable dans <b>Réglages</b>.</li>
-    <li><b>Effacement</b> — le bouton <b>Supprimer mon compte</b>, dans Réglages,
-    efface immédiatement le compte, le planning, le journal, les partages et les
-    abonnés. L'opération est définitive et sans copie de sauvegarde.</li>
+    modifiable dans <b>Moi</b>.</li>
+    <li><b>Effacement</b> — le bouton <b>Supprimer mon compte</b>, dans <b>Moi →
+    Compte</b>, efface immédiatement le compte, le planning, le journal, les partages,
+    les publications, les photos déposées, les messages et les plages publiées.
+    L'opération est définitive et sans copie de sauvegarde.</li>
   </ul>
   <p>Les autres droits — portabilité, limitation, opposition, retrait du consentement,
   et le droit de définir des directives sur le sort de vos données après votre décès —

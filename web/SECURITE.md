@@ -132,27 +132,119 @@ visiteur à un tiers hors UE, sans base légale.
 
 ## La couche sociale
 
-Trois règles, toutes appliquées par la base :
+Toutes les règles ci-dessous sont appliquées par la base. L'interface les reflète ;
+elle ne les décide pas.
+
+### S'abonner, lire, proposer
 
 - **S'abonner** — `s_abonner()` lit `public` sur le profil visé et décide seule :
   acceptation immédiate chez un compte public, mise en attente chez un compte privé.
   Le navigateur ne choisit pas. Plafond de 50 demandes en attente par compte.
 - **Lire un planning privé** exige un abonnement à l'état `accepte`. Une demande en
   attente ne donne rien — ni le planning, ni même la ligne du profil.
-- **Demander un créneau** — `demander_creneau()` vérifie la joignabilité de l'hôte
-  avant d'insérer. Masquer le bouton n'aurait rien empêché : l'API est ouverte à qui
-  sait l'appeler. Plafond de 10 demandes en attente vers la même personne.
+- **Proposer un moment** — `proposer_creneau()` vérifie la joignabilité de l'hôte
+  avant d'insérer, exige un motif quand l'expéditeur n'a pas le droit d'écrire, et
+  plafonne à 2 propositions en attente dans ce cas (10 entre gens qui se parlent
+  déjà). Masquer le bouton n'aurait rien empêché : l'API est ouverte à qui sait
+  l'appeler.
 
-Éprouvé par bascule de rôle réelle, 14 vérifications sur 14 : un abonnement en attente
-lit 0 ligne du planning et 0 du profil, une demande de créneau vers un compte
-« abonnés seulement » est refusée tant que l'abonnement n'est pas accepté, et un tiers
-ne lit aucune réservation qui ne le concerne pas.
+### Publications et commentaires
 
-**Pourquoi pas de messagerie libre.** Héberger des conversations privées entre comptes
-ferait de l'éditeur — personne physique, non professionnelle — le responsable de leur
-modération et de leur conservation. Les messages sont donc attachés aux demandes de
-créneau : un motif et un mot, bornés à 500 caractères, entre deux personnes qui se
-sont déjà acceptées. C'est l'essentiel de l'usage sans la charge.
+`prive.lit_post(auteur, portee)` est la règle unique, appliquée par les politiques
+de `ciel_posts`, `ciel_commentaires` et `ciel_jaime` :
+
+- une publication **publique** suit la visibilité du profil — donc invisible si le
+  profil est privé, même marquée « tout le monde » ;
+- une publication **réservée** exige un abonnement accepté ;
+- un **blocage** coupe dans les deux sens, quelle que soit la portée.
+
+Commenter exige de pouvoir lire la publication commentée : la clause figure dans le
+`with check` de la politique, pas seulement dans l'affichage. L'auteur d'une
+publication peut supprimer les commentaires qui y figurent — il en répond.
+
+Un déclencheur `BEFORE INSERT OR UPDATE` refuse une publication signée d'un autre
+compte et une image qui ne vit pas dans le dossier de son auteur.
+
+### Messages : la règle du seul mot
+
+`envoyer_message()` refuse tout ce qui n'est pas :
+
+1. un message vers quelqu'un dont la joignabilité vous inclut, ou
+2. un message dans une conversation déjà **ouverte** — c'est-à-dire une conversation
+   où l'autre a répondu, ou dont il a accepté la proposition.
+
+Une conversation fermée n'accepte donc **rien**, sauf une proposition de moment, qui
+porte un motif. C'est le modèle du compte privé : on ne peut adresser qu'une chose à
+quelqu'un qui ne vous lit pas, et cette chose dit qui vous êtes. Trente messages par
+cinq minutes au maximum, tous destinataires confondus.
+
+Aucune politique `INSERT` n'existe sur `ciel_messages` : la seule écriture possible
+passe par les deux fonctions. Une politique `DELETE` permet d'effacer ce qu'on a
+écrit, jamais ce qu'on a reçu.
+
+### Fichiers
+
+Deux seaux, deux régimes.
+
+- `avatars` est **public** : une vignette accompagne un pseudonyme, qui l'est déjà.
+  C'est un choix, écrit dans la politique de confidentialité.
+- `photos` ne l'est pas. Aucune adresse permanente n'existe ; chaque affichage
+  réclame une adresse signée d'une heure, et la politique `SELECT` sur
+  `storage.objects` ne la délivre que si une publication lisible porte ce fichier.
+
+L'écriture est bornée au dossier `<uuid de l'utilisateur>/`, côté stockage comme côté
+base : le déclencheur de `ciel_profiles` refuse un `avatar` qui pointerait ailleurs,
+celui de `ciel_posts` en fait autant pour `image`. Sans lui, n'importe qui pourrait
+faire afficher le fichier d'un autre — ou une adresse étrangère, ce que la politique
+de sécurité du contenu interdit par ailleurs (`img-src` ne cite que ce domaine).
+
+Les images sont redessinées dans un canevas avant l'envoi : format normalisé,
+métadonnées EXIF perdues au passage — dont la position GPS. Ce n'est pas une mesure
+de sécurité du serveur, c'est une mesure de vie privée de l'utilisateur, et elle est
+plus efficace côté client qu'après coup.
+
+### Le profil, écrit par son propriétaire
+
+La politique `profiles_maj` autorise à écrire n'importe quelle colonne de sa propre
+ligne. C'est trop large dès que des colonnes portent du sens : le déclencheur
+`prive.ciel_profil_valide()` dit ce qu'une valeur a le droit de valoir — forme de
+l'identifiant public, un changement par jour, avatar borné à son dossier, fuseau
+vérifié contre `pg_timezone_names`, joignabilité dans l'énumération, et
+`consentement_le` recopié depuis l'ancienne ligne pour qu'on ne puisse pas réécrire
+la preuve de son propre consentement.
+
+**L'adresse électronique ne sert plus à fabriquer l'identifiant public.** Elle le
+faisait : `gabriel.carb.pro@gmail.com` donnait `gabriel-carb-pro`, publié dans l'URL
+du profil, dans l'annuaire et sur chaque carte. C'était une fuite silencieuse, sans
+message d'erreur ni page à ouvrir — le genre qu'on ne voit qu'en lisant le
+déclencheur. L'identifiant vient désormais du pseudonyme choisi, et les comptes
+existants ont été renommés.
+
+### Ce que le réseau oblige
+
+Héberger des publications, des images et des conversations fait de l'éditeur un
+**hébergeur** au sens de l'article 6-I-2 de la LCEN. Il n'a pas d'obligation
+générale de surveillance, mais il doit retirer promptement un contenu manifestement
+illicite qui lui est signalé, et conserver de quoi identifier les auteurs.
+
+En pratique : un bouton **Signaler** sur chaque publication et chaque profil, une
+table `ciel_signalements` qu'aucune politique de lecture ne sert (elle se consulte
+depuis la console, pas depuis l'API), un **blocage** réciproque à la main de chacun,
+et une adresse de contact à publier — ce dernier point n'est plus reportable
+maintenant que des tiers déposent du contenu.
+
+**Ce que cela change par rapport à la version précédente.** La messagerie libre avait
+été écartée ici même, au motif qu'elle transférait à une personne physique non
+professionnelle la charge de modérer des conversations privées. Cette charge est
+réelle et elle demeure ; le service l'assume désormais, à la demande de l'éditeur,
+avec les contreparties ci-dessus. Le point à retenir : les messages ne sont **pas**
+chiffrés de bout en bout — le serveur y a techniquement accès, et les conditions le
+disent.
+
+Éprouvé par bascule de rôle réelle : 8 vérifications sur la règle du seul mot,
+9 sur la portée des publications et le blocage, 8 sur les garde-fous du profil,
+en plus des 14 de la couche d'abonnement. Un visiteur sans compte lit les
+publications publiques des profils publics, et rien d'autre.
 
 ## Ce qui n'est pas défendu
 
@@ -170,6 +262,17 @@ Le dire est plus utile que de prétendre le contraire.
   des comptes en masse. Un CAPTCHA règle la question (voir plus bas).
 - **Une perte de la base.** Sans sauvegarde, une erreur ou un incident efface les
   plannings de tout le monde. C'est le point le plus sérieux de cette liste.
+- **Un contenu illicite entre son dépôt et son signalement.** Personne ne relit les
+  publications avant qu'elles ne s'affichent, et la loi ne l'exige pas. La défense
+  est le signalement, le blocage, et le fait qu'une publication ne dépasse jamais
+  le cercle que son auteur a choisi.
+- **Un contenu déjà vu.** Bloquer ou supprimer arrête la diffusion ; cela ne
+  reprend pas ce qui a été lu ou enregistré par ceux qui y avaient accès.
+- **Une image envoyée à qui de droit puis rediffusée.** L'adresse signée expire au
+  bout d'une heure, mais le fichier téléchargé, lui, ne s'efface pas.
+- **Le contenu des messages, vis-à-vis de l'éditeur.** Ils ne sont pas chiffrés de
+  bout en bout ; l'accès au serveur donne accès aux messages. Les conditions le
+  disent, plutôt que de laisser croire l'inverse.
 
 ## Anonymat de l'éditeur
 
@@ -196,7 +299,7 @@ et rien qui ressemble à une activité commerciale.
 | Activer la vérification des mots de passe compromis | Supabase → Authentication → Password | gratuit |
 | Activer un CAPTCHA à l'inscription (hCaptcha ou Turnstile) | Supabase → Authentication → Bot protection | gratuit |
 | Renseigner l'URL du site dans les redirections | Supabase → Authentication → URL Configuration | gratuit |
-| Renseigner l'adresse de contact | `aide.html`, `confidentialite.html` | gratuit |
+| **Publier l'adresse de contact** — devenu obligatoire avec le contenu déposé par des tiers | `aide.html`, `confidentialite.html` | gratuit |
 | **Sauvegardes de la base** | Supabase Pro | ~25 $/mois |
 | Adresse de contact publiée | `aide.html`, `confidentialite.html` | gratuit |
 | Pare-feu applicatif et mode anti-attaque | Vercel Pro | ~20 $/mois |
@@ -221,6 +324,19 @@ Il a trouvé les deux erreurs de droits décrites plus haut : le passer après t
 migration n'est pas facultatif.
 
 ## Journal des audits
+
+**8 septembre 2026 — réseau social, et une fuite fermée.** L'identifiant public d'un
+profil était fabriqué à partir de la partie gauche de l'adresse électronique. Il
+apparaît dans l'URL du profil, dans l'annuaire et sur chaque carte : l'adresse de
+chacun était donc à moitié publiée, sans que rien ne le signale. Le déclencheur a été
+réécrit pour partir du pseudonyme choisi, et les comptes existants renommés.
+
+Ajouté dans le même mouvement : publications, commentaires, mentions « j'aime »,
+photos, conversations, signalement, blocage, classement volontaire, fuseau horaire,
+région facultative et plages libres publiées. Vingt-cinq vérifications par bascule de
+rôle, toutes passées. Deux fonctions du schéma `prive` avaient un `search_path`
+mobile, signalées par les conseillers Supabase et corrigées. Reste ouvert, chez
+l'hébergeur : la vérification des mots de passe compromis.
 
 **7 septembre 2026 — couche sociale.** Six fonctions nouvellement créées se sont
 retrouvées appelables sans session : le `REVOKE ... FROM PUBLIC` que je croyais
