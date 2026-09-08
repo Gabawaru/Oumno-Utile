@@ -46,6 +46,11 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
 - **Installation** — manifeste, icônes et service worker : Repère s'ajoute à l'écran
   d'accueil et s'ouvre sans réseau. `installer.html` explique la marche à suivre par
   plateforme.
+- **Le ruban** — une bande passagère en bas de l'écran, dont le texte défile :
+  « mise à jour en direct », le temps d'un déploiement. Elle vit dans la base, se
+  pose en une ligne, et **s'éteint toute seule** — une fin est obligatoire, deux
+  heures par défaut, pour qu'une annonce oubliée ne devienne pas un mensonge.
+  Toucher la bande la masque pour la session.
 - **L'attente** — le bras du logo tourne autour de son pivot pendant le chargement.
   Sans réponse, il décroche et tombe : « Pas de réseau ici ». Un toucher relance, un
   ré-essai part tout seul avec un recul croissant, et l'événement `online` du
@@ -197,6 +202,27 @@ sens. Le détail est dans [`SECURITE.md`](SECURITE.md).
 
 Un déclencheur crée le profil et le planning vide à l'inscription, avec un identifiant
 dérivé de l'adresse et dédoublonné.
+
+## Poser une annonce
+
+Depuis la console SQL du projet. La fonction éteint l'annonce en cours avant d'en
+poser une nouvelle, et vide le bandeau si on ne lui passe rien.
+
+```sql
+-- Pendant un déploiement
+select prive.annoncer('Mise à jour en direct — quelques secousses possibles.');
+
+-- Plus longtemps, et sur un autre ton : travaux (défaut), info, alerte
+select prive.annoncer('Maintenance jusqu''à 18 h.', interval '3 hours', 'alerte');
+
+-- Éteindre tout de suite
+select prive.annoncer(null);
+```
+
+L'application relit l'annonce à l'ouverture, au retour dans l'onglet, et toutes
+les 90 secondes tant que l'onglet est au premier plan. La table est en lecture
+seule pour tout le monde, y compris sans compte, et n'accepte aucune écriture par
+l'API : seule la console écrit.
 
 ## Réglages Supabase à vérifier
 

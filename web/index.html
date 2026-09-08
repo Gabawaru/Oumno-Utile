@@ -1023,9 +1023,54 @@ body{padding-bottom:calc(56px + env(safe-area-inset-bottom) + .8rem)}
 .releve.mini .bras{stroke-width:10}
 .releve.mini .pivot{r:11;stroke-width:5}
 .vide .releve.mini{margin-right:.1rem}
+
+/* ── Le ruban ─────────────────────────────────────────────────────────
+   En bas, au-dessus du socle quand il y en a un. Le texte défile parce
+   qu'il doit se lire en passant, sans qu'on ait à s'arrêter dessus. */
+.ruban{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;align-items:stretch;
+  background:var(--sig);color:#fff;font-size:.74rem;line-height:1;
+  min-height:44px;overflow:hidden;
+  box-shadow:0 -2px 10px rgba(0,0,0,.14);
+  animation:monterRuban .4s cubic-bezier(.2,.8,.3,1) both}
+@keyframes monterRuban{from{transform:translateY(100%)}to{transform:none}}
+.ruban.info{background:var(--evt)}
+.ruban.alerte{background:var(--warn);color:#1a1207}
+body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + env(safe-area-inset-bottom))}
+
+.ruban .piste{flex:1;min-width:0;overflow:hidden;display:flex;align-items:center}
+.ruban .defile{display:flex;white-space:nowrap;
+  animation:passer 22s linear infinite;will-change:transform}
+.ruban .defile span{padding-right:4rem;flex:none}
+@keyframes passer{to{transform:translateX(-50%)}}
+.ruban:hover .defile{animation-play-state:paused}
+
+/* La cible doit tenir dans le ruban : le ruban grandit, pas le bouton, sinon
+   overflow:hidden rogne la moitié cliquable. */
+.rubanX{flex:none;color:inherit;opacity:.7;font-size:1.2rem;line-height:1;
+  padding:0 1rem;display:grid;place-content:center}
+.ruban{cursor:pointer}
+.ruban:hover .rubanX,.ruban:focus-visible .rubanX{opacity:1}
+.ruban:focus-visible{outline:2px solid #fff;outline-offset:-3px}
+
+@media (prefers-reduced-motion:reduce){
+  .ruban{animation:none}
+  .ruban .piste{padding:0 .7rem}
+  .ruban .defile{animation:none;white-space:normal}
+  .ruban .defile span:last-child{display:none}
+  .ruban .defile span{padding-right:0}
+}
 </style>
 </head>
 <body>
+<!-- ═════════ LE RUBAN ═════════
+     Un mot de passage, posé depuis la base, qui s'efface tout seul. -->
+<div class="ruban" id="ruban" hidden role="status" aria-live="polite"
+     tabindex="0" aria-label="Message du service — toucher pour masquer">
+  <div class="piste"><div class="defile"><span id="rubanTexte"></span><span
+      aria-hidden="true" id="rubanEcho"></span></div></div>
+  <span class="rubanX" aria-hidden="true">&times;</span>
+</div>
+
 <!-- ═════════ L'ATTENTE ═════════
      Visible avant tout le reste : sans lui, la page reste blanche le temps que
      la base réponde. Le bras du logo tourne comme on prend un relèvement ;
