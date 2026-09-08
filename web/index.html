@@ -971,9 +971,80 @@ body{padding-bottom:calc(56px + env(safe-area-inset-bottom) + .8rem)}
   .socle button{flex:0 1 9.5rem}
   .barre{padding:.7rem 0}
 }
+
+/* ── L'attente ────────────────────────────────────────────────────────
+   Le bras du logo tourne autour du pivot. Deux groupes imbriqués : celui
+   qui tourne, et celui qui tombe. Geler la rotation puis animer la chute
+   par-dessus évite le saut qu'on aurait à repartir d'un angle nul. */
+#chargement{min-height:100svh;display:flex;align-items:center;justify-content:center}
+.attente{display:flex;flex-direction:column;align-items:center;gap:.15rem;
+  text-align:center;padding:1.5rem;max-width:22rem;user-select:none}
+.releve{width:92px;height:92px;overflow:visible}
+.releve .ref{stroke:var(--sig);stroke-width:8;stroke-linecap:round}
+.releve .bras{fill:none;stroke:var(--ink3);stroke-width:8;
+  stroke-linecap:round;stroke-linejoin:round;transition:stroke .4s ease}
+.releve .pivot{fill:var(--sig);stroke:var(--paper);stroke-width:4;
+  transition:fill .4s ease}
+.releve .tourne{transform-box:view-box;transform-origin:44px 68px;
+  animation:relever 2.1s cubic-bezier(.5,.05,.5,.95) infinite}
+.releve .chute{transform-box:view-box;transform-origin:44px 68px}
+@keyframes relever{to{transform:rotate(360deg)}}
+
+.attente .etatch{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.15rem;
+  font-weight:700;letter-spacing:-.02em;margin-top:1.1rem}
+.attente .aidech{font-size:.82rem;color:var(--ink2);line-height:1.5;margin-top:.35rem;
+  text-wrap:balance;min-height:1.2em}
+
+/* Le réseau ne répond pas : le bras se décroche et reste tombé. */
+#chargement.casse{cursor:pointer}
+.casse .releve .tourne{animation-play-state:paused}
+.casse .releve .chute{animation:decrocher .7s cubic-bezier(.35,.9,.4,1) both}
+.casse .releve .bras{stroke:var(--rule)}
+.casse .releve .pivot{fill:var(--ink3)}
+@keyframes decrocher{
+  0%{transform:none}
+  22%{transform:rotate(-9deg)}
+  100%{transform:rotate(34deg) translate(3px,14px);opacity:.4}
+}
+/* Une seule respiration sur le point d'ancrage : il attend qu'on le touche. */
+.casse .releve .pivot{animation:battre 2.4s ease-in-out .7s infinite}
+@keyframes battre{0%,100%{r:9.5}50%{r:11}}
+
+@media (prefers-reduced-motion:reduce){
+  .releve .tourne{animation:respirer 1.6s ease-in-out infinite}
+  @keyframes respirer{0%,100%{opacity:1}50%{opacity:.45}}
+  .casse .releve .chute{animation:none;transform:rotate(34deg) translate(3px,14px);opacity:.4}
+  .casse .releve .pivot{animation:none}
+}
+
+/* La même figure, en petit, pour les attentes à l'intérieur de l'application. */
+.releve.mini{width:26px;height:26px;flex:none}
+.releve.mini .ref{stroke-width:10}
+.releve.mini .bras{stroke-width:10}
+.releve.mini .pivot{r:11;stroke-width:5}
+.vide .releve.mini{margin-right:.1rem}
 </style>
 </head>
 <body>
+<!-- ═════════ L'ATTENTE ═════════
+     Visible avant tout le reste : sans lui, la page reste blanche le temps que
+     la base réponde. Le bras du logo tourne comme on prend un relèvement ;
+     quand rien ne vient, il décroche du pivot et tombe. -->
+<section id="chargement">
+  <div class="attente" id="attente" role="status" aria-live="polite">
+    <svg class="releve" viewBox="0 0 100 100" role="img" aria-labelledby="titreCh">
+      <title id="titreCh">Repère</title>
+      <line class="ref" x1="44" y1="10" x2="44" y2="90"/>
+      <g class="tourne"><g class="chute">
+        <path class="bras" d="M13 81 L44 68 L88 27"/>
+      </g></g>
+      <circle class="pivot" cx="44" cy="68" r="9.5"/>
+    </svg>
+    <p class="etatch" id="etatCh">Repère</p>
+    <p class="aidech" id="aideCh"></p>
+  </div>
+</section>
+
 <!-- ═════════ LA PORTE ═════════
      Un seul écran, une seule décision. Tout le reste vient après, et seulement
      si on l'a demandé. -->
