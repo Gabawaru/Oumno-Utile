@@ -21,6 +21,7 @@ let programme = null;    // modèle choisi, ou matières déclarées à la main
 let modeleEnAttente = null;  // modèle retenu à l'inscription, posé à la 1re ouverture
 let nomReel = null;      // vrai nom du profil consulté, si l'on y a droit
 let abonnements = [], abonnes = [], resaRecues = [], resaEnvoyees = [], annuaire = [];
+let demarrageFait = false;  // la question « par quoi on commence ? » a été posée
 let partJour = null;     // { date, h } — la part de travail fixée pour le jour
 let plan = null;         // résultat du planificateur
 
@@ -153,11 +154,13 @@ function appliquerEtat(d){
   capacites = normaliserCapacites(d.capacites);
   reports   = d.reports   || {};
   partJour  = d.partJour  || null;
+  demarrageFait = Boolean(d.demarrage);
   programme = d.programme || { modele: "cned", matieres: [] };
   chargerProgramme(programme);
   Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
 }
-const etat=()=>({done,evenements:events,notes:grades,capacites,reports,partJour,programme});
+const etat=()=>({done,evenements:events,notes:grades,capacites,reports,partJour,programme,
+                 demarrage:demarrageFait});
 
 function log(text){
   pendingLog.push(text);
@@ -2005,13 +2008,22 @@ async function ouvrir(profil) {
   // Le repli sur la copie locale doit se voir : c'est le dernier mot de l'ouverture.
   if (secours) setSync("warn", "hors ligne — copie locale");
   else setSync("ok", canEdit ? "mode édition" : "lecture publique");
-  if (canEdit && !(programme.matieres || []).length) demanderModele();
+  // Le modèle CNED n'a légitimement aucune matière déclarée : ses matières
+  // viennent du référentiel. Se fier à cette liste faisait reposer la question
+  // à chaque ouverture. C'est le drapeau qui décide, plus la forme du programme.
+  const neuf = !demarrageFait && !Object.keys(done).length
+    && !events.length && !journal.length && !(programme.matieres || []).length;
+  if (canEdit && neuf) demanderModele();
 }
 
 /* Par quoi commencer. La question ne se pose qu'une fois, à la première
    ouverture — et pas au milieu du formulaire d'inscription, où elle ne faisait
    qu'allonger la page qu'on venait remplir. */
 function demanderModele() {
+  // Posée à l'affichage, pas à la réponse : fermer la fenêtre d'un geste de
+  // côté compte aussi comme une réponse. On ne redemande jamais.
+  demarrageFait = true;
+  saveState();
   dialogue({ ton: "info", titre: "Par quoi on commence ?",
     corps: `<div class="modeles">${Object.values(MODELES).map((m, i) => `
       <label class="modele${i === 0 ? " on" : ""}">
@@ -2023,6 +2035,7 @@ function demanderModele() {
       if (!c) return;
       programme = depuisModele(c.value);
       chargerProgramme(programme);
+      demarrageFait = true;
       log(`a démarré avec le modèle « ${MODELES[c.value].nom} »`);
       saveState(); renderAll();
     } }] });
@@ -2081,6 +2094,50 @@ async function demarrer() {
   return true;
 }
 
+/* ═════════ LE RUBAN ═════════
+   Quand une mise à jour est en cours, autant le dire : une application qui
+   change sous les doigts sans prévenir passe pour cassée. L'annonce vit dans
+   la base, avec une fin obligatoire — elle s'éteint donc toute seule, même si
+   on oublie de l'éteindre. */
+
+let rubanVu = null;
+
+async function chargerRuban() {
+  const z = $("ruban");
+  if (!z) return;
+  const { data, error } = await sb.from("ciel_annonces")
+    .select("id,texte,ton").order("debut", { ascending: false }).limit(1);
+  const a = Array.isArray(data) ? data[0] : null;
+  // Hors réseau, on garde ce qui est affiché : effacer ferait clignoter.
+  if (error) return;
+  if (!a) { z.hidden = true; rubanVu = null; return; }
+  let ecarte = null;
+  try { ecarte = sessionStorage.getItem("ciel.ruban"); } catch {}
+  if (ecarte === a.id) { z.hidden = true; return; }
+  if (rubanVu === a.id && !z.hidden) return;   // déjà à l'écran, on ne le rejoue pas
+  rubanVu = a.id;
+  $("rubanTexte").textContent = a.texte;
+  $("rubanEcho").textContent = a.texte;
+  z.className = "ruban " + (a.ton || "travaux");
+  z.hidden = false;
+}
+
+// Toute la bande se touche, pas seulement la croix : viser 40 px de large au
+// pouce, sur un bandeau de 44 px de haut, c'est demander de la précision pour
+// écarter un message qu'on n'a pas demandé.
+$("ruban").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("ruban").click(); }
+});
+$("ruban").addEventListener("click", () => {
+  $("ruban").hidden = true;
+  try { sessionStorage.setItem("ciel.ruban", rubanVu || ""); } catch {}
+});
+
+// Assez souvent pour qu'une annonce arrive pendant qu'on est là, assez rare
+// pour ne rien coûter. Et jamais quand l'onglet est en arrière-plan.
+setInterval(() => { if (!document.hidden) chargerRuban(); }, 90000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) chargerRuban(); });
+
 /* ═════════ L'ATTENTE ═════════
    Une page blanche pendant que la base répond ne dit rien ; une page blanche
    qui ne finit jamais ment. Le bras du logo tourne, et s'il ne se passe rien
@@ -2120,6 +2177,7 @@ async function lancer() {
   direAttente(essais ? "Nouvelle tentative" : "Repère", "");
   // Au-delà, ce n'est plus un chargement : c'est une attente sans fin.
   tPatience = setTimeout(attenteCassee, 9000);
+  chargerRuban().catch(() => {});
   const debut = Date.now();
   let abouti = false;
   try { abouti = (await demarrer()) !== false; }
