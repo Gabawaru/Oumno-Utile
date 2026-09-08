@@ -1525,10 +1525,13 @@ function renderCompte() {
     </div>
     <div class="zdanger">
       <div><b>Supprimer mon compte</b>
-        <em>Efface immédiatement le compte, le planning, le journal, les partages et
-          les abonnés. C'est définitif : il n'y a pas de sauvegarde.</em></div>
+        <em>Efface immédiatement le compte, le planning, le journal, les partages,
+          les publications, les photos déposées et les conversations.
+          C'est définitif : il n'y a pas de sauvegarde.</em></div>
       <button class="btn danger" id="supprCompte">Supprimer mon compte</button>
-    </div>`;
+    </div>
+    <div id="blocages"></div>`;
+  renderBlocages();
   $("mdpLien").onclick = async () => {
     const b = $("mdpLien");
     b.disabled = true; b.textContent = "Envoi…";
@@ -1560,6 +1563,33 @@ function renderCompte() {
         } },
     ],
   });
+}
+
+/** Bloquer sans pouvoir débloquer serait un piège : la liste vit dans le compte. */
+async function renderBlocages() {
+  const box = $("blocages");
+  if (!box || !session) return;
+  const { data } = await sb.from("ciel_blocages").select("cible,cree_le").eq("qui", session.user.id);
+  const l = Array.isArray(data) ? data : [];
+  // Le panneau a pu être redessiné pendant l'attente : on ne parle qu'au sien.
+  const cible = $("blocages");
+  if (!cible) return;
+  if (!l.length) { cible.innerHTML = ""; return; }
+  const noms = {};
+  const { data: profs } = await sb.from("ciel_profiles").select("id,nom,slug,avatar")
+    .in("id", l.map((x) => x.cible));
+  (profs || []).forEach((x) => (noms[x.id] = x));
+  const zone = $("blocages");
+  if (!zone) return;
+  zone.innerHTML = `<details class="repli" style="margin-top:.8rem">
+    <summary>Personnes bloquées <span class="note">${l.length}</span></summary>
+    <div class="gens">${l.map((b) => {
+      const x = noms[b.cible] || { nom: "Compte supprimé" };
+      return `<div class="pers">${vignette(x, "pt")}
+        <span class="qui"><b>${esc(x.nom)}</b>${x.slug ? `<em>@${esc(x.slug)}</em>` : ""}</span>
+        <span class="act"><button class="btn" data-debloquer="${esc(b.cible)}">Débloquer</button></span>
+      </div>`;
+    }).join("")}</div></details>`;
 }
 
 /* ═════════ CONTACTS ═════════
@@ -2734,6 +2764,14 @@ document.addEventListener("click", async (e) => {
         moment ouvre la conversation — et le mot qui l'accompagne dit qui tu es.</p>`,
       actions: [{ texte: "Fermer" }, { texte: "Proposer un moment", pri: true,
         faire: () => proposerMoment(w.dataset.ecrire, (p && p.nom) || "cette personne", true) }] });
+  }
+  const db = e.target.closest("[data-debloquer]");
+  if (db) {
+    await sb.from("ciel_blocages").delete()
+      .eq("qui", session.user.id).eq("cible", db.dataset.debloquer);
+    await chargerSocial();
+    renderCompte();
+    return setSync("ok", "débloqué");
   }
   const bl = e.target.closest("[data-bloquer]");
   if (bl) { const [qui, nom] = bl.dataset.bloquer.split("|"); return bloquer(qui, nom); }
