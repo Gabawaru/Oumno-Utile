@@ -51,6 +51,11 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
   pose en une ligne, et **s'éteint toute seule** — une fin est obligatoire, deux
   heures par défaut, pour qu'une annonce oubliée ne devienne pas un mensonge.
   Toucher la bande la masque pour la session.
+- **Zones sûres** — la page est dessinée sous la barre d'état du téléphone
+  (`viewport-fit=cover`) : sans marge en haut, l'en-tête s'y superposait et devenait
+  illisible. Deux variables, `--haut` et `--bas`, portent les encoches ; un bandeau
+  fixe garde son fond pour que rien ne défile derrière. Elles sont réglables depuis
+  la console, ce qui rend l'encoche vérifiable en test — `env()` ne se simule pas.
 - **L'attente** — le bras du logo tourne autour de son pivot pendant le chargement.
   Sans réponse, il décroche et tombe : « Pas de réseau ici ». Un toucher relance, un
   ré-essai part tout seul avec un recul croissant, et l'événement `online` du
