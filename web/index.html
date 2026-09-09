@@ -39,8 +39,17 @@
   --ok:#3cb98a; --late:#ff4d68; --warn:#d6a63c; --ahead:#5a9bff;
 }
 *{box-sizing:border-box;margin:0;padding:0}
+/* La page est dessinée sous la barre d'état du téléphone (viewport-fit=cover) :
+   sans marge en haut, l'en-tête de l'application s'y superpose et devient
+   illisible. Ces deux variables portent les zones sûres, en haut comme en bas. */
+:root{--haut:env(safe-area-inset-top,0px);--bas:env(safe-area-inset-bottom,0px);
+  --marge:clamp(.7rem,2vw,1.5rem)}
 body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;
-  font-size:14px;line-height:1.5;padding:clamp(.7rem,2vw,1.5rem)}
+  font-size:14px;line-height:1.5;padding:var(--marge);
+  padding-top:calc(var(--marge) + var(--haut))}
+/* Le bandeau système garde son fond, sinon le contenu défile derrière lui. */
+body::before{content:"";position:fixed;top:0;left:0;right:0;height:var(--haut);
+  background:var(--paper);z-index:45;pointer-events:none}
 .wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:.85rem}
 h1,h2,h3{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif}
 .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
@@ -713,7 +722,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
 /* ── La porte ────────────────────────────────────────────────────────
    Trois boutons, rien d'autre. Ce qu'on n'affiche pas ici, on ne le lit
    pas non plus : c'était tout le problème de l'ancienne page. */
-.porte{min-height:calc(100svh - 5.5rem);display:flex;flex-direction:column;
+.porte{min-height:calc(100svh - 5.5rem - var(--haut));display:flex;flex-direction:column;
   align-items:center;justify-content:center;text-align:center;gap:.2rem;
   max-width:24rem;margin:0 auto;padding:1rem 0}
 .porte .sceau{filter:drop-shadow(0 6px 18px rgba(0,0,0,.16));
@@ -749,10 +758,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--sig);outline:none}
 .carte .btn{width:100%}
 
 /* ── Barre du haut ───────────────────────────────────────────────── */
-.barre{position:sticky;top:calc(-1 * clamp(.7rem,2vw,1.5rem));z-index:30;
+.barre{position:sticky;top:var(--haut);z-index:30;
   background:color-mix(in srgb,var(--paper) 88%,transparent);
   backdrop-filter:saturate(1.4) blur(10px);
-  border-bottom:1px solid var(--rule);margin:calc(-1 * clamp(.7rem,2vw,1.5rem)) 0 0;
+  border-bottom:1px solid var(--rule);margin:calc(-1 * var(--marge)) 0 0;
   padding:.55rem 0;display:flex;align-items:center;gap:.7rem}
 .barre .ident{min-width:0;flex:1}
 .barre h1{font-size:1.15rem;font-weight:700;letter-spacing:-.02em;line-height:1.15;
@@ -781,7 +790,7 @@ button.av:hover{border-color:var(--sig)}
   background:color-mix(in srgb,var(--card) 94%,transparent);
   backdrop-filter:saturate(1.4) blur(12px);
   border-top:1px solid var(--rule);
-  padding-bottom:env(safe-area-inset-bottom)}
+  padding-bottom:var(--bas)}
 .socle button{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;
   gap:.14rem;padding:.42rem .1rem .38rem;background:none;border:none;cursor:pointer;
   color:var(--ink3);font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.62rem;
@@ -893,7 +902,7 @@ button.av:hover{border-color:var(--sig)}
 .mot.creneau.moi{border-left-color:#fff}
 .mot.creneau .quoi{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
   font-size:.8rem;display:block;margin-bottom:.15rem}
-.convpied{display:flex;gap:.4rem;position:sticky;bottom:calc(56px + env(safe-area-inset-bottom));
+.convpied{display:flex;gap:.4rem;position:sticky;bottom:calc(56px + var(--bas));
   background:var(--paper);padding:.5rem 0}
 .convpied input{flex:1;min-width:0}
 .convferme{font-size:.76rem;color:var(--ink2);background:var(--sunk);border:1px solid var(--rule);
@@ -933,15 +942,21 @@ button.av:hover{border-color:var(--sig)}
 .commun em{font-style:normal;font-size:.7rem;color:var(--ink2)}
 
 /* ── Petits écrans : c'est là que ça se joue ─────────────────────── */
-body{padding-bottom:calc(56px + env(safe-area-inset-bottom) + .8rem)}
+body{padding-bottom:calc(56px + var(--bas) + .8rem)}
 #appli{max-width:640px}
 #appli[data-large]{max-width:1180px}
 
 @media (max-width:640px){
   body{padding-left:.55rem;padding-right:.55rem}
-  .barre h1{font-size:1.02rem}
-  .horlogette .t{font-size:.82rem}
+  /* Sur un écran d'à peine 844 px de haut, dont 47 pris par la barre système,
+     chaque pixel d'en-tête est un pixel de planning en moins. */
+  .barre{padding:.35rem 0;gap:.5rem}
+  .barre h1{font-size:.98rem}
+  .barre .sous,.barre .reel{font-size:.64rem}
+  .horlogette .d{font-size:.55rem}
+  .horlogette .t{font-size:.8rem}
   .horlogette .sec{display:none}
+  .av{width:32px;height:32px;font-size:.72rem}
   .post .corps{font-size:.86rem}
   .socle button span:not(.pastille){font-size:.58rem}
 }
@@ -976,7 +991,8 @@ body{padding-bottom:calc(56px + env(safe-area-inset-bottom) + .8rem)}
    Le bras du logo tourne autour du pivot. Deux groupes imbriqués : celui
    qui tourne, et celui qui tombe. Geler la rotation puis animer la chute
    par-dessus évite le saut qu'on aurait à repartir d'un angle nul. */
-#chargement{min-height:100svh;display:flex;align-items:center;justify-content:center}
+#chargement{min-height:calc(100svh - var(--haut));display:flex;align-items:center;
+  justify-content:center}
 .attente{display:flex;flex-direction:column;align-items:center;gap:.15rem;
   text-align:center;padding:1.5rem;max-width:22rem;user-select:none}
 .releve{width:92px;height:92px;overflow:visible}
@@ -1035,7 +1051,7 @@ body{padding-bottom:calc(56px + env(safe-area-inset-bottom) + .8rem)}
 @keyframes monterRuban{from{transform:translateY(100%)}to{transform:none}}
 .ruban.info{background:var(--evt)}
 .ruban.alerte{background:var(--warn);color:#1a1207}
-body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + env(safe-area-inset-bottom))}
+body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
 
 .ruban .piste{flex:1;min-width:0;overflow:hidden;display:flex;align-items:center}
 .ruban .defile{display:flex;white-space:nowrap;
