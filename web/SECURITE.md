@@ -203,6 +203,38 @@ métadonnées EXIF perdues au passage — dont la position GPS. Ce n'est pas une
 de sécurité du serveur, c'est une mesure de vie privée de l'utilisateur, et elle est
 plus efficace côté client qu'après coup.
 
+### Atteindre quelqu'un sans le déshabiller
+
+La politique de lecture de `ciel_profiles` masque **entièrement** un compte privé.
+C'est juste pour le planning, et c'était une impasse pour tout le reste : une
+personne qui vous suit n'apparaissait nulle part de cliquable, et un compte privé
+qu'on connaît par son nom restait injoignable à jamais — aucune façon de lui
+demander à le suivre.
+
+`carte_profil(identifiant)` rend la carte d'identité minimale — pseudonyme,
+identifiant, vignette, visibilité, joignabilité — plus l'état de la relation
+(`lien`, `me_suit`, `peut_ecrire`). Les champs personnels — présentation, fuseau,
+région — ne sortent **que** si le profil est public ou si l'abonnement est accepté.
+
+Ce qui borne l'exposition :
+
+- elle ne répond que sur un **identifiant exact**, jamais sur une liste ni un
+  préfixe : elle ne sert pas à parcourir les comptes privés ;
+- elle exige une session ;
+- un blocage la fait rendre zéro ligne, dans les deux sens.
+
+Ce qu'elle confirme — « cet identifiant est pris » — est déjà ce que révèle
+`nom_disponible`, appelable sans compte parce que l'inscription en dépend. Le
+gain de discrétion à s'en priver serait nul ; le coût était un réseau où personne
+ne peut se joindre.
+
+**Un piège de logique à trois valeurs y a vécu quelques minutes.** L'état de la
+relation était `null` faute d'abonnement, et `false or null` vaut `null` en SQL,
+pas `false` : la ligne entière disparaissait, y compris pour les comptes publics
+qu'on avait le droit de voir. Chaque test est désormais ramené explicitement à un
+booléen. C'est le genre de défaut qui ne lève aucune erreur et se lit comme une
+absence de données.
+
 ### Le profil, écrit par son propriétaire
 
 La politique `profiles_maj` autorise à écrire n'importe quelle colonne de sa propre

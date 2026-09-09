@@ -171,6 +171,7 @@ des fonctions `security definer` font le travail et n'exposent que le nécessair
 | `repondre_abonnement(uuid,bool)` | connecté | accepte ou refuse une demande reçue |
 | `mes_abonnes()` / `mes_abonnements()` | connecté | les deux sens de la relation |
 | `identifiant_disponible(text)` | connecté | dit si un identifiant public est libre |
+| `carte_profil(text)` | connecté | la carte minimale d'un compte, par identifiant exact — sans quoi un compte privé serait injoignable |
 | `proposer_creneau(...)` | connecté | applique la joignabilité, exige un motif d'un inconnu, dépose le message |
 | `envoyer_message(uuid,text)` | connecté | seule écriture possible dans une conversation |
 | `marquer_lu(uuid)` | connecté | efface la pastille des non-lus |
