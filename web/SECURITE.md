@@ -257,6 +257,34 @@ message d'erreur ni page à ouvrir — le genre qu'on ne voit qu'en lisant le
 déclencheur. L'identifiant vient désormais du pseudonyme choisi, et les comptes
 existants ont été renommés.
 
+### Surveiller quelqu'un sans le lui apprendre
+
+La case « me prévenir quand il est libre » écrit une ligne dans `ciel_veilles`
+(`qui`, `cible`). Deux questions se posaient.
+
+**Qui peut lire la ligne ?** Seul `qui`. La cible ne sait pas qu'on la surveille, et
+personne d'autre ne sait qui surveille qui : la politique de lecture est
+`qui = auth.uid()`, sans exception, et il n'existe aucune fonction qui compte les
+veilleurs d'un compte. C'était le choix à faire : dire à quelqu'un « trois personnes
+attendent que tu sois libre » transforme une commodité en pression.
+
+**Que donne la veille ?** Rien de plus que ce qui était déjà lisible. La veille ne
+lit pas les plages libres elle-même : elle sert de filtre au-dessus de
+`ciel_dispos`, dont les politiques décident déjà qui voit quoi. Surveiller un compte
+privé auquel on n'est pas abonné produit zéro ligne — vérifié par bascule de rôle,
+pas déduit du code. Une contrainte `qui <> cible` évite la veille sur soi-même, et la
+clé primaire `(qui, cible)` rend la case idempotente.
+
+`nouveautes()` réunit six sources sous l'identité de l'appelant, `marquer_nouveautes_vues()`
+ne touche qu'une colonne de sa propre ligne de profil. Les deux sont `security definer`,
+`search_path` figé, `REVOKE ... FROM PUBLIC, anon`.
+
+**Ce que la pastille compte.** Messages, demandes d'abonnement, moments proposés et
+leurs réponses — ce qui attend une réponse. Pas les publications ni les
+disponibilités, qui sont montrées sans être comptées. Une pastille qui ne s'éteint
+jamais cesse d'être lue, et une notification qu'on n'a plus envie d'ouvrir ne protège
+plus rien.
+
 ### Ce que le réseau oblige
 
 Héberger des publications, des images et des conversations fait de l'éditeur un
@@ -361,6 +389,15 @@ Il a trouvé les deux erreurs de droits décrites plus haut : le passer après t
 migration n'est pas facultatif.
 
 ## Journal des audits
+
+**9 septembre 2026 — centre de nouveautés et veilles.** Trois migrations, cinq
+vérifications par bascule de rôle : rien n'attend sur un compte neuf ; une demande
+d'abonnement reçue remonte bien comme telle ; une veille posée sur un compte dont on
+ne voit pas les plages libres rend zéro ligne ; marquer comme vu n'éteint pas ce qui
+attend encore une réponse. Les conseillers Supabase ne signalent rien de nouveau :
+`nouveautes` et `marquer_nouveautes_vues` n'apparaissent que dans la liste attendue
+des fonctions réservées aux comptes connectés. Vérifié depuis l'extérieur : 401 sans
+session sur les deux.
 
 **8 septembre 2026 — réseau social, et une fuite fermée.** L'identifiant public d'un
 profil était fabriqué à partir de la partie gauche de l'adresse électronique. Il
