@@ -1307,7 +1307,8 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + env(safe-area-inset-bot
     <div data-vol="decouvrir" hidden>
       <div class="champ chercher">
         <label class="horsvue" for="chercheP">Chercher quelqu'un</label>
-        <input id="chercheP" type="search" placeholder="Chercher un pseudonyme…">
+        <input id="chercheP" type="search" placeholder="Un nom, ou un identifiant exact…"
+          autocapitalize="none" spellcheck="false">
       </div>
       <div id="annuaire"></div>
     </div>

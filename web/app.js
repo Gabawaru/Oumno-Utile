@@ -1750,6 +1750,9 @@ function renderAbonnements() {
 }
 
 /* ── mes abonnés ─────────────────────────────────────── */
+/** Où j'en suis avec quelqu'un : accepté, en attente, ou rien. */
+const suivi = (id) => (abonnements.find((a) => a.qui === id) || {}).etat || null;
+
 function renderAbonnes() {
   const l = abonnes.filter((x) => x.etat === "accepte");
   $("abonnes").innerHTML = l.length
@@ -1762,6 +1765,14 @@ function renderAbonnes() {
         <span class="act">
           <label class="urgcase"><input type="checkbox" data-reel="${esc(a.qui)}"
             ${a.voit_nom_reel ? "checked" : ""}><span>vrai nom</span></label>
+          ${suivi(a.qui) === "accepte"
+            ? `<span class="etiq ok">tu le suis</span>`
+            : suivi(a.qui) === "attente"
+              ? `<span class="etiq att">demande envoyée</span>`
+              : `<button class="btn pri" data-sab="${esc(a.qui)}">${
+                  a.public ? "Suivre" : "Demander à suivre"}</button>`}
+          ${a.joignable !== "personne"
+            ? `<button class="btn" data-ecrire="${esc(a.qui)}">Message</button>` : ""}
           ${a.slug ? `<button class="btn" data-fiche="${esc(a.slug)}">Voir</button>` : ""}
           <button class="btn" data-retirer="${esc(a.qui)}">Retirer</button>
         </span>
@@ -1798,11 +1809,30 @@ async function chargerAnnuaire() {
   annuaire = (data || []).filter((p) => !session || p.id !== session.user.id);
 }
 
-function renderAnnuaire() {
+async function renderAnnuaire() {
   const box = $("annuaire");
   if (!box) return;
   const q = ($("chercheP")?.value || "").trim().toLowerCase();
   const l = annuaire.filter((p) => !q || p.nom.toLowerCase().includes(q) || p.slug.includes(q));
+  // Un compte privé n'est dans aucune liste — c'est le but. Mais qui connaît
+  // son identifiant exact doit pouvoir lui demander à le suivre, sinon il est
+  // injoignable pour toujours.
+  if (!l.length && q.length >= 2 && session) {
+    const { data } = await sb.rpc("carte_profil", { identifiant: q });
+    const c = Array.isArray(data) ? data[0] : null;
+    if (c && c.lien !== "moi") {
+      box.innerHTML = `<div class="gens"><div class="pers">
+        ${vignette(c, "pt")}
+        <span class="qui"><b>${esc(c.nom)}</b><em>@${esc(c.slug)} · compte privé</em></span>
+        <span class="act">
+          <button class="btn" data-fiche="${esc(c.slug)}">Voir</button>
+          ${c.lien === "aucun"
+            ? `<button class="btn pri" data-sab="${esc(c.id)}">Demander à suivre</button>`
+            : `<span class="etiq att">${c.lien === "attente" ? "demande envoyée" : "tu le suis"}</span>`}
+        </span></div></div>`;
+      return;
+    }
+  }
   box.innerHTML = l.length
     ? `<div class="gens">` + l.slice(0, 40).map((p) => `
       <div class="pers">
@@ -1814,8 +1844,9 @@ function renderAnnuaire() {
             ? `<button class="btn pri" data-sab="${esc(p.id)}">S'abonner</button>` : ""}
         </span>
       </div>`).join("") + `</div>`
-    : `<div class="vide">${q ? "Aucun pseudonyme ne correspond."
-        : "Personne d'ouvert à la consultation pour l'instant."}</div>`;
+    : `<div class="vide">${q
+        ? "Aucun compte ne porte ce nom. Les comptes privés ne se trouvent que par leur identifiant exact."
+        : "Personne d'ouvert à la consultation. Cherche quelqu'un par son identifiant."}</div>`;
 }
 
 function renderJoignable() {
@@ -1894,6 +1925,9 @@ document.addEventListener("click", async (e) => {
     const { data } = await sb.rpc("s_abonner", { cible: b.dataset.sab });
     const r = String(data || "").replace(/"/g, "");
     await chargerSocial(); renderSocial();
+    // La fiche affichée doit refléter le nouvel état, pas celui d'avant le clic.
+    if (vueCourante === "personne" && argCourant) await ouvrirFiche(argCourant);
+    if (vueCourante === "fil") renderAnnuaire();
     return dialogue({ ton: "info", titre: r === "accepte" ? "Abonné" : "Demande envoyée",
       corps: r === "accepte"
         ? `<p>Ce planning est public : tu le suis désormais.</p>`
@@ -2730,8 +2764,8 @@ async function chargerFils() {
         <em>${f.de_moi ? "Toi : " : ""}${esc(String(f.dernier || "").split("\n")[0].slice(0, 70))}</em></span>
       <span class="quand">${tempsRelatif(f.maj_le)}</span>
     </button>`).join("")
-    : `<div class="vide">Aucune conversation. Ouvre le profil de quelqu'un pour lui
-       proposer un moment.</div>`;
+    : `<div class="vide">Aucune conversation.
+       <button class="btn" data-vers="contacts">Voir mes contacts</button></div>`;
 }
 
 function majPastilleMsg() {
@@ -2810,22 +2844,32 @@ async function ouvrirFiche(slug) {
   const box = $("fichePersonne");
   if (!box) return;
   box.innerHTML = enAttente("Ouverture du profil…");
-  const p = await chargerProfil(slug);
-  if (!p) { box.innerHTML = `<div class="vide">Ce profil n'existe pas, ou ne t'est pas ouvert.</div>`; return; }
+  // La table masque entièrement un compte privé : quelqu'un qui vous suit
+  // devenait introuvable. La carte rend le strict nécessaire pour agir.
+  const { data: cartes } = await sb.rpc("carte_profil", { identifiant: slug });
+  const p = Array.isArray(cartes) ? cartes[0] : null;
+  if (!p) {
+    box.innerHTML = `<div class="vide">Aucun compte ne porte cet identifiant, ou il t'a bloqué.</div>`;
+    return;
+  }
   titreFiche = p.nom;
   $("titreProfil").textContent = p.nom;
 
   const [{ data: pub }, { data: dsp }] = await Promise.all([
     sb.rpc("publications_de", { qui: p.id, taille: 12 }),
-    sb.from("ciel_dispos").select("jour,debut,fin").eq("user_id", p.id)
-      .gte("jour", isoJour(new Date(NOW))).order("jour").limit(12),
+    p.ouvert
+      ? sb.from("ciel_dispos").select("jour,debut,fin").eq("user_id", p.id)
+          .gte("jour", isoJour(new Date(NOW))).order("jour").limit(12)
+      : Promise.resolve({ data: [] }),
   ]);
   const sien = Array.isArray(pub) ? pub : [];
   await signerImages(sien);
 
-  const lien = abonnements.find((a) => a.qui === p.id);
-  const suit = lien ? lien.etat : null;
-  const heure = heureChez(p.fuseau), dec = decalage(p.fuseau);
+  const suit = p.lien === "aucun" ? null : p.lien;
+  // Sans fuseau connu (compte privé), pas d'horloge : afficher l'heure de Paris
+  // en la présentant comme la sienne serait un renseignement inventé.
+  const heure = p.fuseau ? heureChez(p.fuseau) : null;
+  const dec = p.fuseau ? decalage(p.fuseau) : null;
   const soi = session && p.id === session.user.id;
 
   box.innerHTML = `
@@ -2841,19 +2885,21 @@ async function ouvrirFiche(slug) {
       <div class="traits">
         ${heure ? `<span class="trait">Il est <b class="mono">${esc(heure)}</b> chez ${esc(p.nom)}${
           dec ? ` · ${esc(dec)}` : ""}</span>` : ""}
-        ${p.region_visible && p.region ? `<span class="trait">${esc(p.region)}</span>` : ""}
+        ${p.region ? `<span class="trait">${esc(p.region)}</span>` : ""}
         <span class="trait">${p.public ? "Planning public" : "Planning privé"}</span>
+        ${p.me_suit ? `<span class="trait">Te suit</span>` : ""}
         <span class="trait">${{ tous: "Joignable par tous", abonnes: "Joignable par ses contacts",
           personne: "Ne reçoit pas de demandes" }[p.joignable] || ""}</span>
       </div>
       ${soi ? "" : `<div class="actes">
         ${suit === "accepte" ? `<button class="btn" data-desab="${esc(p.id)}">Se désabonner</button>`
           : suit === "attente" ? `<span class="etiq att">demande envoyée</span>`
-          : `<button class="btn pri" data-sab="${esc(p.id)}">S'abonner</button>`}
+          : `<button class="btn pri" data-sab="${esc(p.id)}">${
+              p.public ? "S'abonner" : "Demander à suivre"}</button>`}
         ${p.joignable !== "personne"
           ? `<button class="btn" data-moment="${esc(p.id)}">Proposer un moment</button>` : ""}
-        <button class="btn" data-ecrire="${esc(p.id)}">Message</button>
-        ${p.public || suit === "accepte"
+        ${p.peut_ecrire ? `<button class="btn" data-ecrire="${esc(p.id)}">Message</button>` : ""}
+        ${p.ouvert
           ? `<a class="btn" href="?profil=${encodeURIComponent(p.slug)}">Voir son planning</a>` : ""}
       </div>
       <details class="repli" style="margin-top:.7rem"><summary>Un problème avec ce profil ?</summary>
@@ -2869,7 +2915,10 @@ async function ouvrirFiche(slug) {
 
     <div class="panel">
       <div class="phead"><h2>Ses publications</h2></div>
-      ${sien.length ? sien.map((x) => {
+      ${!p.ouvert && !sien.length
+        ? `<div class="vide">Ce compte est privé. Demande à le suivre pour voir
+           son planning et ses publications.</div>`
+        : sien.length ? sien.map((x) => {
         const img = x.image && signees[x.image];
         return `<article class="post">
           <div class="tete">${vignette(x, "pt")}
@@ -2888,6 +2937,40 @@ function grouperDispos(l) {
   return Object.entries(par).slice(0, 7).map(([j, plages]) => `
     <div class="commun"><div class="qui"><b>${esc(jourFr(j))}</b>
       <em>${plages.map((x) => `${x.debut.slice(0, 5)} – ${x.fin.slice(0, 5)}`).join(" · ")}</em></div></div>`).join("");
+}
+
+/** Premier message à quelqu'un. Si la porte est fermée, la base le dit, et on
+    bascule sur la seule chose qu'on puisse encore adresser : une proposition. */
+function ecrireA(qui, nom) {
+  dialogue({ ton: "info", titre: `Écrire à ${nom}`,
+    corps: `<div class="champ"><label class="fl" for="msgTexte">Ton message</label>
+      <input id="msgTexte" maxlength="2000" placeholder="Salut, …"></div>`,
+    actions: [{ texte: "Annuler" }, { texte: "Envoyer", pri: true, faire: async () => {
+      const v = (($("msgTexte") || {}).value || "").trim();
+      if (!v) return;
+      const { data } = await sb.rpc("envoyer_message", { cible: qui, corps: v });
+      const r = String(data || "").replace(/"/g, "");
+      if (r === "ok") {
+        const { data: fs } = await sb.rpc("mes_fils");
+        fils = Array.isArray(fs) ? fs : [];
+        const f = fils.find((x) => x.autre === qui);
+        setSync("ok", "message envoyé");
+        return f ? aller("conv", f.fil) : aller("messages");
+      }
+      if (r === "ferme") {
+        return dialogue({ ton: "info", titre: `${nom} ne reçoit pas de messages`,
+          corps: `<p>Tu peux quand même lui proposer un moment : c'est la seule chose
+            qu'on adresse à quelqu'un qui ne vous lit pas, et le mot qui l'accompagne
+            dit qui tu es.</p>`,
+          actions: [{ texte: "Fermer" }, { texte: "Proposer un moment", pri: true,
+            faire: () => proposerMoment(qui, nom, true) }] });
+      }
+      dialogue({ ton: "warn", titre: "Message non envoyé", corps: `<p>${esc({
+        bloque: "Cette conversation est bloquée.",
+        trop: "Trop de messages d'affilée. Attends quelques minutes.",
+        vide: "Message vide ou trop long.",
+      }[r] || "Envoi refusé.")}</p>` });
+    } }] });
 }
 
 /* ── Proposer un moment ────────────────────────────────────────────── */
@@ -2950,12 +3033,10 @@ document.addEventListener("click", async (e) => {
     fils = Array.isArray(data) ? data : [];
     const f = fils.find((x) => x.autre === w.dataset.ecrire);
     if (f) return aller("conv", f.fil);
+    // Pas de conversation ne veut pas dire pas le droit d'en ouvrir une :
+    // on proposait la seule porte de secours alors que la porte était ouverte.
     const p = annuaireOuAbonnement(w.dataset.ecrire);
-    return dialogue({ ton: "info", titre: "Pas encore de conversation",
-      corps: `<p>Tu n'as pas encore d'échange avec cette personne. Une proposition de
-        moment ouvre la conversation — et le mot qui l'accompagne dit qui tu es.</p>`,
-      actions: [{ texte: "Fermer" }, { texte: "Proposer un moment", pri: true,
-        faire: () => proposerMoment(w.dataset.ecrire, (p && p.nom) || "cette personne", true) }] });
+    return ecrireA(w.dataset.ecrire, (p && p.nom) || "cette personne");
   }
   const db = e.target.closest("[data-debloquer]");
   if (db) {
