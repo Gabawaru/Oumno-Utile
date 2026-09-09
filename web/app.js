@@ -1661,6 +1661,23 @@ function renderSocial() {
   renderMesResa();
   renderInviter();
   majPastille();
+  // Les compteurs à côté des titres : on voit d'un coup s'il y a quelque chose,
+  // sans avoir à décider si une liste est vide ou mal chargée.
+  const n = (id, v) => { const e = $(id); if (e) e.textContent = v ? String(v) : "aucun"; };
+  n("nbAbonnements", abonnements.filter((x) => x.etat === "accepte").length);
+  n("nbAbonnes", abonnes.filter((x) => x.etat === "accepte").length);
+  n("nbDemandes", abonnes.filter((x) => x.etat === "attente").length);
+
+  const r = $("rappelDem");
+  if (r) {
+    const att = aTraiter();
+    r.hidden = att === 0;
+    r.innerHTML = `<b>${plural(att, "demande")}</b> ${att > 1 ? "attendent" : "attend"} ta réponse`;
+    r.onclick = () => {
+      const b = document.querySelector('.segs[data-segs="contacts"] button[data-seg="demandes"]');
+      if (b) b.click();
+    };
+  }
 }
 
 /* ── ce qui attend une réponse ───────────────────────── */
@@ -1671,14 +1688,14 @@ function renderDemandes() {
   const dp = $("pastDem");
   if (dp) { dp.hidden = !(dem.length + res.length); dp.textContent = String(dem.length + res.length); }
   if (!dem.length && !res.length) {
-    box.innerHTML = `<div class="vide">Rien n'attend de réponse de ta part.</div>`;
+    box.innerHTML = `<div class="vide">Personne n'attend de réponse de ta part.</div>`;
     return;
   }
   box.innerHTML = `<div class="gens">` + dem.map((d) => `
     <div class="pers attente">
       ${vignette(d, "pt")}
       <span class="qui"><b>${esc(d.nom || "Compte")}</b>
-        <em>@${esc(d.slug || "?")} · veut suivre ton planning</em></span>
+        <em>@${esc(d.slug || "?")} · demande à suivre ton planning</em></span>
       <span class="act">
         <button class="btn pri" data-abok="${esc(d.qui)}">Accepter</button>
         <button class="btn" data-abnon="${esc(d.qui)}">Refuser</button>
@@ -1728,7 +1745,8 @@ function renderAbonnements() {
           <button class="btn" data-desab="${esc(a.qui)}">Se désabonner</button>
         </span>
       </div>`).join("") + `</div>`
-    : `<div class="vide">Tu ne suis personne. <button class="btn" data-vers="fil">Trouver quelqu'un</button></div>`;
+    : `<div class="vide">Tu ne suis encore personne.
+        <button class="btn" data-vers="fil">Trouver quelqu'un</button></div>`;
 }
 
 /* ── mes abonnés ─────────────────────────────────────── */
