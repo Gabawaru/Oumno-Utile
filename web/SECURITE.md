@@ -192,6 +192,11 @@ Deux seaux, deux régimes.
   réclame une adresse signée d'une heure, et la politique `SELECT` sur
   `storage.objects` ne la délivre que si une publication lisible porte ce fichier.
 
+Le dépôt se fait en « upsert » : le service de stockage regarde d'abord si l'objet
+existe, puis insère ou remplace. Il manquait donc deux politiques — une lecture sur
+`avatars`, et une mise à jour sur les deux seaux. Sans elles, ce chemin échouait, et
+remplacer une photo déjà posée était de toute façon impossible.
+
 L'écriture est bornée au dossier `<uuid de l'utilisateur>/`, côté stockage comme côté
 base : le déclencheur de `ciel_profiles` refuse un `avatar` qui pointerait ailleurs,
 celui de `ciel_posts` en fait autant pour `image`. Sans lui, n'importe qui pourrait

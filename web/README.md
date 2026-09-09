@@ -33,8 +33,15 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
   ne peut vous adresser **qu'une** chose : une proposition de moment, avec son motif.
   Répondre ou accepter ouvre la conversation. Blocage réciproque et signalement d'un
   contenu à l'éditeur.
-- **Photo de profil** — redimensionnée et reconvertie par le navigateur avant l'envoi,
-  ce qui efface au passage les métadonnées EXIF, position GPS comprise.
+- **Photos, avec recadrage** — on cadre avant d'envoyer : la fenêtre s'ouvre sur
+  l'image entière, on la déplace au doigt, on la grossit à deux doigts ou à la
+  molette. Carré et masque rond pour la photo de profil ; carré, portrait ou
+  paysage pour une publication. Tout tient dans un canevas, sans dépendance —
+  la politique de sécurité du contenu n'en accepterait aucune.
+- Le morceau retenu est redessiné et reconverti en JPEG par le navigateur avant
+  l'envoi, ce qui efface au passage les métadonnées EXIF, position GPS comprise.
+  Aucun filtrage sur le type déclaré : un iPhone rend ses photos en HEIC, et le
+  seul test qui vaille est de tenter le décodage.
 - **Fuseau horaire et région** — le profil de quelqu'un affiche l'heure qu'il est chez
   lui et l'écart avec la vôtre. « Libre à 14 h » ne veut pas dire la même chose à
   Paris et à Hanoï. La région est un texte libre, facultatif, masqué par défaut.
