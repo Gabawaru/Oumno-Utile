@@ -4,7 +4,7 @@
 // servirait une version périmée après chaque mise en ligne, ce qui est pire que
 // pas de cache du tout pour une application qu'on corrige souvent.
 
-const VERSION = "repere-v2";
+const VERSION = "repere-v3";
 const SOCLE = [
   "/", "/index.html", "/app.js", "/supa.js", "/planificateur.js",
   "/planning.js", "/modeles.js", "/photos.js", "/polices.css", "/manifest.webmanifest",

@@ -5,7 +5,8 @@ import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree,
          trouverCreneaux, creneauxTexte, plusLongCreneau, normaliserCapacites,
          journeeType, REGLES, JOURNEE,
          hhmm as enHeure, min as enMin, iso as isoJour } from "./planificateur.js";
-import { preparer as preparerImage, deposer as deposerImage } from "./photos.js";
+import { preparer as preparerImage, deposer as deposerImage,
+         recadrer as recadrerImage } from "./photos.js";
 
 const SUPABASE_URL = "https://hnmeefndnckqkdjjbgwe.supabase.co";
 const SUPABASE_KEY = "sb_publishable_ciLHalsy_YvWIUbEbCnN2g_TZfT4aPU";
@@ -1092,7 +1093,7 @@ function renderProfil() {
           <h2>${esc(vue.nom)}</h2>
           <div class="arobase">@${esc(vue.slug)}</div>
           <div class="actes" style="margin-top:.5rem">
-            <input type="file" id="pfFichier" accept="image/jpeg,image/png,image/webp" class="horsvue">
+            <input type="file" id="pfFichier" accept="image/*" class="horsvue">
             <button class="btn" id="pfPhoto">${vue.avatar ? "Changer la photo" : "Ajouter une photo"}</button>
             ${vue.avatar ? `<button class="btn danger" id="pfSansPhoto">Retirer</button>` : ""}
           </div>
@@ -1165,17 +1166,23 @@ function renderProfil() {
   $("pfPhoto").onclick = () => $("pfFichier").click();
   $("pfFichier").onchange = async (e) => {
     const f = e.target.files && e.target.files[0];
+    e.target.value = "";                      // pour pouvoir rechoisir le même fichier
     if (!f) return;
-    setSync("warn", "envoi de la photo");
     try {
-      const chemin = await deposerImage(sb, AVATARS, vue.id, await preparerImage(f, 400, 0.86));
+      const coupe = await recadrerImage(f, { ratio: 1, rond: true, cote: 512,
+        qualite: 0.88, titre: "Cadre ta photo de profil" });
+      if (!coupe) return;                     // annulé, sans bruit
+      setSync("warn", "envoi de la photo");
+      const chemin = await deposerImage(sb, AVATARS, vue.id, coupe);
       const { error } = await sb.from("ciel_profiles").update({ avatar: chemin }).eq("id", vue.id);
       if (error) throw new Error(error.message);
       vue.avatar = chemin; if (moi) moi.avatar = chemin;
       majBoutonCompte(); renderProfil(); setSync("ok", "photo enregistrée");
     } catch (err) {
       setSync("warn", "photo refusée");
-      dialogue({ titre: "Photo refusée", corps: `<p>${esc(err.message)}</p>` });
+      dialogue({ titre: "Photo non enregistrée", corps: `<p>${esc(err.message)}</p>
+        <p class="aide">Si ça se reproduit, réessaie avec une autre photo, ou
+        recharge la page : une session expirée fait échouer le dépôt.</p>` });
     }
   };
   const sp = $("pfSansPhoto");
@@ -2559,7 +2566,7 @@ function renderEcrire() {
       ${brouillon.apercu ? `<div class="apercuimg"><img src="${esc(brouillon.apercu)}" alt="">
         <button class="btn mini danger" id="postSansImage">Retirer</button></div>` : ""}
       <div class="outils">
-        <input type="file" id="postFichier" accept="image/jpeg,image/png,image/webp" class="horsvue">
+        <input type="file" id="postFichier" accept="image/*" class="horsvue">
         <button class="btn" id="postImage">Photo</button>
         <select id="postPortee" aria-label="Qui peut voir">
           <option value="abonnes"${brouillon.portee === "abonnes" ? " selected" : ""}>Mes abonnés</option>
@@ -2571,9 +2578,13 @@ function renderEcrire() {
   $("postImage").onclick = () => $("postFichier").click();
   $("postFichier").onchange = async (e) => {
     const f = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!f) return;
     try {
-      brouillon.blob = await preparerImage(f, 1440, 0.82);
+      const coupe = await recadrerImage(f, { ratio: 1, cote: 1440, qualite: 0.84,
+        choixRatio: true, titre: "Cadre ta photo" });
+      if (!coupe) return;
+      brouillon.blob = coupe;
       if (brouillon.apercu) URL.revokeObjectURL(brouillon.apercu);
       brouillon.apercu = URL.createObjectURL(brouillon.blob);
       renderEcrire();

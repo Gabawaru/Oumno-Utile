@@ -1095,6 +1095,33 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
 .rappel:hover{background:color-mix(in srgb,var(--warn) 20%,var(--card))}
 .rappel b{font-weight:700}
 .rappel::after{content:"›";margin-left:auto;font-size:1.2rem;line-height:1;color:var(--warn)}
+
+/* ── Recadrage ────────────────────────────────────────────────────────
+   Plein écran : sur un téléphone, cadrer une photo dans une vignette de
+   deux centimètres ne marche pas. */
+.recadre{position:fixed;inset:0;z-index:70;display:grid;place-items:center;
+  background:color-mix(in srgb,#080c11 82%,transparent);backdrop-filter:blur(3px);
+  padding:calc(.6rem + var(--haut)) .6rem calc(.6rem + var(--bas));
+  animation:paraitre .18s ease both}
+@keyframes paraitre{from{opacity:0}to{opacity:1}}
+.rboite{width:min(560px,100%);max-height:100%;display:flex;flex-direction:column;gap:.55rem;
+  background:var(--card);border:1px solid var(--rule);border-top:4px solid var(--sig);
+  padding:.8rem .85rem}
+.rtitre{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1rem;font-weight:700}
+.rscene{flex:1;min-height:14rem;background:var(--sunk);overflow:hidden;
+  display:flex;align-items:center;justify-content:center}
+.rscene canvas{display:block;touch-action:none;cursor:grab}
+.rscene canvas:active{cursor:grabbing}
+.rformats{display:flex;gap:2px;background:var(--sunk);border:1px solid var(--rule);padding:2px}
+.rformats button{flex:1;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.75rem;
+  font-weight:600;padding:.4rem;border:none;background:transparent;color:var(--ink3);cursor:pointer}
+.rformats button[aria-pressed="true"]{background:var(--card);color:var(--ink);
+  box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.rzoom input{width:100%;accent-color:var(--sig)}
+.ractes{display:flex;gap:.4rem}
+.ractes .btn{flex:1}
+.raide{font-size:.68rem;color:var(--ink3);text-align:center}
+@media (hover:hover){.raide{display:none}}
 </style>
 </head>
 <body>
