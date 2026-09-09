@@ -522,7 +522,9 @@ table.etapes td:last-child{width:2rem}
    Cibles tactiles d'au moins 40 px, en-tête empilé, onglets qui tiennent en
    une ligne, et tableaux qui redeviennent des listes. */
 @media (max-width:640px){
-  body{padding:.55rem}
+  /* Jamais le raccourci `padding` ici : il remettrait à plat la marge haute
+     qui dégage la barre d'état, et la marge basse qui dégage le socle. */
+  body{padding-left:.55rem;padding-right:.55rem}
   .wrap{gap:.6rem}
   .panel{padding:.75rem .7rem .85rem}
   .ident{flex:1 1 100%}
@@ -889,8 +891,16 @@ button.av:hover{border-color:var(--sig)}
 .filrang.neuf b::after{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
   background:var(--sig);margin-left:.4rem;vertical-align:middle}
 
-.conv{display:flex;flex-direction:column;gap:.5rem;min-height:60svh}
-.convcorps{display:flex;flex-direction:column;gap:.3rem;padding:.2rem 0}
+/* Une conversation occupe la place disponible et fait défiler SA liste.
+   Faire défiler la page entière glissait les messages sous l'en-tête collant :
+   on ne voyait plus que la tranche du dernier. */
+section[data-panel="conv"]{display:flex;flex-direction:column;gap:.5rem;
+  height:calc(100svh - var(--haut) - var(--bas) - 56px - var(--entete,46px) - 1.7rem);
+  min-height:15rem}
+.convcorps{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  display:flex;flex-direction:column;gap:.3rem;padding:.2rem 0;
+  scrollbar-width:thin}
+.convcorps>*{flex:none}
 .mot{max-width:min(78%,30rem);padding:.45rem .7rem;font-size:.85rem;line-height:1.5;
   background:var(--card);border:1px solid var(--rule);align-self:flex-start;
   overflow-wrap:anywhere;white-space:pre-wrap;
@@ -902,8 +912,7 @@ button.av:hover{border-color:var(--sig)}
 .mot.creneau.moi{border-left-color:#fff}
 .mot.creneau .quoi{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
   font-size:.8rem;display:block;margin-bottom:.15rem}
-.convpied{display:flex;gap:.4rem;position:sticky;bottom:calc(56px + var(--bas));
-  background:var(--paper);padding:.5rem 0}
+.convpied{display:flex;gap:.4rem;flex:none;background:var(--paper);padding:.15rem 0 0}
 .convpied input{flex:1;min-width:0}
 .convferme{font-size:.76rem;color:var(--ink2);background:var(--sunk);border:1px solid var(--rule);
   border-left:3px solid var(--warn);padding:.55rem .7rem}
@@ -947,7 +956,6 @@ body{padding-bottom:calc(56px + var(--bas) + .8rem)}
 #appli[data-large]{max-width:1180px}
 
 @media (max-width:640px){
-  body{padding-left:.55rem;padding-right:.55rem}
   /* Sur un écran d'à peine 844 px de haut, dont 47 pris par la barre système,
      chaque pixel d'en-tête est un pixel de planning en moins. */
   .barre{padding:.35rem 0;gap:.5rem}

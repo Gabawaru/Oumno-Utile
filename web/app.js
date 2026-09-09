@@ -2816,7 +2816,12 @@ async function ouvrirConversation(id) {
     return `<div class="mot${moiM ? " moi" : ""}${m.genre === "creneau" ? " creneau" : ""}">`
       + corps + `<span class="h">${hhmm(new Date(m.cree_le).getTime())}</span></div>`;
   }).join("") || `<div class="vide">Rien encore.</div>`;
-  box.scrollIntoView({ block: "end" });
+  // On descend dans la liste, pas dans la page : c'est la liste qui défile.
+  // Après une image de plus, pour que la hauteur du panneau soit calculée :
+  // la poser trop tôt donne une hauteur d'avant et la liste reste en haut.
+  const enBas = () => { box.scrollTop = box.scrollHeight; };
+  enBas();
+  requestAnimationFrame(() => requestAnimationFrame(enBas));
 
   const ouvert = f ? f.ouvert : false;
   $("convPied").hidden = !ouvert;
@@ -2847,6 +2852,7 @@ $("convPied").addEventListener("submit", async (e) => {
   const { data: fs } = await sb.rpc("mes_fils");
   fils = Array.isArray(fs) ? fs : [];
   await ouvrirConversation(convFil);
+  inp.focus();
 });
 
 /* ═════════ LA FICHE DE QUELQU'UN ═════════ */
@@ -3289,6 +3295,13 @@ function appliquerRoute() {
   montrerVue(v, arg);
 }
 
+/** La hauteur réelle de l'en-tête : la conversation s'y ajuste au pixel. */
+function mesurerEnTete() {
+  const b = document.querySelector(".barre");
+  if (b) document.documentElement.style.setProperty("--entete", b.offsetHeight + "px");
+}
+addEventListener("resize", mesurerEnTete);
+
 function montrerVue(v, arg) {
   const def = VUES[v] || VUES.jour;
   vueCourante = v; argCourant = arg;
@@ -3328,7 +3341,13 @@ function montrerVue(v, arg) {
   else if (v === "personne") t.textContent = titreFiche || "Profil";
   else t.textContent = def.titre;
 
-  scrollTo({ top: 0, behavior: SOBRE.matches ? "auto" : "smooth" });
+  // Instantané : un défilement animé pendant que le contenu change laisse la
+  // page à mi-chemin, et le panneau apparaît coupé par l'en-tête.
+  scrollTo({ top: 0, behavior: "auto" });
+  mesurerEnTete();
+  // Les liens de pied de page n'ont rien à faire au milieu d'une conversation.
+  const pied = document.querySelector(".souspied.dansappli");
+  if (pied) pied.hidden = v === "conv";
   try { sessionStorage.setItem("ciel.vue", location.hash); } catch {}
   peupler(v, arg);
 }
