@@ -1059,6 +1059,26 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + env(safe-area-inset-bot
   .ruban .defile span:last-child{display:none}
   .ruban .defile span{padding-right:0}
 }
+
+/* ── Titres de liste ──────────────────────────────────────────────────
+   Une liste sans titre ne se lit pas : on ne sait pas ce qu'on regarde.
+   L'ancienne légende — dix pixels, gris pâle, en capitales — se sautait. */
+.tetel{display:flex;align-items:baseline;gap:.5rem;margin:1.1rem 0 .5rem;
+  padding-bottom:.35rem;border-bottom:1px solid var(--rule)}
+.tetel:first-child{margin-top:.2rem}
+.tetel h3{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.95rem;
+  font-weight:700;letter-spacing:-.01em;color:var(--ink)}
+.tetel .nb{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--ink3);
+  font-variant-numeric:tabular-nums}
+
+/* Un rappel qu'on ne peut pas manquer quand quelque chose attend. */
+.rappel{display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;font:inherit;
+  font-size:.8rem;padding:.6rem .75rem;margin-bottom:.3rem;cursor:pointer;color:var(--ink);
+  background:color-mix(in srgb,var(--warn) 12%,var(--card));
+  border:1px solid var(--warn);border-left-width:3px}
+.rappel:hover{background:color-mix(in srgb,var(--warn) 20%,var(--card))}
+.rappel b{font-weight:700}
+.rappel::after{content:"›";margin-left:auto;font-size:1.2rem;line-height:1;color:var(--warn)}
 </style>
 </head>
 <body>
@@ -1320,21 +1340,24 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + env(safe-area-inset-bot
   <section data-panel="social" class="stack" hidden>
     <div class="segs" data-segs="contacts">
       <button data-seg="gens" aria-selected="true">Mes contacts</button>
-      <button data-seg="demandes">À traiter<span class="pastille" id="pastDem" hidden></span></button>
+      <button data-seg="demandes">Demandes<span class="pastille" id="pastDem" hidden></span></button>
       <button data-seg="communs">Moments communs</button>
     </div>
 
     <div data-vol="gens">
+      <button class="rappel" id="rappelDem" hidden></button>
+      <div class="tetel"><h3>Je les suis</h3><span class="nb" id="nbAbonnements"></span></div>
       <div id="abonnements"></div>
-      <div class="soustitre">Ils me suivent</div>
+      <div class="tetel"><h3>Ils me suivent</h3><span class="nb" id="nbAbonnes"></span></div>
       <div id="abonnes"></div>
       <details class="repli"><summary>Inviter par lien</summary>
         <div id="inviterBox"></div></details>
     </div>
 
     <div data-vol="demandes" hidden>
+      <div class="tetel"><h3>Veulent me suivre</h3><span class="nb" id="nbDemandes"></span></div>
       <div id="demandes"></div>
-      <div class="soustitre">Mes demandes envoyées</div>
+      <div class="tetel"><h3>Ce que j'ai demandé</h3></div>
       <div id="mesResa"></div>
     </div>
 
