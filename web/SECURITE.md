@@ -317,6 +317,12 @@ finissent toujours par diverger — elle a été sortie en
 appel. Cinq vérifications confirment que les deux disent la même chose et que le
 compte privé sans lien reste invisible.
 
+**Les deux routes serveur refusent quand leur protection manque.** Elles
+laissaient passer si `CRON_SECRET` n'était pas posée — `if (secret && ...)`. Tant
+qu'une autre variable manquait, elles répondaient 503 et l'oubli restait
+invisible ; le jour où tout le reste est configuré, n'importe qui aurait pu
+déclencher les envois. Elles échouent désormais fermées.
+
 **Le secret qui déclenche l'envoi ne traîne nulle part.** L'envoi est déclenché
 par `pg_cron`, toutes les quinze minutes. `cron.job` est lisible depuis le tableau
 de bord : le secret y figurerait en clair si la tâche le portait. Il vit donc dans

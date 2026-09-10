@@ -30,7 +30,10 @@ export default async function handler(req, res) {
   // qu'une fois par jour. Une notification qui arrive le lendemain n'en est plus une.
   const secrets = [process.env.PUSH_SECRET, process.env.CRON_SECRET].filter(Boolean);
   const donne = req.headers.authorization || "";
-  if (secrets.length && !secrets.some((s) => donne === `Bearer ${s}`)) {
+  // Aucun secret posé ferme la route au lieu de l'ouvrir. L'inverse — passer
+  // quand il n'y a rien à vérifier — laisse n'importe qui déclencher les envois
+  // le jour où une variable manque, et ce jour-là personne ne le remarque.
+  if (!secrets.length || !secrets.some((s) => donne === `Bearer ${s}`)) {
     res.status(401).json({ error: "Non autorisé" });
     return;
   }

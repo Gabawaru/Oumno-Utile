@@ -47,8 +47,10 @@ function dateParis() {
 }
 
 export default async function handler(req, res) {
+  // Sans CRON_SECRET, on refuse : une route qui s'ouvre quand sa protection
+  // manque est une route dont on ne saura jamais qu'elle était ouverte.
   const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+  if (!secret || req.headers.authorization !== `Bearer ${secret}`) {
     res.status(401).json({ error: "Non autorisé" });
     return;
   }
