@@ -40,6 +40,7 @@ const T0=qStart(0).getTime(),T1=qEnd(19).getTime();
    connaît que des étapes avec un volume d'heures et une période — le référentiel
    CNED n'est qu'un modèle parmi d'autres. */
 let GROUPES=[], ALL=[], DEVS=[], TOTAL_H=0, byId={};
+let avance={};
 
 function chargerProgramme(prog){
   GROUPES = versGroupes(prog);
@@ -150,6 +151,7 @@ function setSync(k,t){
 function appliquerEtat(d){
   d=d||{};
   done      = d.done      || {};
+  avance    = d.avance    || {};
   events    = d.evenements|| d.events || [];
   grades    = d.notes     || d.grades || {};
   capacites = normaliserCapacites(d.capacites);
@@ -159,9 +161,58 @@ function appliquerEtat(d){
   programme = d.programme || { modele: "cned", matieres: [] };
   chargerProgramme(programme);
   Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
+  migrerAvance();
 }
-const etat=()=>({done,evenements:events,notes:grades,capacites,reports,partJour,programme,
+const etat=()=>({done,avance,evenements:events,notes:grades,capacites,reports,partJour,programme,
                  demarrage:demarrageFait});
+
+/* ═════════ HEURES POSÉES ═════════
+   `done` disait oui ou non. Cocher une tranche d'une heure sur une étape de six
+   créditait les six : le diagramme montrait des heures qui n'avaient pas été
+   faites, et l'avance était fausse d'autant. `avance[etape][jour] = heures` dit
+   ce qui a vraiment été posé, et quel jour — ce que la courbe et le rythme
+   demandaient déjà sans pouvoir le lire.
+
+   `done` reste écrit quand une étape est finie : c'est ce que lisent le
+   planificateur, le retard, et les plages libres publiées aux autres. */
+
+/** Les comptes d'avant ne connaissent que `done` : une étape finie devient une
+ *  séance unique, le jour de sa validation. Rien ne se perd, rien ne s'invente. */
+function migrerAvance(){
+  let bouge=false;
+  for(const id in done){
+    if(avance[id]) continue;
+    const s2=byId[id]; if(!s2) continue;
+    const jour=String(done[id]||"").slice(0,10) || isoJour(new Date(T0));
+    avance[id]={[jour]:s2.h}; bouge=true;
+  }
+  // Une étape retirée du programme ne doit pas laisser des heures fantômes.
+  for(const id in avance) if(!byId[id]) delete avance[id];
+  return bouge;
+}
+
+const EPS=0.01;
+/** Heures posées sur une étape, jamais plus que son volume. */
+const faitDe =id=>{const m=avance[id]; if(!m) return 0;
+  let t=0; for(const j in m) t+=Number(m[j])||0;
+  const s2=byId[id]; return s2?Math.min(s2.h,t):t;};
+const resteDe=s2=>Math.max(0,s2.h-faitDe(s2.id));
+const estFait=s2=>resteDe(s2)<=EPS;
+
+/** Pose (ou retire) des heures un jour donné, et tient `done` en accord. */
+function poserHeures(s2,jour,h){
+  const m=avance[s2.id]||(avance[s2.id]={});
+  const autres=Object.keys(m).reduce((a,j)=>a+(j===jour?0:(Number(m[j])||0)),0);
+  const v=Math.max(0,Math.min(s2.h-autres,(Number(m[jour])||0)+h));
+  if(v<=EPS) delete m[jour]; else m[jour]=Math.round(v*100)/100;
+  if(!Object.keys(m).length) delete avance[s2.id];
+  if(estFait(s2)){
+    // Le jour de fin est le dernier jour travaillé, pas celui du dernier clic.
+    const jours=Object.keys(avance[s2.id]||{}).sort();
+    const dernier=jours[jours.length-1]||jour;
+    done[s2.id]=new Date(dernier+"T18:00:00").toISOString();
+  } else delete done[s2.id];
+}
 
 function log(text){
   pendingLog.push(text);
@@ -192,9 +243,9 @@ function saveState(){
 const saveProgress=saveState, saveEvents=saveState, saveGrades=saveState;
 
 /* ═════════ CALCULS ═════════ */
-const doneH=r=>r.steps.reduce((a,s)=>a+(done[s.id]?s.h:0),0);
-const actualH=()=>ALL.reduce((a,s)=>a+(done[s.id]?s.h:0),0);
-const isLate=s=>!done[s.id]&&NOW>s.t1;
+const doneH=r=>r.steps.reduce((a,s)=>a+faitDe(s.id),0);
+const actualH=()=>ALL.reduce((a,s)=>a+faitDe(s.id),0);
+const isLate=s=>!estFait(s)&&NOW>s.t1;
 const lateDays=s=>Math.floor((NOW-s.t1)/DAY);
 function status(){
   const act=actualH(),exp=planned(NOW),eq=plannedDate(act);
@@ -281,7 +332,7 @@ function renderToday(){
         <input type="checkbox" class="cb" data-cb="${esc(s2.id)}"${canEdit ? "" : " disabled"}>
         <span class="qbody"><span class="qtitle">${esc(s2.row.n)} · ${esc(s2.n)}</span>
         <span class="qmeta"><span class="lt">${lateDays(s2) < 1 ? "échéance passée aujourd'hui" : plural(lateDays(s2), "jour") + " de retard"}</span>
-          <span>${s2.h} h</span>
+          <span>${faitDe(s2.id) > 0.01 ? `${unH(faitDe(s2.id))} sur ${unH(s2.h)}` : unH(s2.h)}</span>
           ${s2.row.url ? `<a href="${esc(s2.row.url)}" target="_blank" rel="noopener">cours ↗</a>` : ""}
         </span></span></label>`).join("") +
       (lates.length > 8 ? `<div class="empty muted">+ ${lates.length - 8} autres</div>` : "");
@@ -350,7 +401,7 @@ function buildAcc(){
          <label class="step" data-step="${s.id}">
            <input type="checkbox" class="cb" data-cb="${esc(s.id)}">
            <span class="lbl">${esc(s.n)}${s.date?` <b class="mono" style="color:var(--sig)">${s.date}</b>`:""}</span>
-           <span class="hh">${s.h} h</span></label>`).join("")}</div></div>`).join("")}</div>
+           <span class="hh">${unH(s.h)}</span></label>`).join("")}</div></div>`).join("")}</div>
    </div>`).join("");
   document.querySelectorAll(".grphd").forEach(hd=>{
     const t=()=>{const b=hd.parentElement;b.classList.toggle("open");
@@ -365,6 +416,188 @@ function buildAcc(){
    Deux séries : le plan, en gris, sert de repère ; les heures réellement faites
    portent la couleur du statut — c'est elle qu'on vient lire. La ligne du fait
    s'arrête à aujourd'hui : on ne dessine pas un avenir qui n'existe pas. */
+/* ═════════ PROJECTION ═════════
+   Deux questions, et on se garde de les mélanger. « À ce rythme, est-ce que je
+   finis avant l'examen ? » se lit dans les heures validées. « Où va ma
+   moyenne ? » se lit dans les notes. Rien dans ces données ne dit combien une
+   heure de travail vaut de points : inventer ce coefficient donnerait un chiffre
+   précis et faux. Le seul pont honnête entre les deux est la part du programme
+   qu'on n'aura pas traitée — elle n'est dans aucune note, et c'est dit. */
+
+const FENETRE_RYTHME = 28 * DAY;
+
+/** « 15 févr. » pour une date de l'année suivante se lit comme une date proche,
+ *  et retourne le sens de la phrase. L'année n'apparaît que si elle change. */
+const fmtDY = (t) => new Date(t).getFullYear() === new Date(NOW).getFullYear()
+  ? fmtD(t) : new Date(t).toLocaleDateString("fr-FR",
+      { day: "numeric", month: "short", year: "numeric" });
+
+/** Heures validées par jour. La fenêtre récente prime : un mois d'arrêt doit se
+ *  voir, et une moyenne depuis septembre l'effacerait. */
+function rythmeTravail() {
+  const faits = [];
+  for (const id in avance) {
+    if (!byId[id]) continue;
+    for (const j in avance[id]) {
+      const t = Date.parse(j + "T12:00:00"), h = Number(avance[id][j]) || 0;
+      if (h > 0 && !isNaN(t) && t <= NOW) faits.push({ t, h });
+    }
+  }
+  faits.sort((a, b) => a.t - b.t);
+  if (!faits.length) return null;
+  const debut = faits[0].t;
+  let depuis = Math.max(debut, NOW - FENETRE_RYTHME);
+  // Moins de trois validations dans le mois : la fenêtre ne dit rien, on remonte.
+  if (faits.filter((x) => x.t >= depuis).length < 3) depuis = debut;
+  const heures = faits.filter((x) => x.t >= depuis).reduce((a, x) => a + x.h, 0);
+  // Plancher d'un jour : sans lui, une seule journée chargée donne un rythme absurde.
+  const jours = Math.max(1, (NOW - depuis) / DAY);
+  return { hParJour: heures / jours, heures, jours, depuis, recent: depuis > debut };
+}
+
+function projection() {
+  const st = status();
+  const ry = rythmeTravail();
+  const reste = Math.max(0, TOTAL_H - st.act);
+  const jusquExam = Math.max(0, (+EXAM - NOW) / DAY);
+  const p = { st, ry, reste, jusquExam, exam: +EXAM };
+  p.hSemaineRequis = reste > 0 && jusquExam > 0 ? (reste / jusquExam) * 7 : 0;
+  if (!ry || ry.hParJour <= 0) return p;
+  p.hSemaine = ry.hParJour * 7;
+  p.fin = reste > 0 ? NOW + (reste / ry.hParJour) * DAY : NOW;
+  p.faitAuExam = Math.min(TOTAL_H, st.act + ry.hParJour * jusquExam);
+  p.couverture = TOTAL_H > 0 ? p.faitAuExam / TOTAL_H : 1;
+  p.manque = Math.max(0, TOTAL_H - p.faitAuExam);
+  p.marge = Math.round((+EXAM - p.fin) / DAY);   // > 0 : fini avant l'examen
+  return p;
+}
+
+/** Trois mois : au-delà, prolonger une droite tirée de quelques notes ne dit plus
+ *  rien du tout. Mieux vaut projeter moins loin et le dire. */
+const HORIZON_NOTES = 90 * DAY;
+
+function projectionNotes() {
+  const vals = DEVS.map((s) => ({ t: s.t1, v: grades[s.id] }))
+    .filter((x) => typeof x.v === "number" && !isNaN(x.v))
+    .sort((a, b) => a.t - b.t);
+  if (!vals.length) return null;
+  const n = vals.length;
+  const moyenne = vals.reduce((a, x) => a + x.v, 0) / n;
+  const r = { n, moyenne, total: DEVS.length };
+  // Deux points font toujours une droite parfaite : ce n'est pas une tendance.
+  if (n < 3) return r;
+  const MOIS = 30 * DAY;
+  const xs = vals.map((x) => (x.t - vals[0].t) / MOIS);
+  const mx = xs.reduce((a, x) => a + x, 0) / n;
+  let num = 0, den = 0;
+  for (let i = 0; i < n; i++) { num += (xs[i] - mx) * (vals[i].v - moyenne); den += (xs[i] - mx) ** 2; }
+  if (den <= 0) return r;             // toutes les notes à la même date
+  const pente = num / den, ord = moyenne - pente * mx;
+  const cible = Math.min(+EXAM, vals[n - 1].t + HORIZON_NOTES);
+  const xc = (cible - vals[0].t) / MOIS;
+  const res = vals.map((x, i) => x.v - (ord + pente * xs[i]));
+  // n-2 : deux paramètres estimés. Avec n = 3 la fourchette est large, et elle doit l'être.
+  const sigma = Math.sqrt(res.reduce((a, e) => a + e * e, 0) / Math.max(1, n - 2));
+  r.pente = pente;
+  r.cible = cible;
+  r.brideeParHorizon = cible < +EXAM - DAY;
+  r.projetee = Math.max(0, Math.min(20, ord + pente * xc));
+  r.fourchette = Math.max(0.5, sigma);
+  return r;
+}
+
+/** Une demi-heure affichée « 1 h » est un mensonge d'arrondi, et c'est ce genre
+ *  d'écart qui rend un total incompréhensible. Sous dix heures, on dit les
+ *  minutes ; au-dessus, l'heure ronde suffit et se lit mieux. */
+const unH = (h) => {
+  if (h >= 10) return `${Math.round(h)} h`;
+  const m = Math.round(h * 60);
+  if (m % 60 === 0) return `${m / 60} h`;
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+};
+const unN = (v) => v.toFixed(1).replace(".", ",");
+
+function renderProjection() {
+  const box = $("proj");
+  if (!box) return;
+  const p = projection(), g = projectionNotes();
+  const bl = [];
+
+  /* — Où mène le rythme — */
+  if (!p.ry) {
+    bl.push(`<div class="pj"><div class="k">À ce rythme</div>
+      <div class="v">—</div>
+      <div class="d">Valide une première étape : la projection part de tes heures réelles,
+        pas d'une moyenne inventée.</div></div>`);
+  } else if (p.reste <= 0) {
+    bl.push(`<div class="pj ok"><div class="k">Programme</div>
+      <div class="v">Terminé</div>
+      <div class="d">Toutes les heures sont validées : il n'y a plus rien à projeter.</div></div>`);
+  } else {
+    const tard = p.marge < 0;
+    bl.push(`<div class="pj ${tard ? "late" : "ok"}">
+      <div class="k">À ce rythme</div>
+      <div class="v">${fmtDY(p.fin)}</div>
+      <div class="d">${unH(p.hSemaine)} par semaine ces derniers temps.
+        ${tard
+          ? `C'est <b>${plural(-p.marge, "jour")}</b> après l'examen du ${fmtDY(p.exam)}.`
+          : `Soit <b>${plural(p.marge, "jour")}</b> avant l'examen du ${fmtDY(p.exam)}.`}</div></div>`);
+    bl.push(`<div class="pj"><div class="k">Rythme à tenir</div>
+      <div class="v">${unH(p.hSemaineRequis)}<span class="u"> / semaine</span></div>
+      <div class="d">Pour poser les <b>${unH(p.reste)}</b> qui restent avant l'examen.
+        ${p.hSemaine >= p.hSemaineRequis
+          ? `Tu es au-dessus.`
+          : `Il te manque <b>${unH(p.hSemaineRequis - p.hSemaine)}</b> par semaine.`}</div></div>`);
+  }
+
+  /* — Où mènent les notes — */
+  if (!g) {
+    bl.push(`<div class="pj"><div class="k">Moyenne projetée</div>
+      <div class="v">—</div>
+      <div class="d">Saisis tes notes dans <b>Moi → Mon travail</b> pour qu'elle apparaisse.</div></div>`);
+  } else if (!g.projetee) {
+    bl.push(`<div class="pj"><div class="k">Moyenne actuelle</div>
+      <div class="v">${unN(g.moyenne)}<span class="u"> /20</span></div>
+      <div class="d">Sur ${plural(g.n, "note")}. Il en faut <b>trois</b> à des dates
+        différentes pour qu'une tendance veuille dire quelque chose.</div></div>`);
+  } else {
+    const sens = g.pente > 0.15 ? "monte" : g.pente < -0.15 ? "baisse" : "tient";
+    const cl = g.projetee >= 10 ? "ok" : "late";
+    bl.push(`<div class="pj ${cl}"><div class="k">Moyenne projetée</div>
+      <div class="v">${unN(g.projetee)}<span class="u"> /20</span></div>
+      <div class="d">Fourchette <b>${unN(Math.max(0, g.projetee - g.fourchette))}</b>
+        à <b>${unN(Math.min(20, g.projetee + g.fourchette))}</b>,
+        ${g.brideeParHorizon ? `au ${fmtDY(g.cible)}` : `à l'examen`}.
+        Ta moyenne ${sens} de <b>${unN(Math.abs(g.pente))} pt</b> par mois,
+        sur ${plural(g.n, "note")}.</div></div>`);
+  }
+
+  let pied = "";
+  if (p.ry && p.manque > 0.5) {
+    pied = `Cette moyenne ne parle que de ce que tu auras traité. Au rythme actuel il te
+      manquera <b>${unH(p.manque)}</b> à l'examen, soit <b>${Math.round((1 - p.couverture) * 100)} %</b>
+      du programme — et ça, aucune note ne le mesure.`;
+  } else if (g && g.projetee) {
+    pied = `La projection prolonge la pente de tes notes ; elle suppose que rien ne change,
+      ce qui n'arrive jamais tout à fait. Lis la fourchette, pas le chiffre.`;
+  }
+  if (p.ry && p.ry.recent) {
+    pied += ` Le rythme est mesuré depuis le ${fmtDY(p.ry.depuis)} : tu n'as pas encore
+      un mois d'historique.`;
+  }
+  // Les volumes viennent des « durées indicatives » du CNED. Indicatif veut dire
+  // indicatif : c'est une moyenne, pas ton rythme, et tu peux la corriger.
+  if (programme.modele !== "perso") {
+    pied += ` Les volumes viennent des <b>durées indicatives</b> publiées par le CNED.
+      Indicatif veut dire moyen : si une situation professionnelle te prend
+      systématiquement plus ou moins de temps, rends ton programme modifiable dans
+      <b>Moi → Mon travail</b> et corrige ses heures — tout ce qui est au-dessus suivra.`;
+  }
+
+  box.innerHTML = `<div class="pjs">${bl.join("")}</div>` +
+    (pied ? `<div class="pjpied">${pied}</div>` : "");
+}
+
 /** Le cadre du graphique suit la largeur : sur 390 px, un viewBox de 960 réduit
  *  le texte à quatre pixels. Plus étroit, il reste lisible. */
 const cadreCourbe = () => (window.innerWidth < 640
@@ -377,15 +610,27 @@ const cadreCourbe = () => (window.innerWidth < 640
  * six semaines de piste devant, jusqu'à couvrir l'année entière en juin.
  */
 function fenetreCourbe() {
-  return Math.min(T1, Math.max(NOW + 42 * DAY, T0 + (NOW - T0) * 1.35));
+  const base = Math.max(NOW + 42 * DAY, T0 + (NOW - T0) * 1.35);
+  // La date de fin projetée doit tenir dans le cadre : l'annoncer sans la montrer
+  // laisserait le lecteur chercher un trait qui s'arrête au bord.
+  const pr = projection();
+  const vise = pr.fin ? Math.min(Math.max(pr.fin, +EXAM), T1) + 10 * DAY : base;
+  return Math.min(T1, Math.max(base, vise));
 }
 
 /** Plan continu, réalisé en marches d'escalier, ~60 points sur la fenêtre. */
 function pointsCourbe(tFin) {
-  const faits = Object.keys(done)
-    .map((id) => [Date.parse(done[id]) || T0, byId[id] ? byId[id].h : 0])
-    .filter((x) => x[1] > 0)
-    .sort((a, b) => a[0] - b[0]);
+  // Une étape étalée sur trois jours pose trois points, pas un seul le jour où
+  // la case a été cochée : c'est la différence entre une courbe et un escalier faux.
+  const faits = [];
+  for (const id in avance) {
+    if (!byId[id]) continue;
+    for (const j in avance[id]) {
+      const h = Number(avance[id][j]) || 0;
+      if (h > 0) faits.push([Date.parse(j + "T23:59:59") || T0, h]);
+    }
+  }
+  faits.sort((a, b) => a[0] - b[0]);
   const cumule = (t) => faits.reduce((a, x) => a + (x[0] <= t ? x[1] : 0), 0);
   const pas = Math.max(DAY, (tFin - T0) / 60);
   const pts = [];
@@ -402,8 +647,15 @@ function renderCourbe() {
   const st = status();
   const tFin = fenetreCourbe();
   const pts = pointsCourbe(tFin);
+  const pr = projection();
+  // Le trait projeté s'arrête au bord du cadre, ou au programme fini — le premier des deux.
+  const tProj = pr.fin ? Math.min(pr.fin, tFin) : null;
+  const hProj = tProj != null
+    ? Math.min(TOTAL_H, pr.st.act + pr.ry.hParJour * ((tProj - NOW) / DAY)) : null;
+  // Un programme déjà fini n'a pas d'avenir à tracer : la légende doit se taire aussi.
+  const traceProj = tProj != null && tProj > NOW;
   // L'échelle verticale suit la fenêtre : sinon la courbe rampe au ras de l'axe.
-  const haut = Math.max(20, ...pts.map((p) => Math.max(p.prevu, p.fait || 0)));
+  const haut = Math.max(20, hProj || 0, ...pts.map((p) => Math.max(p.prevu, p.fait || 0)));
   const pas = haut > 400 ? 200 : haut > 150 ? 50 : 10;
   const hMax = haut * 1.06;   // un peu d'air au-dessus, sans repère : rien ne l'atteint
   const X = (t) => CB.l + ((t - T0) / (tFin - T0)) * (CB.L - CB.l - CB.r);
@@ -442,8 +694,13 @@ function renderCourbe() {
     ${mois.map((m) => `<text class="axe" x="${X(m.t)}" y="${CB.H - 9}" text-anchor="middle">${m.n}</text>`).join("")}
     <line class="auj" x1="${X(NOW)}" x2="${X(NOW)}" y1="${CB.h - 4}" y2="${CB.H - CB.b}"/>
     <text class="axe" x="${X(NOW)}" y="${CB.h - 9}" text-anchor="middle">aujourd'hui</text>
+    ${+EXAM > T0 && +EXAM <= tFin ? `<line class="exam" x1="${X(+EXAM)}" x2="${X(+EXAM)}"
+        y1="${CB.h - 4}" y2="${CB.H - CB.b}"/>
+      <text class="axe exam" x="${X(+EXAM)}" y="${CB.h - 9}" text-anchor="middle">examen</text>` : ""}
     ${aire ? `<path class="aire" d="${aire}"/>` : ""}
     <path class="plan" d="${ligne("prevu")}"/>
+    ${traceProj ? `<path class="proj" d="M${X(NOW).toFixed(1)} ${Y(pr.st.act).toFixed(1)}
+      L${X(tProj).toFixed(1)} ${Y(hProj).toFixed(1)}"/>` : ""}
     ${faits.length ? `<path class="fait" d="${ligne("fait")}"/>
       <circle class="bout" cx="${X(dernier.t)}" cy="${Y(dernier.fait)}" r="4"/>` : ""}
     <g id="viseur" hidden><line class="viseur" y1="${CB.h - 6}" y2="${CB.H - CB.b}"/>
@@ -460,7 +717,8 @@ function renderCourbe() {
     `<span><i style="background:${COL[st.kind]}"></i>Fait — <b>${Math.round(st.act)} h</b></span>
      <span><i style="background:var(--ink3);opacity:.7"></i>Plan — <b>${Math.round(st.exp)} h</b> à ce jour</span>
      <span>${st.gap >= 0 ? `<b>${st.gap} h</b> d'avance sur le plan`
-        : `<b>${-st.gap} h</b> de retard sur le plan`}</span>`;
+        : `<b>${-st.gap} h</b> de retard sur le plan`}</span>
+     ${traceProj ? `<span><i class="tirets"></i>Projeté — à ton rythme actuel</span>` : ""}`;
 
   // Survol : viseur, point et bulle, sur le point le plus proche.
   const svg = box.querySelector("svg"), capt = $("capteur"), vis = $("viseur"), bul = $("bulle");
@@ -480,7 +738,10 @@ function renderCourbe() {
     bul.hidden = false;
     bul.innerHTML = `<div class="q">${fmtDL(p.t)}</div>
       ${p.fait != null ? `<div class="l"><i style="background:${COL[st.kind]}"></i>Fait <b>${Math.round(p.fait)} h</b></div>` : ""}
-      <div class="l"><i style="background:var(--ink3)"></i>Plan <b>${Math.round(p.prevu)} h</b></div>`;
+      <div class="l"><i style="background:var(--ink3)"></i>Plan <b>${Math.round(p.prevu)} h</b></div>
+      ${p.t > NOW && traceProj && p.t <= tProj
+        ? `<div class="l"><i class="tirets"></i>Projeté <b>${Math.round(
+            Math.min(TOTAL_H, pr.st.act + pr.ry.hParJour * ((p.t - NOW) / DAY)))} h</b></div>` : ""}`;
     // La bulle reste dans le cadre, même sur le tout premier point.
     const demi = bul.offsetWidth / 2;
     bul.style.left = Math.min(r.width - demi - 4, Math.max(demi + 4, (X(p.t) / CB.L) * r.width)) + "px";
@@ -537,16 +798,28 @@ function applyMode(){
 }
 function syncChecks(){
   document.querySelectorAll("input[data-cb]").forEach(cb=>{
-    const on=!!done[cb.dataset.cb];cb.checked=on;
-    const st=cb.closest(".step");
-    if(st){st.classList.toggle("on",on);st.classList.toggle("lt",isLate(byId[cb.dataset.cb]));}
+    // Les tranches de la journée sont cochées à la construction, d'après les
+    // heures posées ce jour-là : les réécrire ici les effacerait toutes.
+    if(cb.dataset.bh===undefined){
+      const s2=byId[cb.dataset.cb];
+      const on=!!s2&&estFait(s2); cb.checked=on;
+      const st=cb.closest(".step");
+      if(st){
+        st.classList.toggle("on",on);
+        st.classList.toggle("lt",!!s2&&isLate(s2));
+        const f=s2?faitDe(s2.id):0;
+        st.classList.toggle("part",!!s2&&!on&&f>0.01);
+        const hh=st.querySelector(".hh");
+        if(hh&&s2) hh.textContent = (!on&&f>0.01) ? `${unH(f)} / ${unH(s2.h)}` : unH(s2.h);
+      }
+    }
     cb.disabled=!canEdit;});
 }
 let painting=false;
 function renderAll(){
   painting=true;
   replanifier();
-  renderToday();renderCourbe();paintGantt();renderGrades();renderJournal();
+  renderToday();renderCourbe();renderProjection();paintGantt();renderGrades();renderJournal();
   // Reconstruire les champs de réglage sous les doigts de quelqu'un qui écrit
   // efface ce qu'il tape : on ne les redessine que s'ils sont à l'écran.
   if(vueCourante==="moi"){renderCapacites();renderProfil();renderProgramme();renderCompte();renderJoignable();}
@@ -588,10 +861,7 @@ const FIN_ANNEE = new Date(2027, 5, 30).getTime();
 /** Heures validées un jour donné, d'après l'horodatage posé à la validation. */
 function heuresFaitesLe(cle) {
   let h = 0;
-  for (const id in done) {
-    const q = byId[id];
-    if (q && String(done[id]).slice(0, 10) === cle) h += q.h;
-  }
+  for (const id in avance) if (byId[id]) h += Number(avance[id][cle]) || 0;
   return Math.round(h * 100) / 100;
 }
 
@@ -604,7 +874,7 @@ function heuresFaitesLe(cle) {
 function replanifier() {
   const cle = isoJour(new Date(NOW));
   const base = { etapes: ALL, done, evenements: events, capacites, reports,
-                 maintenant: NOW, fin: FIN_ANNEE };
+                 maintenant: NOW, fin: FIN_ANNEE, reste: resteDe };
   if (!partJour || partJour.date !== cle) {
     const brut = planifier(base);
     partJour = { date: cle, h: brut.jours.get(cle)?.travailPose ?? 0 };
@@ -689,6 +959,9 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
   ].sort((x, y) => x.d - y.d);
 
   if (!items.length) return `<div class="empty">Journée entièrement libre.</div>`;
+  // Une étape peut revenir en deux tranches dans la même journée, coupées par une
+  // pause : chacune doit savoir combien d'heures la précèdent.
+  const cumulJour = {};
 
   // Aujourd'hui, ce qui compte c'est ce qui vient. Le passé de la journée se
   // replie : il est consultable, il n'occupe plus l'écran.
@@ -715,12 +988,22 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
     }
     if (x.type === "trav") {
       const e = x.bloc.etape;
-      const part = Math.round(((x.f - x.d) / 60 / e.h) * 100);
-      return `<label class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}" style="--c:${esc(e.g.c)}">
+      const bh = Math.round(((x.f - x.d) / 60) * 100) / 100;
+      const part = Math.round((bh / e.h) * 100);
+      // Cocher cette tranche ne vaut que pour elle : les heures cumulées des
+      // tranches précédentes de la même étape, ce jour-là, disent si elle est faite.
+      const avant = cumulJour[e.id] || 0;
+      cumulJour[e.id] = avant + bh;
+      const posees = Number((avance[e.id] || {})[cle]) || 0;
+      const coche = posees >= avant + bh - 0.01;
+      const fait = faitDe(e.id);
+      return `<label class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}${coche ? " coche" : ""}" style="--c:${esc(e.g.c)}">
         <span class="hh">${plage}</span>
-        <span class="quoi"><input type="checkbox" class="cb" data-cb="${esc(e.id)}"${canEdit ? "" : " disabled"}>
+        <span class="quoi"><input type="checkbox" class="cb" data-cb="${esc(e.id)}"
+            data-bh="${bh}" data-jour="${esc(cle)}"${coche ? " checked" : ""}${canEdit ? "" : " disabled"}>
           <b>${esc(e.n)}</b> <em>${esc(e.row.n)}</em>
-          ${compact ? "" : `<span class="part">${dur} h sur ${e.h} h${part < 100 ? ` · ${part} %` : ""}</span>`}
+          ${compact ? "" : `<span class="part">${unH(bh)} sur ${unH(e.h)}${part < 100 ? ` · ${part} %` : ""}${
+            fait > 0.01 && fait < e.h - 0.01 ? ` · déjà ${unH(fait)}` : ""}</span>`}
           ${x.bloc.tard ? `<span class="lt">hors horaires</span>` : x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
           ${e.row.url ? `<a href="${esc(e.row.url)}" target="_blank" rel="noopener">cours ↗</a>` : ""}
         </span></label>`;
@@ -1349,7 +1632,11 @@ function renderProgramme() {
       ? `Ton programme, à ta main : <b>${programme.matieres.length}</b> matière(s),
          <b>${Math.round(TOTAL_H)} h</b> au total.`
       : `Tu utilises le modèle <b>${esc(MODELES[programme.modele]?.nom || programme.modele)}</b> —
-         ${Math.round(TOTAL_H)} h. Passe à un programme modifiable pour ajouter tes propres matières.`}</p>
+         ${Math.round(TOTAL_H)} h.</p>
+       <p class="aide">Découpage et volumes sont relevés sur le CNED : chaque situation
+         professionnelle et chaque séquence y porte une <b>durée indicative</b>, reprise ici
+         telle quelle. Elle reste une moyenne — rends le programme modifiable pour l'ajuster
+         à ton rythme, ou pour ajouter tes propres matières.`}</p>
     ${perso ? `<div class="matieres" id="matieres"></div>
       <button class="btn pri" id="ajMatiere">Ajouter une matière</button>` : ""}
     <div class="zbascule">
@@ -3508,14 +3795,29 @@ document.addEventListener("change", (e) => {
   if (cb) {
     if (!canEdit) { cb.checked = !cb.checked; return; }
     const s = byId[cb.dataset.cb], on = cb.checked;
+    if (!s) return;
     const item = cb.closest(".qitem") || cb.closest(".ligne.trav");
+    // Une tranche de la journée porte ses heures ; ailleurs, la case vaut l'étape entière.
+    const bh = parseFloat(cb.dataset.bh);
+    const tranche = !isNaN(bh) && bh > 0;
     const appliquer = () => {
-      if (on) done[s.id] = new Date(NOW).toISOString(); else delete done[s.id];
-      log(`${on ? "a terminé" : "a rouvert"} : ${s.row.n} · ${s.n} (${s.h} h)`);
+      if (tranche) {
+        poserHeures(s, cb.dataset.jour, on ? bh : -bh);
+        const f = faitDe(s.id);
+        log(`${on ? "a posé" : "a retiré"} ${unH(bh)} sur ${s.row.n} · ${s.n}` +
+            ` (${unH(f)} sur ${s.h} h)`);
+      } else if (on) {
+        // « J'ai fini cette étape » : on complète, sans effacer ce qui était déjà posé.
+        poserHeures(s, isoJour(new Date(NOW)), resteDe(s));
+        log(`a terminé : ${s.row.n} · ${s.n} (${s.h} h)`);
+      } else {
+        delete avance[s.id]; delete done[s.id];
+        log(`a rouvert : ${s.row.n} · ${s.n} (${s.h} h)`);
+      }
       saveProgress(); renderAll();
     };
     // Valider fait glisser la ligne dehors : on voit ce qu'on vient d'enlever.
-    if (item && on && !SOBRE.matches) {
+    if (item && on && !tranche && !SOBRE.matches) {
       item.classList.add(item.classList.contains("qitem") ? "going" : "partie");
       setTimeout(appliquer, 260);
     } else appliquer();
@@ -3527,7 +3829,7 @@ document.addEventListener("change", (e) => {
     if (isNaN(v)) delete grades[gr.dataset.gr];
     else grades[gr.dataset.gr] = Math.max(0, Math.min(20, v));
     log(isNaN(v) ? `a effacé la note de ${s.n}` : `a saisi ${grades[gr.dataset.gr]}/20 — ${s.n}`);
-    saveGrades(); renderGrades();
+    saveGrades(); renderGrades(); renderProjection();
   }
 });
 

@@ -390,6 +390,24 @@ migration n'est pas facultatif.
 
 ## Journal des audits
 
+**10 septembre 2026 — validation à la tranche, et un scan de contrôle.** Cocher une
+tranche d'une heure dans la journée validait l'étape entière : sur une étape de six
+heures, l'application créditait six heures pour une de travail. L'avance, la courbe
+et le rythme étaient faux d'autant, et le planificateur replanifiait des heures déjà
+faites. Le modèle passe de « faite ou non » à des heures posées par jour (`avance`),
+migré sans perte depuis l'ancien. Onze vérifications de bout en bout, les treize
+suites existantes repassées au vert.
+
+Scan de contrôle du CNED le même jour, avec une session fournie par Gabriel, sans
+ouvrir aucune page d'activité — la règle qui interdit `/mod/assign/` (espace de dépôt
+de devoirs) est appliquée dans le code du scan, avant la requête. Le premier passage,
+qui ne lisait que l'état de cours Moodle, ne voyait aucune durée et m'a fait conclure
+à tort que les volumes du référentiel étaient inventés. Les durées sont dans le texte
+rendu des sections, pas dans l'état : au second passage, les vingt volumes du
+référentiel se retrouvent un à un. La leçon vaut d'être notée — une source qui semble
+muette est d'abord une source mal interrogée, et j'avais écrit la conclusion avant de
+l'avoir cherchée.
+
 **9 septembre 2026 — centre de nouveautés et veilles.** Trois migrations, cinq
 vérifications par bascule de rôle : rien n'attend sur un compte neuf ; une demande
 d'abonnement reçue remonte bien comme telle ; une veille posée sur un compte dont on

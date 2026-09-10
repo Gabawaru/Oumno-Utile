@@ -211,8 +211,14 @@ export function grille(debut, fin, capacites, evenements) {
  * Ce qui ne tient toujours nulle part remonte dans `manques` — c'est le signal
  * que le planning est devenu intenable.
  */
+/**
+ * `reste(etape)` dit combien d'heures il faut encore poser. Sans lui, une étape
+ * entamée était replanifiée en entier : le planning redemandait des heures déjà
+ * faites. Par défaut, une étape cochée dans `done` ne reste pas à faire.
+ */
 export function planifier({ etapes, done, evenements, capacites, reports = {},
-                            plafonds = {}, maintenant, fin }) {
+                            plafonds = {}, maintenant, fin, reste }) {
+  const restant = reste || ((s) => (done[s.id] ? 0 : s.h));
   const jours = grille(maintenant, fin, capacites, evenements);
   const cles = [...jours.keys()];
   const libre = new Map(cles.map((c) => [c, jours.get(c).cap]));
@@ -232,12 +238,12 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
   }
 
   const restantes = etapes
-    .filter((s) => !done[s.id])
     .map((s) => ({
       etape: s,
       ech: reports[s.id] ? new Date(reports[s.id] + "T23:59:59").getTime() : s.t1,
-      h: s.h,
+      h: restant(s),
     }))
+    .filter((t) => t.h > 0.01)
     .sort((a, b) => (a.ech - b.ech) || (b.h - a.h));
 
   const parts = new Map();

@@ -12,6 +12,16 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
 - **Comptes** — chacun crée le sien (adresse + mot de passe). Une seule inscription
   par adresse, **nom affiché unique**, mot de passe oublié par courriel, conditions et
   politique de confidentialité acceptées à l'inscription et datées en base.
+- **Heures posées, pas étapes cochées** — le travail se valide à la tranche. Cocher
+  une heure de la journée sur une étape de six crédite une heure, pas six : la table
+  `avance` retient ce qui a été fait, quel jour, et le planificateur ne replanifie
+  que le reste. Une étape se termine toute seule quand ses heures sont posées.
+- **Projection de fin** — sous la courbe, deux chiffres et rien de mélangé : la date
+  à laquelle le rythme des quatre dernières semaines mène, face à l'examen ; et la
+  moyenne où mènent les notes, avec sa fourchette. Le seul pont entre les deux est
+  la part du programme qui ne sera pas traitée, dite en heures et en pourcentage —
+  rien ici ne dit combien une heure de travail vaut de points, et l'inventer donnerait
+  un chiffre précis et faux.
 - **Programme au choix** — le référentiel BTS CIEL du CNED n'est qu'un modèle. On peut
   aussi partir d'une trame de révisions ou d'une page blanche et déclarer ses propres
   matières et étapes. Le moteur ne connaît que des étapes avec un volume d'heures et
@@ -164,6 +174,36 @@ L'application elle-même n'en a besoin d'aucune.
 | `MAIL_FROM` | expéditeur, ex. `Pilote CIEL <planning@mondomaine.fr>` | non |
 | `PUBLIC_URL` | reprise en pied de courriel | non |
 | `CRON_SECRET` | posé par Vercel ; protège `/api/cron` | auto |
+
+## D'où viennent les heures
+
+Vérifié le 10 septembre 2026 sur `eformation.cned.fr`, section par section, sans
+ouvrir aucune page d'activité.
+
+Chaque situation professionnelle et chaque séquence de physique porte une **durée
+indicative** sur sa page de section. Le référentiel les reprend telles quelles, et
+la vérification les redonne toutes :
+
+| | CNED | `planning.js` |
+|---|---|---|
+| Bloc 1 — SP 6 / 7 / 8 / 9 / 10 | 41 / 23 / 26 / 22 / 26 h | identiques |
+| Bloc 2 — SP 6 / 7 / 8 / 9 / 10 | 41 / 41 / 41 / 46 / 41 h | identiques |
+| Bloc 3 — SP 6 / 7 / 8 / 9 | 51 / 40 / 42 / 80 h | identiques |
+| Physique — séquences 13 à 21 | 10 h chacune | identiques |
+| Mathématiques — modules M8 à M13 | 60 h | identiques |
+
+Deux réserves, qui ne changent aucun total :
+
+- Le découpage d'une SP en **« Mission 1 / 2 / 3 »** (36 / 34 / 30 %) est une
+  commodité de planification, pas un découpage du CNED : lui ne donne qu'une durée
+  pour la situation entière. Le partage sert à répartir le travail sur plusieurs
+  jours, rien de plus.
+- Les **6 h, 3 h et 1 h** annoncées pour E4, E5 et E6 sont les durées *d'épreuve*
+  (« Type : Écrit, Coefficient 4 »), pas du temps de travail. Elles ne sont donc pas
+  comptées comme telles.
+
+Indicatif reste indicatif : c'est une moyenne, pas un rythme personnel. *Moi → Mon
+travail* rend le programme modifiable pour corriger les heures qui ne collent pas.
 
 ## Base de données
 
