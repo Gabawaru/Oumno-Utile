@@ -285,6 +285,49 @@ disponibilités, qui sont montrées sans être comptées. Une pastille qui ne s'
 jamais cesse d'être lue, et une notification qu'on n'a plus envie d'ouvrir ne protège
 plus rien.
 
+### Faire sonner un téléphone
+
+Une notification poussée est un droit d'interrompre quelqu'un. Quatre décisions
+en découlent, et elles sont dans le code plutôt que dans les intentions.
+
+**Le contenu est chiffré de bout en bout, et pas par nous.** RFC 8291 : le
+message est chiffré avec une clé dérivée du secret d'authentification de
+l'abonnement et des deux clés publiques. Ni Google, ni Apple, ni Mozilla — qui
+transportent la poussée — ne peuvent lire ce qu'elle dit. Vérifié par un
+aller-retour complet, et par un secret d'authentification différent qui ne
+déchiffre rien.
+
+**Le serveur prouve son identité.** RFC 8292 : chaque envoi porte un jeton ES256
+signé par la clé privée, dont l'audience est l'origine du point d'envoi. Sans
+elle, personne ne peut pousser au nom de Repère. Elle vit dans les variables
+d'environnement, jamais dans le dépôt.
+
+**Qui a activé quoi ne regarde personne.** `ciel_push` ne se lit que par son
+propriétaire (`user_id = auth.uid()`), et rien ne permet de compter les appareils
+d'un autre. L'expéditeur (`a_pousser`, `marquer_pousse`, `oublier_appareil`) est
+retiré à `anon` et à `authenticated` : seul le rôle de service l'atteint.
+Éprouvé par bascule de rôle — les trois refusent un compte connecté, et abonner
+le téléphone d'un autre est rejeté.
+
+**La veille ne donne toujours accès à rien de neuf.** La règle de visibilité
+existait sous une forme qui lisait `auth.uid()` ; l'expéditeur n'en a pas. Plutôt
+que de réécrire la règle une seconde fois — deux copies d'une règle de sécurité
+finissent toujours par diverger — elle a été sortie en
+`prive.ciel_visible_pour(cible, spectateur)`, dont l'ancienne forme est devenu un
+appel. Cinq vérifications confirment que les deux disent la même chose et que le
+compte privé sans lien reste invisible.
+
+**Le secret qui déclenche l'envoi ne traîne nulle part.** L'envoi est déclenché
+par `pg_cron`, toutes les quinze minutes. `cron.job` est lisible depuis le tableau
+de bord : le secret y figurerait en clair si la tâche le portait. Il vit donc dans
+`vault.secrets`, et la fonction planifiée va l'y chercher. Vérifié : il n'apparaît
+dans aucune commande de `cron.job`, et ni le coffre, ni `cron.job`, ni la fonction
+de déclenchement ne sont atteignables depuis un compte connecté.
+
+Une dernière contrainte, imposée par les navigateurs et qu'on assume :
+`userVisibleOnly` oblige à afficher quelque chose à chaque poussée. Une poussée
+silencieuse servirait à pister ; le navigateur la refuse, et c'est bien.
+
 ### Ce que le réseau oblige
 
 Héberger des publications, des images et des conversations fait de l'éditeur un
@@ -389,6 +432,25 @@ Il a trouvé les deux erreurs de droits décrites plus haut : le passer après t
 migration n'est pas facultatif.
 
 ## Journal des audits
+
+**10 septembre 2026 — notifications poussées.** Web Push écrit à la main, sans
+dépendance : VAPID (RFC 8292) et chiffrement `aes128gcm` (RFC 8291) avec
+`node:crypto`. Onze vérifications sur la cryptographie — aller-retour du contenu,
+message lié à un seul abonnement, sel et clé éphémère tirés à chaque envoi,
+signature de 64 octets en `r‖s` et non en DER, audience réduite à l'origine du
+point d'envoi. Dix-huit de plus sur l'expéditeur et l'interrupteur, dont un faux
+service de poussée qui déchiffre réellement ce qu'il reçoit.
+
+Deux points de conception valent d'être écrits. Le contenu poussé ne passe jamais
+en clair chez le transporteur, ce qui n'était pas acquis : c'est la RFC qui
+l'impose, pas nous, et l'implémenter à la main était la seule façon d'en être sûr.
+Et `prive.ciel_visible` a été refactorisée pour que la règle de visibilité n'existe
+qu'à un seul endroit, l'expéditeur n'ayant pas d'`auth.uid()` — avec le `REVOKE`
+qui suit chaque `CREATE OR REPLACE`, piège désormais rencontré trois fois.
+
+Un défaut trouvé et corrigé au passage : ouvrir deux fois le panneau lançait deux
+vérifications en parallèle, qui concluaient toutes deux « appareil absent de la
+base » et l'enregistraient chacune.
 
 **10 septembre 2026 — audit du modèle d'heures, quatre défauts.** Relecture de ce qui
 venait d'être livré. Aucun n'ouvrait de faille ; tous mentaient sur des chiffres, ce
