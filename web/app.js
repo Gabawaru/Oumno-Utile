@@ -186,8 +186,9 @@ function migrerAvance(){
     const jour=String(done[id]||"").slice(0,10) || isoJour(new Date(T0));
     avance[id]={[jour]:s2.h}; bouge=true;
   }
-  // Une étape retirée du programme ne doit pas laisser des heures fantômes.
-  for(const id in avance) if(!byId[id]) delete avance[id];
+  // On ne supprime pas les heures d'une étape absente du programme courant :
+  // changer de modèle et revenir doit retrouver son travail. Elles sont inertes —
+  // tous les comptes parcourent les étapes du programme, jamais la table brute.
   return bouge;
 }
 
@@ -201,6 +202,9 @@ const estFait=s2=>resteDe(s2)<=EPS;
 
 /** Pose (ou retire) des heures un jour donné, et tient `done` en accord. */
 function poserHeures(s2,jour,h){
+  // On ne travaille pas demain : une tranche d'un jour à venir se pose aujourd'hui.
+  const auj=isoJour(new Date(NOW));
+  if(jour>auj) jour=auj;
   const m=avance[s2.id]||(avance[s2.id]={});
   const autres=Object.keys(m).reduce((a,j)=>a+(j===jour?0:(Number(m[j])||0)),0);
   const v=Math.max(0,Math.min(s2.h-autres,(Number(m[jour])||0)+h));
@@ -627,7 +631,10 @@ function pointsCourbe(tFin) {
     if (!byId[id]) continue;
     for (const j in avance[id]) {
       const h = Number(avance[id][j]) || 0;
-      if (h > 0) faits.push([Date.parse(j + "T23:59:59") || T0, h]);
+      // Une séance compte à la fin de sa journée — sauf aujourd'hui, où elle compte
+      // maintenant : sinon la courbe ignore le travail du jour jusqu'à minuit,
+      // pendant que la légende, elle, le compte déjà.
+      if (h > 0) faits.push([Math.min(Date.parse(j + "T23:59:59") || T0, NOW), h]);
     }
   }
   faits.sort((a, b) => a[0] - b[0]);
@@ -997,16 +1004,20 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
       const posees = Number((avance[e.id] || {})[cle]) || 0;
       const coche = posees >= avant + bh - 0.01;
       const fait = faitDe(e.id);
-      return `<label class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}${coche ? " coche" : ""}" style="--c:${esc(e.g.c)}">
+      // Un jour à venir n'a pas de case : on n'a pas encore fait le travail de demain,
+      // et une case qui se décoche toute seule au redessin ne veut rien dire.
+      const futur = cle > isoJour(new Date(NOW));
+      const bal = futur ? "div" : "label";
+      return `<${bal} class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}${coche ? " coche" : ""}${futur ? " avenir" : ""}" style="--c:${esc(e.g.c)}">
         <span class="hh">${plage}</span>
-        <span class="quoi"><input type="checkbox" class="cb" data-cb="${esc(e.id)}"
-            data-bh="${bh}" data-jour="${esc(cle)}"${coche ? " checked" : ""}${canEdit ? "" : " disabled"}>
+        <span class="quoi">${futur ? "" : `<input type="checkbox" class="cb" data-cb="${esc(e.id)}"
+            data-bh="${bh}" data-jour="${esc(cle)}"${coche ? " checked" : ""}${canEdit ? "" : " disabled"}>`}
           <b>${esc(e.n)}</b> <em>${esc(e.row.n)}</em>
           ${compact ? "" : `<span class="part">${unH(bh)} sur ${unH(e.h)}${part < 100 ? ` · ${part} %` : ""}${
             fait > 0.01 && fait < e.h - 0.01 ? ` · déjà ${unH(fait)}` : ""}</span>`}
           ${x.bloc.tard ? `<span class="lt">hors horaires</span>` : x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
           ${e.row.url ? `<a href="${esc(e.row.url)}" target="_blank" rel="noopener">cours ↗</a>` : ""}
-        </span></label>`;
+        </span></${bal}>`;
     }
     const e = x.ev;
     // On ne montre le titre d'un événement que s'il est explicitement partagé.
