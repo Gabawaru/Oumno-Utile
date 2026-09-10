@@ -390,6 +390,30 @@ migration n'est pas facultatif.
 
 ## Journal des audits
 
+**10 septembre 2026 — audit du modèle d'heures, quatre défauts.** Relecture de ce qui
+venait d'être livré. Aucun n'ouvrait de faille ; tous mentaient sur des chiffres, ce
+qui dans un planning revient au même.
+
+1. **Les heures du jour n'apparaissaient sur la courbe que le lendemain.** Une séance
+   était horodatée à 23 h 59 de sa journée, donc postérieure à maintenant : la courbe
+   les ignorait pendant que la légende, elle, les comptait déjà. Les deux se
+   contredisaient à l'écran.
+2. **Changer de programme détruisait des heures.** Le chargement supprimait les
+   entrées d'étapes absentes du programme courant. Partir du modèle CNED, essayer une
+   trame, revenir : le travail était perdu. Elles sont désormais conservées — inertes,
+   puisque tous les comptes parcourent les étapes du programme, jamais la table brute.
+3. **On pouvait dater du travail dans le futur.** Cocher une tranche de demain
+   l'enregistrait au lendemain ; la courbe s'arrête à aujourd'hui, le total non.
+4. **Et la case d'un jour à venir se décochait toute seule** au redessin, son état se
+   lisant sur le jour affiché. Un jour à venir n'a plus de case du tout : on n'a pas
+   encore fait le travail de demain.
+
+Trois vérifications de bout en bout ajoutées, une par défaut vérifiable. Contrôles
+externes repassés : douze RPC réservées à 401, écriture anonyme refusée sur les six
+tables sensibles, aucun secret dans le dépôt ni dans son historique. `get_advisors`
+ne signale rien de neuf — la protection contre les mots de passe compromis reste la
+case à cocher de l'éditeur.
+
 **10 septembre 2026 — validation à la tranche, et un scan de contrôle.** Cocher une
 tranche d'une heure dans la journée validait l'étape entière : sur une étape de six
 heures, l'application créditait six heures pour une de travail. L'avance, la courbe
