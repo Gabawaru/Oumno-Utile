@@ -25,8 +25,12 @@ const rpc = (nom, corps = {}) =>
   rest(`rpc/${nom}`, { method: "POST", body: JSON.stringify(corps) });
 
 export default async function handler(req, res) {
-  const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+  // Deux appelants légitimes : le planificateur de Vercel, avec le secret qu'il
+  // pose lui-même, et celui de Supabase — qui, lui, peut tourner plus souvent
+  // qu'une fois par jour. Une notification qui arrive le lendemain n'en est plus une.
+  const secrets = [process.env.PUSH_SECRET, process.env.CRON_SECRET].filter(Boolean);
+  const donne = req.headers.authorization || "";
+  if (secrets.length && !secrets.some((s) => donne === `Bearer ${s}`)) {
     res.status(401).json({ error: "Non autorisé" });
     return;
   }

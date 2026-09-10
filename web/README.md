@@ -188,6 +188,7 @@ L'application elle-même n'en a besoin d'aucune.
 | `VAPID_PUBLIC` | clé publique de poussée, servie au navigateur | pour les notifications |
 | `VAPID_PRIVATE` | clé privée — elle seule prouve que la poussée vient d'ici | pour les notifications |
 | `VAPID_SUBJECT` | `mailto:` de contact, exigé par la RFC 8292 | pour les notifications |
+| `PUSH_SECRET` | partagé avec Supabase, qui déclenche l'envoi | pour les notifications |
 
 ## D'où viennent les heures
 
@@ -298,8 +299,23 @@ quelqu'un, la route chiffre et poste. Un appareil que le service déclare mort
 moins un appareil a reçu — sinon la nouvelle serait perdue sans que personne ne
 l'ait jamais vue.
 
-Pour installer : générer une paire VAPID une fois, poser les trois variables dans
-Vercel, redéployer.
+**Qui bat la mesure.** Pas Vercel : son offre gratuite ne planifie qu'une fois
+par jour, et une notification qui arrive le lendemain n'en est plus une. C'est
+Supabase, avec `pg_cron` et `pg_net`, toutes les quinze minutes. La tâche
+interroge d'abord `a_pousser()` et ne réveille la route que s'il y a
+effectivement quelque chose à dire. Le secret partagé dort dans le coffre
+(`vault.secrets`, entrée `push_secret`) et non dans la définition de la tâche,
+que le tableau de bord affiche en clair.
+
+```sql
+-- Voir la tâche, la suspendre, la relancer
+select jobid, jobname, schedule, active from cron.job where jobname = 'poussees';
+select cron.unschedule('poussees');
+select cron.schedule('poussees', '*/15 * * * *', $$select prive.declencher_poussees()$$);
+```
+
+Pour installer : générer une paire VAPID une fois, poser les quatre variables
+dans Vercel, redéployer. `PUSH_SECRET` se lit dans le coffre Supabase.
 
 ```sh
 node -e 'import("./api/_push.js").then(m=>console.log(m.nouvellesClesVapid()))'

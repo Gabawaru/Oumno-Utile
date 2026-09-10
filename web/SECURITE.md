@@ -317,6 +317,13 @@ finissent toujours par diverger — elle a été sortie en
 appel. Cinq vérifications confirment que les deux disent la même chose et que le
 compte privé sans lien reste invisible.
 
+**Le secret qui déclenche l'envoi ne traîne nulle part.** L'envoi est déclenché
+par `pg_cron`, toutes les quinze minutes. `cron.job` est lisible depuis le tableau
+de bord : le secret y figurerait en clair si la tâche le portait. Il vit donc dans
+`vault.secrets`, et la fonction planifiée va l'y chercher. Vérifié : il n'apparaît
+dans aucune commande de `cron.job`, et ni le coffre, ni `cron.job`, ni la fonction
+de déclenchement ne sont atteignables depuis un compte connecté.
+
 Une dernière contrainte, imposée par les navigateurs et qu'on assume :
 `userVisibleOnly` oblige à afficher quelque chose à chaque poussée. Une poussée
 silencieuse servirait à pister ; le navigateur la refuse, et c'est bien.
