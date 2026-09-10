@@ -466,6 +466,28 @@ label.cap{flex-wrap:wrap}
 .ligne.trav.avenir:hover{background:transparent}
 .ligne.trav.coche b{text-decoration:line-through;text-decoration-thickness:1px}
 
+/* ── sonnerie : notifications poussées ─────────────────── */
+.sonnerie{display:flex;gap:.7rem;align-items:flex-start;background:var(--sunk);
+  padding:.7rem .8rem;border-left:2px solid var(--rule);margin-bottom:.8rem}
+.sonnerie.active{border-left-color:var(--ok)}
+.sonnerie.refus{border-left-color:var(--late)}
+.sonnerie .cl{flex:1;min-width:0}
+.sonnerie .t{font-weight:600;font-size:.82rem}
+.sonnerie .d{font-size:.73rem;line-height:1.5;color:var(--ink2);margin-top:.2rem}
+.sonnerie .d b{color:var(--ink)}
+.sonnerie .btn{flex:none;align-self:center}
+.bascule{position:relative;display:inline-flex;align-items:center;gap:.5rem;cursor:pointer}
+.bascule input{position:absolute;opacity:0;width:0;height:0}
+.bascule .piste{width:38px;height:22px;border-radius:11px;background:var(--rule);
+  flex:none;transition:background .18s;position:relative}
+.bascule .piste::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;
+  border-radius:50%;background:var(--card);transition:transform .18s;
+  box-shadow:0 1px 3px color-mix(in srgb,var(--ink) 30%,transparent)}
+.bascule input:checked + .piste{background:var(--ok)}
+.bascule input:checked + .piste::after{transform:translateX(16px)}
+.bascule input:focus-visible + .piste{outline:2px solid var(--sig);outline-offset:2px}
+.bascule input:disabled + .piste{opacity:.5}
+
 /* ── projection de fin ─────────────────────────────────── */
 .proj{margin-top:.85rem;border-top:1px solid var(--rule2);padding-top:.85rem}
 .pjs{display:grid;grid-template-columns:repeat(auto-fit,minmax(13.5rem,1fr));gap:.55rem}
@@ -1459,6 +1481,7 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
 
   <!-- ─────────── NOUVEAUTÉS ─────────── -->
   <section data-panel="nouveautes" class="stack" hidden>
+    <div id="sonnerie"></div>
     <div id="nouveautes"></div>
   </section>
 

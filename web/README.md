@@ -43,6 +43,14 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
   ne peut vous adresser **qu'une** chose : une proposition de moment, avec son motif.
   Répondre ou accepter ouvre la conversation. Blocage réciproque et signalement d'un
   contenu à l'éditeur.
+- **Notifications poussées** — le téléphone sonne même application fermée, pour
+  un message, une demande d'abonnement, un moment proposé ou sa réponse, et pour
+  les personnes qu'on surveille. **Jamais pour les publications du fil** : c'est
+  précisément la notification qu'on désactive, et elle emporte les autres avec
+  elle. Cinq nouvelles d'un coup font un seul message, pas cinq. Rien n'est
+  demandé à l'ouverture — une permission qui tombe sans qu'on l'ait sollicitée se
+  refuse par réflexe, et un refus ne se reprend pas. Sur iPhone il faut d'abord
+  poser Repère sur l'écran d'accueil : l'application le dit, avec le lien.
 - **Le centre de nouveautés** — une cloche dans l'en-tête rassemble ce qui a bougé
   depuis la dernière visite : messages, demandes d'abonnement, moments proposés et
   leurs réponses, publications et disponibilités. Deux groupes, dans cet ordre :
@@ -146,6 +154,9 @@ web/
 ├── pages.css pages.js   feuille et interactions communes aux trois pages ci-dessus
 ├── polices.css polices/ IBM Plex servi depuis le même domaine
 ├── api/cron.js          tâche quotidienne : récapitulatif aux abonnés
+├── api/pousser.js       toutes les 30 min : envoie les notifications en attente
+├── api/_push.js         Web Push écrit à la main — VAPID et chiffrement aes128gcm
+├── api/vapid.js         la clé publique, que le navigateur doit connaître
 └── vercel.json          planification du cron
 ```
 
@@ -173,7 +184,10 @@ L'application elle-même n'en a besoin d'aucune.
 | `RESEND_API_KEY` | clé [Resend](https://resend.com) | sans elle, aucun courriel ne part |
 | `MAIL_FROM` | expéditeur, ex. `Pilote CIEL <planning@mondomaine.fr>` | non |
 | `PUBLIC_URL` | reprise en pied de courriel | non |
-| `CRON_SECRET` | posé par Vercel ; protège `/api/cron` | auto |
+| `CRON_SECRET` | posé par Vercel ; protège `/api/cron` et `/api/pousser` | auto |
+| `VAPID_PUBLIC` | clé publique de poussée, servie au navigateur | pour les notifications |
+| `VAPID_PRIVATE` | clé privée — elle seule prouve que la poussée vient d'ici | pour les notifications |
+| `VAPID_SUBJECT` | `mailto:` de contact, exigé par la RFC 8292 | pour les notifications |
 
 ## D'où viennent les heures
 
@@ -214,7 +228,7 @@ Le planning : `ciel_profiles`, `ciel_state`, `ciel_journal`, `ciel_subs`,
 
 Le réseau : `ciel_posts`, `ciel_commentaires`, `ciel_jaime`, `ciel_fils`,
 `ciel_messages`, `ciel_blocages`, `ciel_signalements`, `ciel_dispos`, `ciel_scores`,
-`ciel_veilles`.
+`ciel_veilles`, `ciel_push`.
 
 Deux seaux de stockage : `avatars` (public, 1 Mo) et `photos` (privé, 3 Mo, servi par
 adresse signée). L'écriture est bornée au dossier `<uuid>/` de chacun.
@@ -244,6 +258,9 @@ des fonctions `security definer` font le travail et n'exposent que le nécessair
 | `nouveautes()` | connecté | ce qui a bougé depuis la dernière visite, en six sources réunies |
 | `marquer_nouveautes_vues()` | connecté | repose la date de dernière consultation |
 | `supprimer_mon_compte()` | connecté | efface tout, en cascade, fichiers compris |
+| `a_pousser()` | `service_role` seul | ce qui mérite de faire sonner un téléphone |
+| `marquer_pousse(uuid,timestamptz)` | `service_role` seul | avance la borne des poussées |
+| `oublier_appareil(text)` | `service_role` seul | efface un appareil que le service déclare mort |
 
 `prive.ciel_visible()`, le rouage interne des politiques, vit dans un schéma non
 exposé par PostgREST. **Attention :** `CREATE OR REPLACE FUNCTION` remet les droits
@@ -267,6 +284,26 @@ sens. Le détail est dans [`SECURITE.md`](SECURITE.md).
 
 Un déclencheur crée le profil et le planning vide à l'inscription, avec un identifiant
 dérivé de l'adresse et dédoublonné.
+
+## Les notifications poussées
+
+Écrites à la main dans `api/_push.js` : signature VAPID en ES256 (RFC 8292) et
+chiffrement `aes128gcm` du contenu (RFC 8291), avec `node:crypto` et rien d'autre.
+Ajouter une dépendance pour signer un jeton et dériver trois clés reviendrait à
+confier la boîte aux lettres de chacun à du code qu'on ne lit pas.
+
+Le serveur ne décide rien : `a_pousser()` dit en SQL ce qui mérite d'interrompre
+quelqu'un, la route chiffre et poste. Un appareil que le service déclare mort
+(404 ou 410) est effacé, pas réessayé. La borne `pousse_le` n'avance que si au
+moins un appareil a reçu — sinon la nouvelle serait perdue sans que personne ne
+l'ait jamais vue.
+
+Pour installer : générer une paire VAPID une fois, poser les trois variables dans
+Vercel, redéployer.
+
+```sh
+node -e 'import("./api/_push.js").then(m=>console.log(m.nouvellesClesVapid()))'
+```
 
 ## Poser une annonce
 

@@ -3114,9 +3114,155 @@ function majCloche(sonner = false) {
   }
 }
 
+/* ═════════ SONNERIE ═════════
+   Les notifications poussées : ce qui fait sonner le téléphone même application
+   fermée. Trois refus légitimes qu'il faut savoir dire sans jargon — le
+   navigateur ne sait pas faire, la permission a été refusée une fois pour
+   toutes, ou l'application n'est pas installée (l'exigence d'Apple).
+
+   Rien n'est demandé à l'ouverture : une demande de permission qui tombe sans
+   qu'on l'ait sollicitée se refuse par réflexe, et un refus ne se reprend pas. */
+
+const PUSH_POSSIBLE = "serviceWorker" in navigator && "PushManager" in window
+                      && "Notification" in window;
+// Sur iPhone, la poussée n'existe que si l'application est posée sur l'écran d'accueil.
+const INSTALLEE = matchMedia("(display-mode: standalone)").matches
+                  || navigator.standalone === true;
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+
+const enOctets = (b64) => {
+  const p = "=".repeat((4 - (b64.length % 4)) % 4);
+  const brut = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(brut, (c) => c.charCodeAt(0));
+};
+
+let sonnerieEtat = { abonne: false, occupe: false, souci: null };
+
+/** L'endpoint est unique en base : réabonner le même téléphone met à jour sa
+ *  ligne au lieu de rendre un conflit. */
+function enregistrerAppareil(ab) {
+  const j = ab.toJSON();
+  return sb.from("ciel_push").upsert({
+    user_id: session.user.id, endpoint: j.endpoint,
+    p256dh: j.keys.p256dh, auth: j.keys.auth,
+    appareil: (navigator.userAgentData?.platform || navigator.platform || "").slice(0, 60),
+    vu_le: new Date().toISOString(),
+  });
+}
+
+async function abonnementCourant() {
+  if (!PUSH_POSSIBLE) return null;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    return reg ? await reg.pushManager.getSubscription() : null;
+  } catch { return null; }
+}
+
+async function activerSonnerie() {
+  sonnerieEtat.occupe = true; sonnerieEtat.souci = null; renderSonnerie();
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") {
+      sonnerieEtat.souci = perm === "denied"
+        ? "Ton navigateur a retenu un refus. Il faut le lever dans ses réglages de site — je ne peux pas le faire d'ici."
+        : "Permission non accordée.";
+      return;
+    }
+    const r = await fetch("/api/vapid");
+    if (!r.ok) throw new Error("clé publique indisponible");
+    const { cle } = await r.json();
+    const reg = await navigator.serviceWorker.ready;
+    const ab = await reg.pushManager.subscribe({
+      userVisibleOnly: true, applicationServerKey: enOctets(cle),
+    });
+    const { error } = await enregistrerAppareil(ab);
+    if (error) throw error;
+    sonnerieEtat.abonne = true;
+    log("a activé les notifications sur un appareil");
+  } catch (e) {
+    sonnerieEtat.souci = "Impossible d'activer : " + String(e.message || e);
+  } finally {
+    sonnerieEtat.occupe = false; renderSonnerie();
+  }
+}
+
+async function couperSonnerie() {
+  sonnerieEtat.occupe = true; renderSonnerie();
+  try {
+    const ab = await abonnementCourant();
+    if (ab) {
+      await sb.from("ciel_push").delete().eq("endpoint", ab.endpoint);
+      await ab.unsubscribe();
+    }
+    sonnerieEtat.abonne = false;
+    log("a coupé les notifications sur un appareil");
+  } catch (e) {
+    sonnerieEtat.souci = "Impossible de couper : " + String(e.message || e);
+  } finally {
+    sonnerieEtat.occupe = false; renderSonnerie();
+  }
+}
+
+function renderSonnerie() {
+  const box = $("sonnerie");
+  if (!box) return;
+  if (!canEdit) { box.innerHTML = ""; return; }
+
+  const dire = (classe, titre, detail, action = "") =>
+    box.innerHTML = `<div class="sonnerie ${classe}"><div class="cl">
+      <div class="t">${titre}</div><div class="d">${detail}</div></div>${action}</div>`;
+
+  if (!PUSH_POSSIBLE)
+    return dire("", "Notifications", "Ce navigateur ne sait pas les recevoir. La cloche, elle, marche partout.");
+  if (IOS && !INSTALLEE)
+    return dire("", "Notifications", `Sur iPhone, il faut d'abord poser Repère sur ton écran d'accueil.
+      <a href="installer.html">Comment faire</a>.`);
+  if (Notification.permission === "denied")
+    return dire("refus", "Notifications bloquées",
+      `Ton navigateur a retenu un refus pour ce site. Lui seul peut le lever, dans ses réglages —
+       je n'ai pas la main dessus.`);
+
+  const a = sonnerieEtat.abonne;
+  dire(a ? "active" : "",
+    a ? "Notifications activées" : "Être prévenu, même appli fermée",
+    a ? `Cet appareil sonnera pour un message, une demande, un moment proposé et sa réponse,
+         et pour les personnes que tu surveilles. Jamais pour les publications du fil.`
+      : `Un message, une demande, un moment proposé ou sa réponse. Rien d'autre —
+         et tu peux couper d'un geste.` +
+        (sonnerieEtat.souci ? ` <b>${esc(sonnerieEtat.souci)}</b>` : ""),
+    `<label class="bascule btn-zone"><input type="checkbox" id="basculeSonnerie"
+        ${a ? "checked" : ""}${sonnerieEtat.occupe ? " disabled" : ""}>
+      <span class="piste"></span></label>`);
+
+  const b = $("basculeSonnerie");
+  if (b) b.onchange = () => (b.checked ? activerSonnerie() : couperSonnerie());
+}
+
+let majEnCours = null;
+/** Ouvrir deux fois le panneau lançait deux vérifications en parallèle, qui
+ *  concluaient toutes deux « absent de la base » et enregistraient chacune. */
+function majSonnerie() {
+  if (!majEnCours) majEnCours = majSonnerieVraiment().finally(() => (majEnCours = null));
+  return majEnCours;
+}
+
+async function majSonnerieVraiment() {
+  if (!PUSH_POSSIBLE || !canEdit) return renderSonnerie();
+  const ab = await abonnementCourant();
+  sonnerieEtat.abonne = Boolean(ab) && Notification.permission === "granted";
+  // Un abonnement que le navigateur garde mais que la base ignore ne sonnera
+  // jamais : on le recolle plutôt que de mentir sur l'interrupteur.
+  if (ab && sonnerieEtat.abonne) {
+    const { data } = await sb.from("ciel_push").select("endpoint").eq("endpoint", ab.endpoint);
+    if (!data || !data.length) await enregistrerAppareil(ab);
+  }
+  renderSonnerie();
+}
+
 async function ouvrirNouveautes() {
   await chargerNouveautes();
   renderNouveautes();
+  majSonnerie();
   // Marquer comme vu après l'affichage : ce qu'on vient de voir ne doit pas
   // resurgir, mais ce qui attend encore une réponse reste dans la liste.
   await sb.rpc("marquer_nouveautes_vues");
