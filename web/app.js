@@ -1630,16 +1630,22 @@ const jourFr = (d) => new Date(d + "T00:00").toLocaleDateString("fr-FR",
   { weekday: "long", day: "numeric", month: "long" });
 
 async function chargerSocial() {
-  if (!session) { abonnements = abonnes = resaRecues = resaEnvoyees = fils = []; return; }
-  const [a, b, r, f] = await Promise.all([
+  if (!session) {
+    abonnements = abonnes = resaRecues = resaEnvoyees = fils = [];
+    veilles = new Set();
+    return;
+  }
+  const [a, b, r, f, w] = await Promise.all([
     sb.rpc("mes_abonnements"),
     sb.rpc("mes_abonnes"),
     sb.from("ciel_reservations").select("*").order("jour", { ascending: true }),
     sb.rpc("mes_fils"),
+    sb.from("ciel_veilles").select("cible").eq("qui", session.user.id),
   ]);
   abonnements = Array.isArray(a.data) ? a.data : [];
   abonnes = Array.isArray(b.data) ? b.data : [];
   fils = Array.isArray(f.data) ? f.data : [];
+  veilles = new Set((Array.isArray(w.data) ? w.data : []).map((x) => x.cible));
   majPastilleMsg();
   const tout = Array.isArray(r.data) ? r.data : [];
   resaRecues = tout.filter((x) => x.hote === session.user.id);
@@ -1748,6 +1754,9 @@ function renderAbonnements() {
           <em>@${esc(a.slug || "?")}${a.public ? " · public" : ""}</em></span>
         <span class="act">
           ${a.etat === "attente" ? `<span class="etiq att">demande envoyée</span>` : ""}
+          ${a.etat === "accepte" ? `<label class="urgcase"><input type="checkbox"
+            data-veille="${esc(a.qui)}"${veilles.has(a.qui) ? " checked" : ""}>
+            <span>me prévenir quand il est libre</span></label>` : ""}
           ${a.slug ? `<button class="btn" data-fiche="${esc(a.slug)}">Voir</button>` : ""}
           <button class="btn" data-desab="${esc(a.qui)}">Se désabonner</button>
         </span>
@@ -2059,6 +2068,7 @@ async function ouvrir(profil) {
   // L'en-tête ne montre plus l'adresse électronique : c'était en donner un
   // morceau à quiconque regarde l'écran par-dessus l'épaule.
   majBoutonCompte();
+  chargerNouveautes().catch(() => {});
   montrer("appli");
   buildGantt(); buildAcc();
   routeDepart();
@@ -2194,8 +2204,16 @@ $("ruban").addEventListener("click", () => {
 
 // Assez souvent pour qu'une annonce arrive pendant qu'on est là, assez rare
 // pour ne rien coûter. Et jamais quand l'onglet est en arrière-plan.
-setInterval(() => { if (!document.hidden) chargerRuban(); }, 90000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) chargerRuban(); });
+setInterval(() => {
+  if (document.hidden) return;
+  chargerRuban();
+  chargerNouveautes({ silencieux: false });
+}, 90000);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  chargerRuban();
+  chargerNouveautes({ silencieux: false });
+});
 
 /* ═════════ L'ATTENTE ═════════
    Une page blanche pendant que la base répond ne dit rien ; une page blanche
@@ -2757,6 +2775,101 @@ async function bloquer(qui, nom) {
     } }] });
 }
 
+/* ═════════ CE QUI A BOUGÉ ═════════
+   Une application qu'il faut ouvrir pour savoir qu'il s'y passe quelque chose
+   ne se rouvre pas. La cloche rassemble ce qui attend une réponse et ce qui
+   mérite un coup d'œil — et la pastille ne compte que le premier : une pastille
+   qui ne s'éteint jamais cesse d'être lue. */
+
+let nouveautes = [], veilles = new Set();
+
+const ICONES = {
+  message: `<path d="M20.5 12c0 3.9-3.8 7.1-8.5 7.1a10 10 0 0 1-2.4-.3l-4.6 1.7 1.4-3.7A6.8 6.8 0 0 1 3.5 12c0-3.9 3.8-7.1 8.5-7.1s8.5 3.2 8.5 7.1Z"/>`,
+  abonnement: `<circle cx="9.2" cy="8.4" r="3.3"/><path d="M3 19.5a6.2 6.2 0 0 1 12.4 0"/><path d="M18.5 8v6M21.5 11h-6"/>`,
+  creneau: `<rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8.5 3.5v4M15.5 3.5v4"/>`,
+  reponse: `<path d="M4 12.5 9.5 18 20 6.5"/>`,
+  publication: `<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m3.6 15.5 4.6-3.8 3.6 2.7 3-2.2 5.6 4.6"/><circle cx="9" cy="9.2" r="1.5"/>`,
+  dispo: `<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.3l3.4 2"/>`,
+};
+
+async function chargerNouveautes({ silencieux = true } = {}) {
+  if (!session) { nouveautes = []; return majCloche(); }
+  const { data } = await sb.rpc("nouveautes");
+  const avant = compteAttente();
+  nouveautes = Array.isArray(data) ? data : [];
+  majCloche(!silencieux || compteAttente() > avant);
+  if (vueCourante === "nouveautes") renderNouveautes();
+}
+
+const compteAttente = () =>
+  nouveautes.filter((x) => x.attend).reduce((a, x) => a + Number(x.nombre || 1), 0);
+
+function majCloche(sonner = false) {
+  const c = $("cloche"), p = $("pastNouv");
+  if (!c || !p) return;
+  c.hidden = !session;
+  const n = compteAttente();
+  p.hidden = n === 0;
+  p.textContent = n > 9 ? "9+" : String(n);
+  if (sonner && n && !SOBRE.matches) {
+    c.classList.remove("sonne"); void c.offsetWidth; c.classList.add("sonne");
+  }
+}
+
+async function ouvrirNouveautes() {
+  await chargerNouveautes();
+  renderNouveautes();
+  // Marquer comme vu après l'affichage : ce qu'on vient de voir ne doit pas
+  // resurgir, mais ce qui attend encore une réponse reste dans la liste.
+  await sb.rpc("marquer_nouveautes_vues");
+}
+
+function renderNouveautes() {
+  const box = $("nouveautes");
+  if (!box) return;
+  if (!nouveautes.length) {
+    box.innerHTML = `<div class="vide">Rien de neuf. Tout est à jour.</div>`;
+    return;
+  }
+  const bloc = (titre, l) => l.length ? `<div class="groupenouv">${titre}</div>` + l.map((x) => `
+    <button class="nouv ${x.attend ? "attend" : esc(x.genre)}" data-nouv="${esc(x.ou || "")}">
+      ${x.avatar || x.nom ? vignette(x, "pt")
+        : `<span class="rond"><svg viewBox="0 0 24 24">${ICONES[x.genre] || ""}</svg></span>`}
+      <span class="qui">
+        <b>${x.nom ? esc(x.nom) : "Le fil"}${Number(x.nombre) > 1
+          ? ` <span class="pastille">${x.nombre}</span>` : ""}</b>
+        <em>${esc(x.texte || "")}</em></span>
+      <span class="quand">${x.quand ? tempsRelatif(x.quand) : ""}</span>
+    </button>`).join("") : "";
+  box.innerHTML =
+      bloc("Ça attend ta réponse", nouveautes.filter((x) => x.attend))
+    + bloc("Bon à savoir", nouveautes.filter((x) => !x.attend));
+}
+
+document.addEventListener("click", (e) => {
+  const c = e.target.closest("#cloche");
+  if (c) return aller("nouveautes");
+  const n = e.target.closest("[data-nouv]");
+  if (n && n.dataset.nouv) {
+    location.hash = n.dataset.nouv;
+    // L'adresse suffit : le routeur écoute déjà les changements de fragment.
+  }
+});
+
+/** « Préviens-moi quand il est libre » : une ligne par personne surveillée. */
+document.addEventListener("change", async (e) => {
+  const v = e.target.closest("[data-veille]");
+  if (!v || !session) return;
+  const cible = v.dataset.veille;
+  const { error } = v.checked
+    ? await sb.from("ciel_veilles").insert({ qui: session.user.id, cible })
+    : await sb.from("ciel_veilles").delete().eq("qui", session.user.id).eq("cible", cible);
+  if (error) { v.checked = !v.checked; return setSync("warn", "changement refusé"); }
+  if (v.checked) veilles.add(cible); else veilles.delete(cible);
+  setSync("ok", v.checked ? "tu seras prévenu" : "alerte retirée");
+  chargerNouveautes();
+});
+
 /* ═════════ CONVERSATIONS ═════════ */
 
 async function chargerFils() {
@@ -3261,6 +3374,7 @@ const VUES = {
   moi:      { panneau: "regl",     titre: "Moi" },
   conv:     { panneau: "conv",     titre: "Conversation", retour: "messages" },
   personne: { panneau: "personne", titre: "Profil",      retour: "contacts" },
+  nouveautes: { panneau: "nouveautes", titre: "Nouveautés", retour: "jour" },
 };
 const TITRES = { cal: "Calendrier", dispo: "Quand je suis libre", todo: "Étapes" };
 
@@ -3363,6 +3477,7 @@ function peupler(v, arg) {
   if (v === "messages") chargerFils();
   if (v === "conv") ouvrirConversation(arg);
   if (v === "personne") ouvrirFiche(arg);
+  if (v === "nouveautes") ouvrirNouveautes();
 }
 
 addEventListener("hashchange", appliquerRoute);

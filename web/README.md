@@ -33,6 +33,15 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
   ne peut vous adresser **qu'une** chose : une proposition de moment, avec son motif.
   Répondre ou accepter ouvre la conversation. Blocage réciproque et signalement d'un
   contenu à l'éditeur.
+- **Le centre de nouveautés** — une cloche dans l'en-tête rassemble ce qui a bougé
+  depuis la dernière visite : messages, demandes d'abonnement, moments proposés et
+  leurs réponses, publications et disponibilités. Deux groupes, dans cet ordre :
+  « ça attend ta réponse », puis « bon à savoir ». Seul le premier compte dans la
+  pastille — une pastille qui ne s'éteint jamais cesse d'être lue.
+- **« Me prévenir quand il est libre »** — une case à cocher par contact. Elle ne
+  déclenche aucun courriel : la prochaine plage libre que la personne publie apparaît
+  dans le centre de nouveautés. On coche et on décoche depuis la liste des contacts,
+  et la personne surveillée n'en sait rien.
 - **Photos, avec recadrage** — on cadre avant d'envoyer : la fenêtre s'ouvre sur
   l'image entière, on la déplace au doigt, on la grossit à deux doigts ou à la
   molette. Carré et masque rond pour la photo de profil ; carré, portrait ou
@@ -164,7 +173,8 @@ Le planning : `ciel_profiles`, `ciel_state`, `ciel_journal`, `ciel_subs`,
 `ciel_partages`, `ciel_invitations`, `ciel_identites`, `ciel_reservations`.
 
 Le réseau : `ciel_posts`, `ciel_commentaires`, `ciel_jaime`, `ciel_fils`,
-`ciel_messages`, `ciel_blocages`, `ciel_signalements`, `ciel_dispos`, `ciel_scores`.
+`ciel_messages`, `ciel_blocages`, `ciel_signalements`, `ciel_dispos`, `ciel_scores`,
+`ciel_veilles`.
 
 Deux seaux de stockage : `avatars` (public, 1 Mo) et `photos` (privé, 3 Mo, servi par
 adresse signée). L'écriture est bornée au dossier `<uuid>/` de chacun.
@@ -191,6 +201,8 @@ des fonctions `security definer` font le travail et n'exposent que le nécessair
 | `fil_actualite(...)` / `publications_de(...)` | tout le monde | le fil, en `security invoker` — ce sont les politiques qui filtrent |
 | `classement()` | connecté | les heures de la semaine, des seuls volontaires |
 | `moments_communs()` | connecté | l'intersection des plages libres |
+| `nouveautes()` | connecté | ce qui a bougé depuis la dernière visite, en six sources réunies |
+| `marquer_nouveautes_vues()` | connecté | repose la date de dernière consultation |
 | `supprimer_mon_compte()` | connecté | efface tout, en cascade, fichiers compris |
 
 `prive.ciel_visible()`, le rouage interne des politiques, vit dans un schéma non
