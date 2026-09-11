@@ -800,6 +800,22 @@ function penteAu(t, reste, fin) {
   return reste / jours;
 }
 
+/* La part du programme franchie. Un cours terminé vaut un pas entier, celui
+   qu'on a entamé vaut sa fraction : le bonhomme avance déjà pendant qu'on
+   travaille, et il a bougé d'un cran net quand le cours tombe. */
+function partFranchie() {
+  if (!ALL.length) return 0;
+  let p = 0;
+  for (const s2 of ALL) p += s2.h > 0 ? Math.min(1, faitDe(s2.id) / s2.h) : 1;
+  return Math.min(1, p / ALL.length);
+}
+
+/** L'étape vers laquelle il marche : la première à faire, blocages écartés. */
+function prochaineEtape() {
+  return ALL.find((s2) => !estFait(s2) && !estBloque(s2.id))
+      || ALL.find((s2) => !estFait(s2)) || null;
+}
+
 function terrain() {
   const reste = ALL.reduce((a, s2) => a + resteReel(s2), 0);
   const fin = +EXAM;
@@ -814,16 +830,22 @@ function terrain() {
 
   const aujourdhui = heuresFaitesLe(isoJour(new Date(NOW)));
   const depuis = joursSansRien();
+  const bloquees = heuresBloquees();
 
   let allure;
-  if (reste <= 0.01) allure = "sommet";
-  else if (depuis >= 1 && aujourdhui <= 0.01) allure = "arret";
+  if (reste <= EPS) allure = "sommet";
+  // Tout ce qui reste attend quelqu'un d'autre : ce n'est pas de l'arrêt, et on
+  // ne lui met pas sur le dos une pente qu'il n'a pas le droit de gravir.
+  else if (bloquees >= reste - EPS) allure = "attente";
+  else if (depuis >= 1 && aujourdhui <= EPS) allure = "arret";
   else if (raideur >= 2.2) allure = "alpinisme";
   else if (raideur >= 1.25) allure = "montee";
   else allure = "randonnee";
 
-  return { reste, fin, requis, capacite, declaree, raideur, allure, bloquees: heuresBloquees(),
-           aujourdhui, depuis, jours: Math.max(0, (fin - NOW) / DAY) };
+  return { reste, fin, requis, capacite, declaree, raideur, allure, bloquees,
+           aujourdhui, depuis, jours: Math.max(0, (fin - NOW) / DAY),
+           part: partFranchie(), suivante: prochaineEtape(),
+           faits: ALL.reduce((a, s2) => a + (estFait(s2) ? 1 : 0), 0), total: ALL.length };
 }
 
 /** Ce que la journée type déclare, en heures : le repère quand rien n'est mesuré. */
@@ -852,6 +874,8 @@ function joursSansRien() {
 
 const MOTS = {
   sommet: ["Au sommet", "Tout est posé. Il n'y a plus de pente devant toi."],
+  attente: ["En attente",
+    "Tout ce qui reste attend quelqu'un d'autre. Il s'assoit : relance ton tuteur."],
   arret: ["Arrêté devant la pente",
     "Tu regardes la montagne en cherchant par où passer. Elle grandit pendant ce temps."],
   alpinisme: ["En alpinisme",
@@ -859,6 +883,12 @@ const MOTS = {
   montee: ["En montée", "Ça grimpe, mais ça se marche."],
   randonnee: ["En randonnée", "Le terrain est plat devant toi. C'est le bon moment."],
 };
+
+/* D'un rendu à l'autre on retient où il était, pour le faire marcher jusqu'à sa
+   nouvelle place au lieu de l'y téléporter. */
+let dernierePart = null;
+
+const court = (s, n) => (s && s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s || "");
 
 function renderMontagne() {
   const box = $("montagne");
@@ -879,9 +909,12 @@ function renderMontagne() {
   // ×4 un mur qui remplit le cadre, au-delà c'est le même message.
   const dessine = (r) => Math.min(1, Math.sqrt(Math.max(0, r) / 4));
   const Y = (r, u) => sol - Math.min(1, Math.max(0, dessine(r) * u)) * utile;
-  const rampe = (r) => {
+  const rampe = (r, de = 0, a = 1) => {
     const pts = [];
-    for (let i = 0; i <= 40; i++) { const u = i / 40; pts.push([X(u), Y(r, u)]); }
+    for (let i = 0; i <= 40; i++) {
+      const u = de + (a - de) * (i / 40);
+      pts.push([X(u), Y(r, u)]);
+    }
     return pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
   };
 
@@ -892,19 +925,59 @@ function renderMontagne() {
   // la montagne qu'on a construite en ne faisant rien, rendue visible.
   const avant = t.jours > 0 ? t.raideur * (t.jours / (t.jours + 7)) : 0;
   // On ne montre le tracé d'avant que si l'écart se voit à l'écran.
-  const montree = t.reste > 0.01 && dessine(t.raideur) - dessine(avant) > 0.05;
+  const montree = t.reste > EPS && dessine(t.raideur) - dessine(avant) > 0.05;
 
-  // Le bonhomme se tient au départ de la rampe, sur la pente.
-  const u0 = 0.07;
+  /* Il ne se tient plus au pied de la pente : il est là où en est le programme,
+     et chaque cours fini le pousse d'un cran vers l'examen. Tant qu'il reste un
+     jalon à planter devant lui on lui garde un bout de pente : un panneau collé
+     au bord du cadre ne se lit pas. */
+  const jalonne = t.suivante && t.reste > EPS;
+  const borne = (u) => Math.min(jalonne ? 0.9 : 0.985, Math.max(0.012, u));
+  const u0 = borne(t.part);
   const bx = X(u0), by = Y(t.raideur, u0);
+  // L'angle du terrain sous ses pieds, et ce qu'il en prend : un marcheur reste
+  // plus droit que la pente, un alpiniste s'y couche. 0 pour qui ne grimpe pas.
+  const angle = Math.atan2(dessine(t.raideur) * utile, L - 20) * 180 / Math.PI;
+  const penche = { alpinisme: 1, montee: .6, randonnee: .35 }[t.allure] || 0;
+  const incl = angle * penche;
 
-  // Le panneau porte l'allure : c'est lui qui donne sa couleur au massif.
+  // S'il a gagné du terrain depuis le dernier rendu, il y marche au lieu d'y
+  // apparaître : c'est tout l'intérêt de finir un cours.
+  const avantU = dernierePart != null && t.part > dernierePart + 1e-6
+    ? borne(dernierePart) : null;
+  dernierePart = t.part;
+  const glisse = avantU == null ? "" : ` style="--dx:${(X(avantU) - bx).toFixed(1)}px;` +
+    `--dy:${(Y(t.raideur, avantU) - by).toFixed(1)}px"`;
+
+  /* Le panneau devant lui nomme la prochaine tâche. Il dit où il va, pas
+     combien il en reste : un cours sur cent vingt ne fait que six pixels, et
+     planté à la distance exacte le panneau tomberait DANS le bonhomme. On le
+     pose donc à la distance vraie OU assez loin pour se lire, la plus grande
+     des deux. Le compte exact est écrit en toutes lettres juste dessous. */
+  const uSuiv = Math.min(0.985, Math.max(
+    t.total ? (Math.floor(t.part * t.total + 1e-9) + 1) / t.total : 1, u0 + 0.075));
+  const jx = X(uSuiv), jy = Y(t.raideur, uSuiv);
+  const aGauche = uSuiv > 0.62;
+  const jalon = jalonne ? `
+      <g class="jalon">
+        <path class="hampe" d="M${jx.toFixed(1)} ${jy.toFixed(1)}v-52"/>
+        <path class="fanion" d="M${jx.toFixed(1)} ${(jy - 52).toFixed(1)}l15 5.5-15 5.5z"/>
+        <text class="jal" x="${(jx + (aGauche ? -5 : 5)).toFixed(1)}"
+          y="${(jy - 57).toFixed(1)}" text-anchor="${aGauche ? "end" : "start"}"
+          >${esc(court(t.suivante.n, 30))}</text>
+      </g>` : "";
+
+  /* Le panneau porte l'allure : c'est elle qui donne sa couleur au massif. On la
+     préfixe, sinon un nom d'allure part en classe globale et attrape la règle du
+     même nom — « attente » tombait sur l'écran de chargement et rabotait le
+     panneau à 22 rem. Toute allure ajoutée ici doit garder le préfixe. */
   const bloc = $("montbloc");
-  if (bloc) bloc.className = "panel montbloc " + t.allure;
+  if (bloc) bloc.className = "panel montbloc all-" + t.allure;
 
   box.innerHTML = `
-    <svg class="mont ${esc(t.allure)}" viewBox="0 0 ${L} ${H}" role="img"
-        aria-label="${esc(titre)} — ${esc(phrase)}">
+    <svg class="mont all-${esc(t.allure)}" viewBox="0 0 ${L} ${H}" role="img"
+        aria-label="${esc(titre)} — ${esc(phrase)} ${t.faits} ${t.faits > 1 ? "étapes franchies" : "étape franchie"} sur ${t.total}.${
+          t.suivante ? ` Prochaine étape : ${esc(t.suivante.n)}.` : ""}">
       <defs><linearGradient id="gcimes" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="var(--c1)"/><stop offset="1" stop-color="var(--c2)"/>
       </linearGradient></defs>
@@ -914,58 +987,112 @@ function renderMontagne() {
         <text class="jal jadis-t" x="${X(0.99)}" y="${Y(avant, 0.99) - 6}" text-anchor="end">
           la pente d'il y a une semaine</text>` : ""}
       <path class="crete" d="${ligne}"/>
-      ${bonhomme(bx, by, t.allure)}
+      <path class="franchi" d="${rampe(t.raideur, 0, u0)}"/>
+      ${jalon}
+      <g class="pas${avantU == null ? "" : " avance"}"${glisse}>
+        <g transform="translate(${bx.toFixed(1)},${by.toFixed(1)}) rotate(${incl.toFixed(1)}) scale(1.75)">
+          ${bonhomme(t.allure)}
+        </g>
+      </g>
       <text class="jal" x="${X(1)}" y="${sol + 20}" text-anchor="end">examen</text>
-      <text class="jal" x="${X(0)}" y="${sol + 20}">aujourd'hui</text>
+      <text class="jal" x="${X(0)}" y="${sol + 20}">départ</text>
     </svg>
     <div class="montdit">
       <div class="mtitre">${esc(titre)}</div>
       <div class="mphrase">${esc(phrase)}</div>
       <div class="mchif">
+        <span><b>${t.faits}</b> ${t.faits > 1 ? "étapes franchies" : "étape franchie"} sur ${t.total}</span>
         <span><b>${unH(t.requis)}</b> par jour à tenir</span>
-        ${t.capacite && t.reste > 0.01
+        ${t.capacite && t.reste > EPS
           ? `<span><b>${unH(t.capacite)}</b> par jour mesuré chez toi</span>` : ""}
-        ${t.bloquees > 0.01 ? `<span><b>${unH(t.bloquees)}</b> en attente de quelqu'un</span>` : ""}
+        ${t.bloquees > EPS ? `<span><b>${unH(t.bloquees)}</b> en attente de quelqu'un</span>` : ""}
         ${t.depuis != null && t.depuis >= 1
           ? `<span class="late"><b>${plural(t.depuis, "jour")}</b> sans rien poser</span>`
-          : t.aujourdhui > 0.01 ? `<span class="ok"><b>${unH(t.aujourdhui)}</b> aujourd'hui</span>` : ""}
+          : t.aujourdhui > EPS ? `<span class="ok"><b>${unH(t.aujourdhui)}</b> aujourd'hui</span>` : ""}
       </div>
     </div>`;
 }
 
+/* ── Le bonhomme ────────────────────────────────────────────────────────
+   Le groupe parent le place ; ici on ne dessine que le corps, à l'origine,
+   les pieds sur le zéro.
+
+   Le défaut qu'on corrige venait d'un seul groupe qui portait à la fois le
+   translate/scale de placement et l'animation CSS : une animation `transform`
+   REMPLACE l'attribut `transform`, elle ne s'y ajoute pas. Le bonhomme partait
+   donc à l'angle du cadre, à l'échelle 1, hors champ — invisible dans trois
+   allures sur cinq. D'où la règle : un groupe place, un autre anime, jamais
+   le même. Elle vaut aussi pour chaque membre.
+
+   Chaque membre est donc un groupe dont l'origine EST son pivot (hanche ou
+   épaule), posé par un translate, et dont l'enfant animé porte l'une des trois
+   classes d'origine selon le sens du tracé — bas / haut / hautg. Un tracé qui
+   part ailleurs ferait tourner le membre autour du mauvais point. */
+const TETE = `<circle class="tete" cx="0" cy="-27.5" r="4"/>`;
+const TRONC = `<path class="corps" d="M0 -23.3v13.3"/>`;
+const os = (d, c = "corps") => `<path class="${c}" d="${d}"/>`;
+/** Un membre : le groupe pose le pivot, l'enfant tourne autour. */
+const membre = (cls, x, y, inner, style = "") =>
+  `<g transform="translate(${x},${y})"><g class="${cls}"${style}>${inner}</g></g>`;
+// Presque droits au repos : c'est le balancement qui les écarte, et il les
+// écarte des deux côtés parce que le pivot reste sur l'axe du corps.
+const JAMBE = os("M0 0l.8 10");
+// Le bâton est tenu dans la main : il vit dans le groupe du bras et se plante
+// avec lui. Le dessiner à part lui donnerait une vie propre, et ça se voit.
+const BRAS = os("M0 0l.8 9") + os("M.8 9l1.5 14", "baton");
+
 /** Un bonhomme, dessiné selon ce que le terrain lui demande. */
-function bonhomme(x, y, allure) {
-  // 1,6× : à 760 de large, un bonhomme à l'échelle 1 fait quatre pixels sur un
-  // téléphone. Il porte le message, il doit se voir.
-  const g = (contenu, extra = "") =>
-    `<g class="rando ${esc(allure)}" transform="translate(${x.toFixed(1)},${(y - 3).toFixed(1)}) scale(1.6)"${extra}>${contenu}</g>`;
-  const tete = `<circle class="corps" cx="0" cy="-26" r="5"/>`;
-  const tronc = `<path class="corps" d="M0 -21v13"/>`;
+function bonhomme(allure) {
+  const g = (contenu) => `<g class="rando all-${esc(allure)}">${contenu}</g>`;
 
   if (allure === "arret") {
-    // Immobile, la main au menton, regardant ce qu'il va bien falloir gravir.
-    return g(`${tete}${tronc}
-      <path class="corps" d="M0 -8l-5 9M0 -8l5 9"/>
-      <path class="corps" d="M0 -17l7 3-4 -7"/>
-      <path class="pense" d="M9 -34a3 3 0 1 1 .1 0M14 -40a4 4 0 1 1 .1 0"/>`);
+    // Immobile, la main au menton, cherchant par où passer. Rien ne marche :
+    // seuls le souffle et les bulles bougent.
+    return g(`${TETE}${TRONC}
+      ${os("M0 -10l-4.5 10M0 -10l4.5 10")}
+      ${os("M0 -22l6.5 4-3.5 -6.5")}
+      <g class="pense">
+        <circle cx="8" cy="-34" r="1.8"/><circle cx="12.5" cy="-39" r="2.6"/>
+        <circle cx="18.5" cy="-45" r="3.5"/>
+      </g>`);
   }
+
+  if (allure === "attente") {
+    // Assis sur un bloc, une jambe qui balance : il ne peut rien faire d'autre
+    // que d'attendre une réponse.
+    return g(`${os("M-12 0h21l-4.5 -8.5h-12z", "rocher")}
+      <circle class="tete" cx="-5" cy="-26" r="4"/>
+      ${os("M-5 -22l1.5 12.5")}
+      ${os("M-3.5 -9.5l9 -.6")}
+      ${os("M-5 -20l6.5 6")}
+      ${membre("balance lent bas", 5.5, -10.1, os("M0 0l.8 10"))}`);
+  }
+
   if (allure === "alpinisme") {
-    // Penché dans la pente, un piolet planté plus haut.
-    return g(`${tete}${tronc}
-      <path class="corps" d="M0 -8l-7 8M0 -8l6 9"/>
-      <path class="corps" d="M0 -18l10 -9"/>
-      <path class="piolet" d="M10 -27l7 -6M14 -31l5 1"/>`, ' transform-origin="0 0"');
+    // Plié dans la pente, le piolet planté plus haut, les jambes qui poussent.
+    return g(`${TETE}${TRONC}
+      ${membre("balance bas", 0, -10, JAMBE)}
+      ${membre("balance bas", 0, -10, JAMBE, ' style="animation-delay:-1.2s"')}
+      ${membre("ancre haut", 0, -22.3, os("M0 0l8.5 -8.5") + os("M8.5 -8.5l7 -6M12.5 -12.5l5 1", "piolet"))}
+      ${membre("bras bas", 0, -22.3, os("M0 0l.8 8.5"), ' style="animation-delay:-.8s"')}`);
   }
+
   if (allure === "sommet") {
-    return g(`${tete}${tronc}
-      <path class="corps" d="M0 -8l-6 9M0 -8l6 9"/>
-      <path class="corps" d="M0 -18l-8 -8M0 -18l8 -8"/>`);
+    // Les deux bras en l'air, et il les agite.
+    return g(`${TETE}${TRONC}
+      ${os("M0 -10l-5 10M0 -10l5 10")}
+      ${membre("salut haut", 0, -22.3, os("M0 0l5.5 -1l4 -8"))}
+      ${membre("salut hautg", 0, -22.3, os("M0 0l-5.5 -1l-4 -8"), ' style="animation-delay:-.6s"')}`);
   }
-  // Randonnée et montée : il marche, avec un bâton.
-  return g(`${tete}${tronc}
-    <path class="corps jambes" d="M0 -8l-6 9M0 -8l6 9"/>
-    <path class="corps bras" d="M0 -17l8 4"/>
-    <path class="baton" d="M8 -13v14"/>`);
+
+  // Randonnée et montée : il marche. Les jambes alternent, les bras suivent à
+  // contretemps, et le bâton se plante à chaque pas.
+  const lent = allure === "montee" ? " lent" : "";
+  return g(`${TETE}${TRONC}
+    ${membre("balance bas" + lent, 0, -10, JAMBE)}
+    ${membre("balance bas" + lent, 0, -10, JAMBE, ' style="animation-delay:-.8s"')}
+    ${membre("bras bas" + lent, 0, -22.3, os("M0 0l.8 9"), ' style="animation-delay:-.8s"')}
+    ${membre("bras bas" + lent, 0, -22.3, BRAS)}`);
 }
 
 /* ═════════ FICHES ═════════
@@ -1750,6 +1877,9 @@ function projectionNotes() {
 const unH = (h) => {
   if (h >= 10) return `${Math.round(h)} h`;
   const m = Math.round(h * 60);
+  // Une durée non nulle ne doit jamais s'afficher « 0 h » : c'est un mensonge
+  // par arrondi, et c'est exactement ce qu'on est censé ne plus faire.
+  if (m === 0 && h > 0) return "moins d'1 min";
   if (m % 60 === 0) return `${m / 60} h`;
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
 };
