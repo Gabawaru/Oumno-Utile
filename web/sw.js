@@ -28,6 +28,9 @@ self.addEventListener("fetch", (e) => {
   // On ne touche jamais aux appels à la base : ses réponses ne se mettent pas
   // en cache, et une réponse périmée serait un mensonge sur l'état du planning.
   if (e.request.method !== "GET" || u.origin !== location.origin) return;
+  // Ni aux routes serveur : elles répondent selon qui demande et quand. Les
+  // garder reviendrait à resservir la réponse d'un autre moment, ou d'un autre.
+  if (u.pathname.startsWith("/api/")) return;
 
   e.respondWith(
     fetch(e.request)

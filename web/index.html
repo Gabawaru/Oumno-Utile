@@ -490,34 +490,82 @@ label.cap{flex-wrap:wrap}
 /* ── la montagne ────────────────────────────────────────── */
 .montbloc{--c1:color-mix(in srgb,var(--sig) 26%,transparent);
   --c2:color-mix(in srgb,var(--sig) 4%,transparent)}
-.montbloc.alpinisme{--c1:color-mix(in srgb,var(--late) 30%,transparent);
+.montbloc.all-alpinisme{--c1:color-mix(in srgb,var(--late) 30%,transparent);
   --c2:color-mix(in srgb,var(--late) 4%,transparent)}
-.montbloc.arret{--c1:color-mix(in srgb,var(--ink3) 26%,transparent);
+.montbloc.all-arret{--c1:color-mix(in srgb,var(--ink3) 26%,transparent);
   --c2:color-mix(in srgb,var(--ink3) 4%,transparent)}
-.montbloc.randonnee,.montbloc.sommet{--c1:color-mix(in srgb,var(--ok) 26%,transparent);
+.montbloc.all-attente{--c1:color-mix(in srgb,var(--warn) 26%,transparent);
+  --c2:color-mix(in srgb,var(--warn) 4%,transparent)}
+.montbloc.all-randonnee,.montbloc.all-sommet{--c1:color-mix(in srgb,var(--ok) 26%,transparent);
   --c2:color-mix(in srgb,var(--ok) 4%,transparent)}
 .mont{width:100%;height:auto;display:block;overflow:visible}
 .mont .sol{stroke:var(--rule);stroke-width:1}
 .mont .massif{fill:url(#gcimes)}
 .mont .crete{fill:none;stroke:var(--ink3);stroke-width:1.6;stroke-linejoin:round;opacity:.75}
-.mont.alpinisme .crete{stroke:var(--late)}
-.mont.randonnee .crete,.mont.sommet .crete{stroke:var(--ok)}
+.mont.all-alpinisme .crete{stroke:var(--late)}
+.mont.all-attente .crete{stroke:var(--warn)}
+.mont.all-montee .crete{stroke:var(--sig)}
+.mont.all-randonnee .crete,.mont.all-sommet .crete{stroke:var(--ok)}
+/* Le chemin déjà sous ses pieds : ce qu'on a franchi se voit. */
+.mont .franchi{fill:none;stroke:var(--ink);stroke-width:3.2;stroke-linecap:round;opacity:.5}
 .mont .jal{fill:var(--ink3);font-family:"IBM Plex Mono",monospace;font-size:11px}
 .mont .jadis{fill:none;stroke:var(--ink3);stroke-width:1.4;stroke-dasharray:5 4;opacity:.6}
 .mont .jadis-t{font-size:10px;opacity:.75}
+.mont .jalon .hampe{fill:none;stroke:var(--ink3);stroke-width:1.4}
+.mont .jalon .fanion{fill:var(--sig);stroke:none;opacity:.85}
+.mont .jalon .jal{fill:var(--ink2)}
 .mont .corps{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;
   stroke-linejoin:round}
-.mont .corps:first-of-type{fill:var(--ink)}
+.mont .tete{fill:var(--ink);stroke:none}
+.mont .rocher{fill:var(--ink3);stroke:none;opacity:.5}
 .mont .baton,.mont .piolet{fill:none;stroke:var(--ink2);stroke-width:1.8;stroke-linecap:round}
-.mont .pense{fill:none;stroke:var(--ink3);stroke-width:1.4}
+.mont .pense circle{fill:none;stroke:var(--ink3);stroke-width:1.4}
 
-@keyframes marche{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
-@keyframes hisse{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-3px) rotate(-4deg)}}
-@keyframes songe{0%,100%{opacity:.35}50%{opacity:1}}
-.mont .rando.randonnee,.mont .rando.montee{animation:marche 1.6s ease-in-out infinite}
-.mont .rando.alpinisme{animation:hisse 2.4s ease-in-out infinite}
-.mont .rando.arret .pense{animation:songe 2.2s ease-in-out infinite}
-@media(prefers-reduced-motion:reduce){.mont .rando,.mont .rando .pense{animation:none}}
+/* Chaque membre tourne autour de son propre pivot, jamais autour du centre du
+   cadre : fill-box prend la boîte du membre lui-même, et le tracé est dessiné
+   pour que le pivot tombe sur l'un de ses coins. Trois sens, trois origines. */
+.mont .bas{transform-box:fill-box;transform-origin:left top}
+.mont .haut{transform-box:fill-box;transform-origin:left bottom}
+.mont .hautg{transform-box:fill-box;transform-origin:right bottom}
+
+@keyframes balancer{0%,100%{transform:rotate(-26deg)}50%{transform:rotate(26deg)}}
+@keyframes brasser{0%,100%{transform:rotate(22deg)}50%{transform:rotate(-22deg)}}
+@keyframes ancrer{0%,100%{transform:rotate(-14deg)}55%{transform:rotate(8deg)}}
+@keyframes saluer{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(12deg)}}
+@keyframes marche{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.3px)}}
+@keyframes hisse{0%,100%{transform:translateY(0)}55%{transform:translateY(-2.4px)}}
+@keyframes souffle{0%,100%{transform:translateY(0)}50%{transform:translateY(.7px)}}
+@keyframes songe{0%,100%{opacity:.3}50%{opacity:1}}
+/* Il ne se téléporte pas à sa nouvelle place : il part d'où il était et y va.
+   Une étape sur cent vingt ne fait que quelques pixels — sans l'enjambée du
+   milieu, le déplacement passerait inaperçu. C'est elle qu'on voit, pas la
+   distance. */
+@keyframes avancer{
+  0%{transform:translate(var(--dx),var(--dy))}
+  55%{transform:translate(calc(var(--dx)*.35),calc(var(--dy)*.35 - 6px))}
+  100%{transform:none}}
+
+.mont .balance{animation:balancer 1.6s ease-in-out infinite}
+.mont .bras{animation:brasser 1.6s ease-in-out infinite}
+.mont .ancre{animation:ancrer 2.4s ease-in-out infinite}
+.mont .salut{animation:saluer 1.2s ease-in-out infinite}
+.mont .lent{animation-duration:2.4s}
+.mont .rando.all-randonnee,.mont .rando.all-montee{animation:marche 1.6s ease-in-out infinite}
+.mont .rando.all-montee{animation-duration:2.4s}
+.mont .rando.all-alpinisme{animation:hisse 2.4s ease-in-out infinite}
+.mont .rando.all-arret,.mont .rando.all-attente{animation:souffle 3.8s ease-in-out infinite}
+.mont .rando.all-arret .pense{animation:songe 2.2s ease-in-out infinite}
+.mont .pas.avance{animation:avancer 1.15s cubic-bezier(.35,.1,.3,1) both}
+/* Sur un téléphone le cadre fait ~340 px pour 760 unités de viewBox : tout ce
+   qui est dessiné en unités rétrécit de moitié, texte compris. On compense. */
+@media(max-width:560px){
+  .mont .jal{font-size:17px}
+  .mont .jadis-t{font-size:15px}
+  .mont .corps{stroke-width:3.2}
+  .mont .baton,.mont .piolet,.mont .jalon .hampe{stroke-width:2.6}
+}
+@media(prefers-reduced-motion:reduce){
+  .mont .rando,.mont .rando *,.mont .pas{animation:none}}
 
 .montdit{margin-top:.5rem}
 .mtitre{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;
