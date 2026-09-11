@@ -439,6 +439,24 @@ migration n'est pas facultatif.
 
 ## Journal des audits
 
+**11 septembre 2026 — le minuteur, et ce qu'il mesure.** L'application savait ce
+qu'on valide, jamais ce que ça coûte : une étape de six heures finie en trois et
+une finie en dix se ressemblaient exactement. Les séances enregistrent désormais
+le temps réel, d'où le facteur de réalité — temps passé sur temps indicatif — qui
+nourrit le planificateur et la prévision.
+
+Rien de tout cela ne sort du compte : les séances vivent dans l'état personnel,
+comme le reste, sans nouvelle table ni nouvelle surface d'API. Le minuteur lui-même
+ne quitte pas le navigateur.
+
+Trois défauts trouvés en chemin. Le panneau était réécrit en entier chaque seconde,
+ce qui détruisait le focus et la case sous le doigt — seule l'horloge bouge
+maintenant. La vue était peuplée depuis le rafraîchissement des nouveautés au lieu
+du routeur, donc le minuteur n'apparaissait pas. Et la prévision annonçait « 14 juil.
+2036, 3331 jours de trop » : arithmétiquement juste, humainement inutile. Au-delà de
+dix-huit mois on écrit « au-delà » et on donne le rythme hebdomadaire à tenir, qui
+est le seul chiffre sur lequel on peut agir.
+
 **10 septembre 2026 — notifications poussées.** Web Push écrit à la main, sans
 dépendance : VAPID (RFC 8292) et chiffrement `aes128gcm` (RFC 8291) avec
 `node:crypto`. Onze vérifications sur la cryptographie — aller-retour du contenu,

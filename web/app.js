@@ -40,7 +40,7 @@ const T0=qStart(0).getTime(),T1=qEnd(19).getTime();
    connaît que des étapes avec un volume d'heures et une période — le référentiel
    CNED n'est qu'un modèle parmi d'autres. */
 let GROUPES=[], ALL=[], DEVS=[], TOTAL_H=0, byId={};
-let avance={};
+let avance={}, seances=[];
 
 function chargerProgramme(prog){
   GROUPES = versGroupes(prog);
@@ -152,6 +152,7 @@ function appliquerEtat(d){
   d=d||{};
   done      = d.done      || {};
   avance    = d.avance    || {};
+  seances   = Array.isArray(d.seances) ? d.seances : [];
   events    = d.evenements|| d.events || [];
   grades    = d.notes     || d.grades || {};
   capacites = normaliserCapacites(d.capacites);
@@ -162,9 +163,13 @@ function appliquerEtat(d){
   chargerProgramme(programme);
   Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
   migrerAvance();
+  // Un minuteur laissé en route doit se retrouver : l'onglet a pu être fermé,
+  // le téléphone verrouillé, la page rechargée.
+  lireMinuteur();
+  if (minuteur) battre();
 }
-const etat=()=>({done,avance,evenements:events,notes:grades,capacites,reports,partJour,programme,
-                 demarrage:demarrageFait});
+const etat=()=>({done,avance,seances,evenements:events,notes:grades,capacites,reports,partJour,
+                 programme,demarrage:demarrageFait});
 
 /* ═════════ HEURES POSÉES ═════════
    `done` disait oui ou non. Cocher une tranche d'une heure sur une étape de six
@@ -193,6 +198,13 @@ function migrerAvance(){
 }
 
 const EPS=0.01;
+/** Le reste d'une étape, corrigé de ce qu'elle coûte réellement à cette personne.
+ *  Borné : un facteur tiré d'une seule séance courte ne doit pas tordre l'année. */
+function resteReel(s2){
+  const r=resteDe(s2); if(r<=EPS) return 0;
+  const m=mesureDe(s2.id); if(!m||m.seances<2) return r;
+  return r*Math.max(0.5,Math.min(2,m.facteur));
+}
 /** Heures posées sur une étape, jamais plus que son volume. */
 const faitDe =id=>{const m=avance[id]; if(!m) return 0;
   let t=0; for(const j in m) t+=Number(m[j])||0;
@@ -360,7 +372,8 @@ function buildGantt(){
     grp.rows.forEach(r=>{
       h+=`<div class="glabel sub" data-lab="${esc(r.id)}" title="${esc(r.n)}">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(r.n)}</a>`:esc(r.n)}${r.code?`<span class="code">${r.code}</span>`:""}</div>
         <div class="lane"><div class="bar" data-r="${esc(r.id)}" style="--c:${esc(grp.c)};grid-column:${col(r.s)}/${col(r.e)}">
-          <div class="fill"></div><span class="blab"></span></div></div>`;
+          <div class="fill"></div><span class="blab"></span>
+          <span class="retard" data-rt="${esc(r.id)}" hidden></span></div></div>`;
     });
   });
   g.innerHTML=h;
@@ -368,17 +381,33 @@ function buildGantt(){
   const liens=GROUPES.some(gp=>gp.rows.some(r=>r.url));
   document.getElementById("legend").innerHTML=
     GROUPES.map(gp=>`<span class="li"><span class="sw" style="background:${gp.c}"></span>${short(gp)} — ${gp.h} h</span>`).join("")+
+    `<span class="li"><span class="sw vide"></span>Vide — reste à faire</span>`+
+    `<span class="li"><span class="sw" style="background:var(--late)"></span>En retard — échéance passée</span>`+
     (liens?`<span class="li muted" style="margin-left:auto">Clique le nom d'un lot pour ouvrir le cours</span>`:"");
 }
 function paintGantt(){
   GROUPES.forEach(g=>{
     let gd=0;
     g.rows.forEach(r=>{
-      const d=doneH(r);gd+=d;const pc=r.h?d/r.h*100:0,late=r.steps.some(isLate);
+      const d=doneH(r);gd+=d;const pc=r.h?d/r.h*100:0;
+      const tardives=r.steps.filter(isLate);
+      const late=tardives.length>0;
+      // Le vide dit déjà qu'il manque quelque chose ; il ne dit pas depuis quand.
+      const jours=late?Math.max(...tardives.map(lateDays)):0;
       const bar=document.querySelector(`[data-r="${r.id}"]`);
       if(bar){bar.querySelector(".fill").style.width=pc+"%";
-        bar.querySelector(".blab").textContent=`${d}/${r.h} h`;
+        bar.querySelector(".blab").textContent=`${Math.round(d*10)/10}/${r.h} h`;
         bar.classList.toggle("done",pc>=99.5);bar.classList.toggle("lt",late&&pc<99.5);}
+      const rt=document.querySelector(`[data-rt="${r.id}"]`);
+      if(rt){
+        const montre=late&&pc<99.5;
+        rt.hidden=!montre;
+        if(montre){
+          rt.textContent=jours<1?"en retard":`${jours} j`;
+          rt.title=`${plural(tardives.length,"étape")} dont l'échéance est passée`
+            +(jours>=1?`, la plus ancienne depuis ${plural(jours,"jour")}`:"");
+        }
+      }
       const lab=document.querySelector(`[data-lab="${esc(r.id)}"]`);
       if(lab){lab.classList.toggle("full",pc>=99.5);lab.classList.toggle("lt",late&&pc<99.5);}
       const rh=document.querySelector(`[data-rh="${r.id}"]`);if(rh)rh.textContent=`${d}/${r.h} h`;
@@ -420,6 +449,530 @@ function buildAcc(){
    Deux séries : le plan, en gris, sert de repère ; les heures réellement faites
    portent la couleur du statut — c'est elle qu'on vient lire. La ligne du fait
    s'arrête à aujourd'hui : on ne dessine pas un avenir qui n'existe pas. */
+/* ═════════ SÉANCES ET MINUTEUR ═════════
+   L'application savait ce qu'on valide, jamais ce que ça coûte. Une étape de six
+   heures finie en trois et une finie en dix se ressemblaient exactement dans les
+   données : le planning ne pouvait donc rien apprendre, il n'avait que la durée
+   du CNED — une moyenne pour tout le monde, jamais la tienne.
+
+   Une séance enregistre le temps réellement passé. De là vient le seul chiffre
+   qui manquait : le facteur de réalité, temps réel divisé par temps indicatif.
+
+   Le minuteur vit dans le navigateur, pas en mémoire : un téléphone qui verrouille
+   son écran gèle l'onglet, et un compteur qui s'incrémente à la seconde perdrait
+   tout. On ne garde que des horodatages, et l'écoulé se recalcule à l'horloge. */
+
+const CLE_MIN = "ciel.minuteur";
+let minuteur = null;          // { etape, debut, cumul, pause, pom, phase, cycle }
+let battement = null;
+
+const POM = { travail: 25 * 60, pause: 5 * 60, longue: 15 * 60, avantLongue: 4 };
+/** Sous ce seuil, on a ouvert le minuteur par erreur : rien n'est enregistré. */
+const FAUX_DEPART = 30;
+
+function lireMinuteur() {
+  try { minuteur = JSON.parse(localStorage.getItem(CLE_MIN) || "null"); }
+  catch { minuteur = null; }
+  if (minuteur && !byId[minuteur.etape]) minuteur = null;   // étape disparue du programme
+  return minuteur;
+}
+function poserMinuteur() {
+  try {
+    if (minuteur) localStorage.setItem(CLE_MIN, JSON.stringify(minuteur));
+    else localStorage.removeItem(CLE_MIN);
+  } catch { /* navigation privée : le minuteur ne survivra pas au rechargement */ }
+}
+
+/** Secondes effectivement travaillées, pauses déduites, recalculées à l'horloge. */
+function ecoule(m = minuteur) {
+  if (!m) return 0;
+  const base = m.cumul || 0;
+  return m.pause ? base : base + Math.max(0, Math.floor((Date.now() - m.depuis) / 1000));
+}
+
+/** Le cadran du minuteur. `mmss` existe déjà, pour les minutes d'un planning. */
+const cadran = (sec) => {
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  return (h ? `${h}:${String(m).padStart(2, "0")}` : `${m}`) + ":" + String(r).padStart(2, "0");
+};
+
+function demarrerMinuteur(etapeId, { pom = false } = {}) {
+  const s2 = byId[etapeId];
+  if (!s2 || !canEdit) return;
+  if (minuteur && minuteur.etape !== etapeId) arreterMinuteur({ silencieux: true });
+  minuteur = { etape: etapeId, depuis: Date.now(), cumul: 0, pause: false,
+               pom, phase: "travail", cycle: 0, pauses: 0, debutLe: new Date(NOW).toISOString() };
+  poserMinuteur(); battre(); aller("minuteur", etapeId);
+}
+
+function basculerPause() {
+  if (!minuteur) return;
+  if (minuteur.pause) { minuteur.depuis = Date.now(); minuteur.pause = false; }
+  else { minuteur.cumul = ecoule(); minuteur.pause = true; minuteur.pauses++; }
+  poserMinuteur(); renderMinuteur();
+}
+
+/**
+ * Clôt la séance. `pose` est le nombre d'heures d'avance à créditer : on propose
+ * le temps réel, mais c'est bien ce qu'on a avancé qu'on valide, pas ce qu'on a
+ * passé — sinon une heure de ramage compterait comme une heure de programme.
+ */
+function arreterMinuteur({ pose = 0, fini = false, silencieux = false } = {}) {
+  if (!minuteur) return null;
+  const sec = ecoule(), s2 = byId[minuteur.etape];
+  const m = minuteur;
+  minuteur = null; poserMinuteur();
+  if (battement) { clearInterval(battement); battement = null; }
+  if (!s2 || sec < FAUX_DEPART) return null;
+  const seance = { e: m.etape, d: m.debutLe, s: sec, p: m.pauses || 0,
+                   pom: Boolean(m.pom), h: 0 };
+  if (pose > 0) { poserHeures(s2, isoJour(new Date(NOW)), pose); seance.h = pose; }
+  if (fini) poserHeures(s2, isoJour(new Date(NOW)), resteDe(s2));
+  seances.unshift(seance);
+  // Une année de travail tient largement ici ; au-delà, on ne garde que le récent.
+  if (seances.length > 400) seances.length = 400;
+  if (!silencieux) {
+    log(`a travaillé ${unDuree(sec)} sur ${s2.row.n} · ${s2.n}` +
+        (pose > 0 ? ` et validé ${unH(pose)}` : ""));
+    saveProgress(); renderAll();
+  }
+  return seance;
+}
+
+const unDuree = (sec) => {
+  const m = Math.round(sec / 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+};
+
+/** Le battement ne sert qu'à redessiner : il ne compte rien, l'horloge s'en charge. */
+function battre() {
+  if (battement) clearInterval(battement);
+  battement = setInterval(() => {
+    if (!minuteur) { clearInterval(battement); battement = null; return; }
+    if (minuteur.pom && !minuteur.pause) verifierPomodoro();
+    // Seule l'horloge bouge. Réécrire le panneau entier chaque seconde
+    // détruirait le focus, la case pomodoro sous le doigt, et la sélection.
+    if (vueCourante === "minuteur") tictac();
+  }, 1000);
+}
+
+/** Met à jour le seul chiffre qui change, sans toucher au reste du panneau. */
+function tictac() {
+  const t = $("chronoTemps"), so = $("chronoSous"), eq = $("chronoVaut");
+  if (!t || !minuteur) return;
+  const sec = ecoule();
+  t.textContent = cadran(sec);
+  if (so) so.textContent = sousTitreMinuteur(sec);
+  if (eq) {
+    const m = mesureDe(minuteur.etape);
+    eq.textContent = unH(Math.max(0, m ? sec / 3600 / m.facteur : sec / 3600));
+  }
+  const c = t.closest(".cadran");
+  if (c) {
+    c.classList.toggle("tourne", !minuteur.pause);
+    c.classList.toggle("repos", Boolean(minuteur.pom) && minuteur.phase === "repos");
+  }
+}
+
+function sousTitreMinuteur(sec) {
+  if (!minuteur) return "prêt";
+  if (minuteur.pause) return "en pause";
+  if (!minuteur.pom) return "en cours";
+  const cible = minuteur.phase === "travail" ? POM.travail
+    : (minuteur.cycle % POM.avantLongue === 0 ? POM.longue : POM.pause);
+  const dans = Math.max(0, sec - (minuteur.ancre || 0));
+  return `${minuteur.phase === "travail" ? "travail" : "pause"} · ${cadran(Math.max(0, cible - dans))} restantes`;
+}
+
+/** Le pomodoro ne coupe rien tout seul : il annonce, on décide. */
+function verifierPomodoro() {
+  const cible = minuteur.phase === "travail" ? POM.travail
+    : (minuteur.cycle % POM.avantLongue === 0 ? POM.longue : POM.pause);
+  const depuisPhase = ecoule() - (minuteur.ancre || 0);
+  if (depuisPhase < cible || minuteur.sonne === minuteur.cycle + ":" + minuteur.phase) return;
+  minuteur.sonne = minuteur.cycle + ":" + minuteur.phase;
+  poserMinuteur();
+  const box = $("pomAlerte");
+  if (box) {
+    box.hidden = false;
+    box.textContent = minuteur.phase === "travail"
+      ? "25 minutes. Une pause de 5 minutes tiendrait la distance."
+      : "Fin de la pause. On repart ?";
+  }
+}
+
+function phaseSuivante() {
+  if (!minuteur) return;
+  minuteur.ancre = ecoule();
+  if (minuteur.phase === "travail") { minuteur.phase = "repos"; minuteur.cycle++; }
+  else minuteur.phase = "travail";
+  minuteur.sonne = null;
+  const box = $("pomAlerte"); if (box) box.hidden = true;
+  poserMinuteur(); renderMinuteur();
+}
+
+function renderMinuteur() {
+  const box = $("minuteurBox");
+  if (!box) return;
+  const id = argCourant || (minuteur && minuteur.etape);
+  const s2 = byId[id];
+  if (!s2) {
+    box.innerHTML = `<div class="vide">Cette étape n'existe plus.
+      <button class="btn" data-aller="jour">Revenir</button></div>`;
+    return;
+  }
+  const actif = minuteur && minuteur.etape === id;
+  const sec = actif ? ecoule() : 0;
+  const fait = faitDe(s2.id), reste = resteDe(s2);
+  const mes = mesureDe(s2.id);
+  // Ce que ce temps vaut en avance, si le rythme observé se confirme.
+  const equivalent = mes ? sec / 3600 / mes.facteur : sec / 3600;
+  const pom = actif && minuteur.pom;
+
+  box.innerHTML = `
+    <div class="chro" style="--c:${esc(s2.g.c)}">
+      <div class="chrotete">
+        <div class="matiere">${esc(s2.g.name)}</div>
+        <h2>${esc(s2.n)}</h2>
+        <div class="ssq">${esc(s2.row.n)}</div>
+      </div>
+
+      <div class="cadran${actif && !minuteur.pause ? " tourne" : ""}${
+        pom && minuteur.phase === "repos" ? " repos" : ""}">
+        <div class="temps" id="chronoTemps">${cadran(sec)}</div>
+        <div class="sous" id="chronoSous">${actif ? sousTitreMinuteur(sec) : "prêt"}</div>
+      </div>
+
+      <div class="pomAlerte" id="pomAlerte" hidden></div>
+
+      <div class="chroboutons">
+        ${!actif
+          ? `<button class="btn pri gros" data-min="demarrer">Démarrer</button>`
+          : `<button class="btn gros" data-min="pause">${minuteur.pause ? "Reprendre" : "Pause"}</button>
+             <button class="btn pri gros" data-min="arreter">Terminer</button>`}
+        ${pom && actif ? `<button class="btn" data-min="phase">Passer à la ${
+          minuteur.phase === "travail" ? "pause" : "suite"}</button>` : ""}
+      </div>
+
+      <label class="bascule chropom"><input type="checkbox" id="pomOn"
+          ${pom ? "checked" : ""}${actif && !minuteur.pom ? "" : ""}>
+        <span class="piste"></span>
+        <span class="etiq">Pomodoro — 25 min de travail, 5 de pause</span></label>
+
+      <div class="chrofaits">
+        <div class="cf"><div class="k">Cette étape</div>
+          <div class="v">${unH(fait)}<span class="u"> / ${unH(s2.h)}</span></div>
+          <div class="d">${reste > 0.01 ? `${unH(reste)} à poser` : "terminée"}</div></div>
+        <div class="cf"><div class="k">Ton facteur</div>
+          <div class="v">${mes ? "×" + mes.facteur.toFixed(2).replace(".", ",") : "—"}</div>
+          <div class="d">${mes
+            ? `${mes.propre ? "sur cette étape" : "sur " + esc(s2.g.name.split("—")[0].trim())},
+               ${plural(mes.seances, "séance")}. ${mes.facteur > 1.05
+                 ? "Elle te coûte plus que l'indicatif."
+                 : mes.facteur < 0.95 ? "Elle te coûte moins que l'indicatif."
+                 : "Tu es sur le rythme du référentiel."}`
+            : "Termine une séance pour que l'application apprenne ton rythme."}</div></div>
+        ${actif ? `<div class="cf"><div class="k">Ça vaut</div>
+          <div class="v" id="chronoVaut">${unH(Math.max(0, equivalent))}</div>
+          <div class="d">d'avance sur le programme, à ton rythme observé.</div></div>` : ""}
+      </div>
+    </div>`;
+
+  const pb = $("pomOn");
+  if (pb) pb.onchange = () => {
+    if (minuteur && minuteur.etape === id) {
+      minuteur.pom = pb.checked; minuteur.ancre = ecoule();
+      minuteur.phase = "travail"; minuteur.sonne = null; poserMinuteur();
+    }
+    prefPom = pb.checked;
+    try { localStorage.setItem("ciel.pomodoro", prefPom ? "1" : ""); } catch {}
+    renderMinuteur();
+  };
+}
+
+let prefPom = false;
+try { prefPom = Boolean(localStorage.getItem("ciel.pomodoro")); } catch {}
+
+/** Terminer : on demande ce qui a vraiment avancé, pas ce qui s'est écoulé. */
+function finirSeance() {
+  if (!minuteur) return;
+  const s2 = byId[minuteur.etape], sec = ecoule();
+  const mes = mesureDe(s2.id);
+  // Proposition : le temps passé, corrigé du facteur observé, borné au reste.
+  const brut = mes ? sec / 3600 / mes.facteur : sec / 3600;
+  const propose = Math.min(resteDe(s2), Math.round(brut * 4) / 4);
+  dialogue({
+    titre: `${unDuree(sec)} sur ${s2.n}`,
+    ton: "info",
+    corps: `<p class="aide">Combien d'heures du programme cela a-t-il fait avancer ?
+        Le temps passé et l'avance ne sont pas la même chose — c'est justement l'écart
+        entre les deux que l'application apprend.</p>
+      <label class="ch"><span>Heures validées</span>
+        <input type="number" id="poseH" min="0" max="${s2.h}" step="0.25" value="${propose}"></label>
+      <p class="aide">Reste ${unH(resteDe(s2))} sur cette étape.</p>`,
+    actions: [
+      { texte: "Valider", pri: true, faire: () => {
+          const v = parseFloat(($("poseH") || {}).value);
+          arreterMinuteur({ pose: isNaN(v) ? 0 : Math.max(0, v) });
+          proposerSuite(s2);
+        } },
+      { texte: "J'ai fini l'étape", faire: () => {
+          arreterMinuteur({ fini: true }); aller("jour");
+        } },
+      { texte: "Rien validé", faire: () => { arreterMinuteur({ pose: 0 }); aller("jour"); } },
+    ],
+  });
+  setTimeout(() => { const i = $("poseH"); if (i) { i.focus(); i.select(); } }, 60);
+}
+
+/** La question que le minuteur permet enfin de poser : on continue, ou on décale ? */
+function proposerSuite(s2) {
+  const reste = resteDe(s2);
+  if (reste <= 0.01) { aller("jour"); return; }
+  const mes = mesureDe(s2.id);
+  const attendu = mes ? reste * mes.facteur : reste;
+  dialogue({
+    titre: "On continue, ou on décale ?",
+    ton: "info",
+    corps: `<p class="aide">Il reste <b>${unH(reste)}</b> sur cette étape —
+      environ <b>${unDuree(attendu * 3600)}</b> à ton rythme.
+      ${mes && mes.facteur > 1.1
+        ? `Elle te coûte <b>${Math.round((mes.facteur - 1) * 100)} %</b> de plus que l'indicatif :
+           le planning en tiendra compte pour la suite.`
+        : ""}</p>`,
+    actions: [
+      { texte: "Repartir dessus", pri: true, faire: () => demarrerMinuteur(s2.id, { pom: prefPom }) },
+      { texte: "Passer à autre chose", faire: () => aller("jour") },
+    ],
+  });
+}
+
+/* ═════════ FACTEUR DE RÉALITÉ ═════════
+   Temps réellement passé divisé par temps indicatif, sur les séances qui ont
+   validé des heures. Au-dessus de 1, une étape coûte plus cher que ce que le
+   CNED annonce ; au-dessous, moins. C'est le seul chiffre qui dise si le plan
+   parle de toi ou d'un élève moyen. */
+
+/** Le facteur d'une étape, ou de sa matière si l'étape n'a pas d'historique. */
+function mesureDe(etapeId) {
+  const s2 = byId[etapeId];
+  if (!s2) return null;
+  const pertinentes = seances.filter((x) => x.h > 0.01 && byId[x.e]);
+  const propre = pertinentes.filter((x) => x.e === etapeId);
+  const meme = pertinentes.filter((x) => byId[x.e].g === s2.g);
+  const lot = propre.length ? propre : (meme.length >= 3 ? meme : null);
+  if (!lot) return null;
+  const sec = lot.reduce((a, x) => a + x.s, 0);
+  const heures = lot.reduce((a, x) => a + x.h, 0);
+  if (heures <= 0) return null;
+  return { facteur: sec / 3600 / heures, seances: lot.length,
+           propre: propre.length > 0, matiere: s2.g };
+}
+
+/**
+ * Le panneau du rythme réel. Une matière par ligne : son facteur, et la courbe
+ * de ses séances dans le temps. Un facteur qui descend, c'est qu'on apprend —
+ * et c'est le seul endroit de l'application où ça se voit.
+ */
+function renderRendement() {
+  const box = $("rendement");
+  if (!box) return;
+  const par = facteursParMatiere();
+  const total = seances.length;
+
+  if (!par.length) {
+    box.innerHTML = `<div class="vide">Aucune séance mesurée pour l'instant.
+      ${total ? `${plural(total, "séance")} enregistrée${total > 1 ? "s" : ""}, mais aucune
+        n'a validé d'heures : c'est le rapport entre les deux qui fait la mesure.`
+      : `Touche l'icône de minuteur sur une tâche de la journée : l'application saura
+         ce qu'une étape te coûte vraiment, au lieu de croire la moyenne du CNED.`}</div>`;
+    return;
+  }
+
+  const global = par.reduce((a, d) => a + d.sec, 0) / 3600 /
+                 par.reduce((a, d) => a + d.h, 0);
+  const ligne = (d) => {
+    const f = d.facteur;
+    const classe = f > 1.15 ? "lent" : f < 0.9 ? "vite" : "juste";
+    // La barre se lit autour de 1 : à gauche plus rapide que l'indicatif, à droite plus lent.
+    const pos = Math.max(4, Math.min(96, 50 + (Math.log(f) / Math.log(2)) * 50));
+    return `<div class="rend ${classe}" style="--c:${esc(d.g.c)}">
+      <div class="rtete"><span class="rnom">${esc(short(d.g))}</span>
+        <span class="rfac">×${f.toFixed(2).replace(".", ",")}</span></div>
+      <div class="rbarre"><i style="left:${pos}%"></i><u></u></div>
+      <div class="rdetail">${plural(d.n, "séance")} ·
+        ${unDuree(d.sec)} passées pour ${unH(d.h)} validées${
+        d.points.length >= 3 ? " · " + tendanceTexte(d.points) : ""}</div>
+      ${d.points.length >= 2 ? courbeFacteur(d.points) : ""}
+    </div>`;
+  };
+
+  box.innerHTML = `
+    <div class="rglobal">Toutes matières confondues, une heure de programme te demande
+      <b>${unDuree(global * 3600)}</b>. ${global > 1.1
+        ? `Le référentiel est optimiste pour toi — ce n'est ni bon ni mauvais signe,
+           c'est une information que le planning peut enfin utiliser.`
+        : global < 0.9
+        ? `Tu vas plus vite que le référentiel.`
+        : `Tu es sur le rythme du référentiel.`}</div>
+    <div class="rends">${par.map(ligne).join("")}</div>`;
+}
+
+/* ═════════ PRÉVISION PAR MATIÈRE ═════════
+   Le diagramme dit où l'on en est. Ce tableau dit où l'on va : pour chaque
+   matière, ce qui reste, ce que ça coûtera vraiment, et si ça tient avant
+   l'échéance de la matière — pas seulement avant l'examen. */
+
+const echeanceDe = (etapes) => Math.max(...etapes.map((s2) => s2.t1));
+
+/** Au-delà, une date projetée cesse d'être une prévision : c'est un chiffre
+ *  qui affole sans rien dire. On nomme l'impasse et on donne l'effort à fournir. */
+const HORIZON_PREV = 18 * 30 * DAY;
+
+function previsions() {
+  const ry = rythmeTravail();
+  const parJour = ry && ry.hParJour > 0 ? ry.hParJour : 0;
+  const total = GROUPES.reduce((a, g) => a + g.rows.reduce(
+    (b, r) => b + r.steps.reduce((c, s2) => c + resteReel(s2), 0), 0), 0);
+
+  return GROUPES.map((g) => {
+    const etapes = g.rows.flatMap((r) => r.steps);
+    const resteInd = etapes.reduce((a, s2) => a + resteDe(s2), 0);
+    const resteVrai = etapes.reduce((a, s2) => a + resteReel(s2), 0);
+    const fait = etapes.reduce((a, s2) => a + faitDe(s2.id), 0);
+    const tardives = etapes.filter(isLate);
+    const mes = etapes.length ? mesureDe(etapes[0].id) : null;
+    // Part du temps qui revient à cette matière, au prorata de ce qu'il lui reste.
+    const part = total > 0 ? resteVrai / total : 0;
+    const jours = parJour > 0 && part > 0 ? resteVrai / (parJour * part) : null;
+    const fin = jours != null ? NOW + jours * DAY : null;
+    // Le rythme qu'il faudrait tenir sur cette matière pour tenir son échéance.
+    const reste_j = Math.max(1, (echeanceDe(etapes) - NOW) / DAY);
+    const requis = resteVrai > 0.01 ? (resteVrai / reste_j) * 7 : 0;
+    // L'échéance de la matière, pas celle de l'examen : une matière finie en
+    // juin quand son dernier devoir tombe en mars n'est pas « dans les temps ».
+    const echeance = echeanceDe(etapes);
+    return { g, resteInd, resteVrai, fait, h: g.h, tardives: tardives.length,
+             facteur: mes ? mes.facteur : null, fin, echeance, requis,
+             actuel: parJour * part * 7,
+             marge: fin != null ? Math.round((echeance - fin) / DAY) : null };
+  }).filter((p) => p.h > 0);
+}
+
+function renderPrevision() {
+  const box = $("prevision");
+  if (!box) return;
+  const l = previsions();
+  const ry = rythmeTravail();
+
+  if (!ry || ry.hParJour <= 0) {
+    box.innerHTML = `<div class="vide">Valide quelques heures : la prévision part de
+      ton rythme réel, pas d'une moyenne.</div>`;
+    return;
+  }
+
+  const etat = (p) => {
+    if (p.resteVrai <= 0.01) return { c: "fini", t: "Terminée" };
+    if (p.marge == null) return { c: "", t: "—" };
+    if (p.fin - NOW > HORIZON_PREV) return { c: "late", t: "Hors d'atteinte" };
+    if (p.marge < 0) return { c: "late", t: `${-p.marge} j de trop` };
+    if (p.marge < 14) return { c: "serre", t: `${p.marge} j de marge` };
+    return { c: "ok", t: `${p.marge} j de marge` };
+  };
+  const quandFin = (p) => p.resteVrai <= 0.01 ? "—"
+    : p.fin == null ? "—"
+    : p.fin - NOW > HORIZON_PREV ? "au-delà" : fmtDY(p.fin);
+
+  box.innerHTML = `
+    <p class="aide">À ton rythme des quatre dernières semaines, et en répartissant
+      ton temps entre les matières au prorata de ce qui leur reste.</p>
+    <div class="scroll"><table class="prev">
+      <thead><tr>
+        <th>Matière</th><th class="num">Reste</th><th class="num">À ton rythme</th>
+        <th class="num">Facteur</th><th>Fin prévue</th><th>Échéance</th>
+        <th class="num">À tenir</th><th>Verdict</th>
+      </tr></thead>
+      <tbody>${l.map((p) => {
+        const e = etat(p);
+        return `<tr class="${e.c}${p.tardives ? " a-retard" : ""}">
+          <td><span class="pastille" style="background:${esc(p.g.c)}"></span>${esc(short(p.g))}
+            ${p.tardives ? `<span class="mini-rt">${p.tardives} en retard</span>` : ""}</td>
+          <td class="num">${p.resteInd > 0.01 ? unH(p.resteInd) : "—"}</td>
+          <td class="num">${p.resteVrai > 0.01 ? unH(p.resteVrai) : "—"}</td>
+          <td class="num">${p.facteur ? "×" + p.facteur.toFixed(2).replace(".", ",") : "—"}</td>
+          <td>${quandFin(p)}</td>
+          <td>${fmtDY(p.echeance)}</td>
+          <td class="num">${p.resteVrai > 0.01
+            ? `${unH(p.requis)}<span class="par">/sem</span>` : "—"}</td>
+          <td class="verdict">${e.t}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>
+    <p class="pjpied">« À ton rythme » applique le facteur mesuré : une matière qui te
+      coûte 1,4× occupe 1,4× plus de temps que ne le dit le référentiel. Sans séance
+      mesurée, la colonne reprend l'indicatif — la prévision vaut alors ce que vaut
+      la moyenne du CNED. <b>À tenir</b> est le rythme hebdomadaire qu'il faudrait sur
+      cette matière pour tenir son échéance : c'est le seul chiffre du tableau sur
+      lequel tu peux agir aujourd'hui.</p>`;
+}
+
+/** Pente sur les séances, en pourcentage par mois. Trois points au minimum. */
+function tendanceTexte(points) {
+  const MOIS = 30 * DAY;
+  const n = points.length;
+  const xs = points.map((p) => (p.t - points[0].t) / MOIS);
+  const ys = points.map((p) => Math.log(p.f));            // le facteur est un rapport : on raisonne en log
+  const mx = xs.reduce((a, x) => a + x, 0) / n, my = ys.reduce((a, y) => a + y, 0) / n;
+  let num = 0, den = 0;
+  for (let i = 0; i < n; i++) { num += (xs[i] - mx) * (ys[i] - my); den += (xs[i] - mx) ** 2; }
+  if (den <= 0) return "pas assez d'écart dans le temps";
+  const parMois = Math.expm1(num / den) * 100;
+  if (Math.abs(parMois) < 4) return "stable";
+  return parMois < 0
+    ? `<b class="vite">${Math.round(-parMois)} % plus vite par mois</b>`
+    : `<b class="lent">${Math.round(parMois)} % plus lent par mois</b>`;
+}
+
+/** Une courbe minuscule : chaque séance, dans le temps, autour de la ligne du 1. */
+function courbeFacteur(points) {
+  const L = 300, H = 44, m = 4;
+  const t0 = points[0].t, t1 = points[points.length - 1].t;
+  const etendue = Math.max(1, t1 - t0);
+  // Échelle logarithmique bornée à ×4 et ÷4 : au-delà, c'est une séance aberrante,
+  // pas une tendance, et elle écraserait tout le reste.
+  const Y = (f) => {
+    const v = Math.max(-2, Math.min(2, Math.log(f) / Math.log(2)));
+    return m + ((2 - v) / 4) * (H - 2 * m);
+  };
+  const X = (t) => m + ((t - t0) / etendue) * (L - 2 * m);
+  const d = points.map((p, i) => `${i ? "L" : "M"}${X(p.t).toFixed(1)} ${Y(p.f).toFixed(1)}`).join(" ");
+  return `<svg class="rcourbe" viewBox="0 0 ${L} ${H}" role="img"
+      aria-label="Facteur de chaque séance dans le temps">
+    <line class="un" x1="${m}" x2="${L - m}" y1="${Y(1)}" y2="${Y(1)}"/>
+    <path class="tr" d="${d}"/>
+    ${points.map((p) => `<circle class="pt" cx="${X(p.t).toFixed(1)}" cy="${Y(p.f).toFixed(1)}" r="2.5"/>`).join("")}
+  </svg>`;
+}
+
+/** Le facteur par matière, et son évolution semaine après semaine. */
+function facteursParMatiere() {
+  const par = new Map();
+  for (const x of seances) {
+    const s2 = byId[x.e];
+    if (!s2 || x.h <= 0.01) continue;
+    const g = s2.g;
+    const d = par.get(g.id) || { g, sec: 0, h: 0, n: 0, points: [] };
+    d.sec += x.s; d.h += x.h; d.n++;
+    d.points.push({ t: Date.parse(x.d) || T0, f: x.s / 3600 / x.h });
+    par.set(g.id, d);
+  }
+  return [...par.values()]
+    .map((d) => ({ ...d, facteur: d.sec / 3600 / d.h,
+                   points: d.points.sort((a, b) => a.t - b.t) }))
+    .sort((a, b) => b.facteur - a.facteur);
+}
+
 /* ═════════ PROJECTION ═════════
    Deux questions, et on se garde de les mélanger. « À ce rythme, est-ce que je
    finis avant l'examen ? » se lit dans les heures validées. « Où va ma
@@ -462,7 +1015,8 @@ function rythmeTravail() {
 function projection() {
   const st = status();
   const ry = rythmeTravail();
-  const reste = Math.max(0, TOTAL_H - st.act);
+  // Ce qui reste, en heures réelles : c'est ce temps-là qu'il faudra trouver.
+  const reste = ALL.reduce((a, s2) => a + resteReel(s2), 0);
   const jusquExam = Math.max(0, (+EXAM - NOW) / DAY);
   const p = { st, ry, reste, jusquExam, exam: +EXAM };
   p.hSemaineRequis = reste > 0 && jusquExam > 0 ? (reste / jusquExam) * 7 : 0;
@@ -826,7 +1380,8 @@ let painting=false;
 function renderAll(){
   painting=true;
   replanifier();
-  renderToday();renderCourbe();renderProjection();paintGantt();renderGrades();renderJournal();
+  renderToday();renderCourbe();renderProjection();renderRendement();renderPrevision();
+  paintGantt();renderGrades();renderJournal();
   // Reconstruire les champs de réglage sous les doigts de quelqu'un qui écrit
   // efface ce qu'il tape : on ne les redessine que s'ils sont à l'écran.
   if(vueCourante==="moi"){renderCapacites();renderProfil();renderProgramme();renderCompte();renderJoignable();}
@@ -880,8 +1435,11 @@ function heuresFaitesLe(cle) {
  */
 function replanifier() {
   const cle = isoJour(new Date(NOW));
+  // Le planificateur raisonnait en heures du référentiel. Il raisonne maintenant
+  // en heures réelles : une étape qui coûte 1,4× prend 1,4× de place. Sans ça,
+  // la projection annonçait une date que le rythme mesuré contredisait déjà.
   const base = { etapes: ALL, done, evenements: events, capacites, reports,
-                 maintenant: NOW, fin: FIN_ANNEE, reste: resteDe };
+                 maintenant: NOW, fin: FIN_ANNEE, reste: resteReel };
   if (!partJour || partJour.date !== cle) {
     const brut = planifier(base);
     partJour = { date: cle, h: brut.jours.get(cle)?.travailPose ?? 0 };
@@ -1007,17 +1565,27 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
       // Un jour à venir n'a pas de case : on n'a pas encore fait le travail de demain,
       // et une case qui se décoche toute seule au redessin ne veut rien dire.
       const futur = cle > isoJour(new Date(NOW));
-      const bal = futur ? "div" : "label";
-      return `<${bal} class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}${coche ? " coche" : ""}${futur ? " avenir" : ""}" style="--c:${esc(e.g.c)}">
+      // La ligne porte deux gestes qu'il ne faut pas confondre : cocher ce qui est
+      // fait, et ouvrir le minuteur. Un <label> englobant volait le second.
+      const mesure = mesureDe(e.id);
+      return `<div class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}${coche ? " coche" : ""}${futur ? " avenir" : ""}" style="--c:${esc(e.g.c)}">
         <span class="hh">${plage}</span>
-        <span class="quoi">${futur ? "" : `<input type="checkbox" class="cb" data-cb="${esc(e.id)}"
-            data-bh="${bh}" data-jour="${esc(cle)}"${coche ? " checked" : ""}${canEdit ? "" : " disabled"}>`}
+        ${futur ? "" : `<label class="zcoche" title="J'ai fait cette tranche">
+          <input type="checkbox" class="cb" data-cb="${esc(e.id)}"
+            data-bh="${bh}" data-jour="${esc(cle)}"${coche ? " checked" : ""}${canEdit ? "" : " disabled"}></label>`}
+        <span class="quoi">
           <b>${esc(e.n)}</b> <em>${esc(e.row.n)}</em>
           ${compact ? "" : `<span class="part">${unH(bh)} sur ${unH(e.h)}${part < 100 ? ` · ${part} %` : ""}${
-            fait > 0.01 && fait < e.h - 0.01 ? ` · déjà ${unH(fait)}` : ""}</span>`}
+            fait > 0.01 && fait < e.h - 0.01 ? ` · déjà ${unH(fait)}` : ""}${
+            mesure ? ` · <b class="fr">×${mesure.facteur.toFixed(2).replace(".", ",")}</b> pour toi` : ""}</span>`}
           ${x.bloc.tard ? `<span class="lt">hors horaires</span>` : x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
           ${e.row.url ? `<a href="${esc(e.row.url)}" target="_blank" rel="noopener">cours ↗</a>` : ""}
-        </span></${bal}>`;
+        </span>
+        ${futur || !canEdit ? "" : `<button class="chrono" data-chrono="${esc(e.id)}"
+          title="Lancer le minuteur sur cette étape" aria-label="Lancer le minuteur">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/>
+            <path d="M12 9v4l2.5 2M9 2h6"/></svg></button>`}
+      </div>`;
     }
     const e = x.ev;
     // On ne montre le titre d'un événement que s'il est explicitement partagé.
@@ -3819,6 +4387,7 @@ const VUES = {
   conv:     { panneau: "conv",     titre: "Conversation", retour: "messages" },
   personne: { panneau: "personne", titre: "Profil",      retour: "contacts" },
   nouveautes: { panneau: "nouveautes", titre: "Nouveautés", retour: "jour" },
+  minuteur: { panneau: "minuteur", titre: "En cours", retour: "jour" },
 };
 const TITRES = { cal: "Calendrier", dispo: "Quand je suis libre", todo: "Étapes" };
 
@@ -3828,6 +4397,7 @@ function versAdresse(v, arg) {
   if (v === "conv") return `#/conv/${arg}`;
   if (v === "personne") return `#/p/${arg}`;
   if (v === "planning") return `#/planning/${arg || sousPlanning}`;
+  if (v === "minuteur" && arg) return `#/minuteur/${encodeURIComponent(arg)}`;
   return `#/${v}`;
 }
 
@@ -3845,6 +4415,10 @@ function lireAdresse() {
   if (v === "conv" && m[1]) return ["conv", m[1]];
   if (v === "p" && m[1]) return ["personne", decodeURIComponent(m[1])];
   if (v === "planning") return ["planning", m[1] || sousPlanning];
+  // Sans étape dans l'adresse, on reprend celle du minuteur en cours : revenir
+  // sur l'application par un raccourci ne doit pas perdre la séance.
+  if (v === "minuteur") return ["minuteur", m[1] ? decodeURIComponent(m[1])
+                                                 : (minuteur && minuteur.etape) || null];
   return [VUES[v] ? v : "jour", null];
 }
 
@@ -3922,6 +4496,7 @@ function peupler(v, arg) {
   if (v === "conv") ouvrirConversation(arg);
   if (v === "personne") ouvrirFiche(arg);
   if (v === "nouveautes") ouvrirNouveautes();
+  if (v === "minuteur") { renderMinuteur(); if (minuteur) battre(); }
 }
 
 addEventListener("hashchange", appliquerRoute);
@@ -3944,6 +4519,22 @@ document.addEventListener("click", (e) => {
   if (b.dataset.seg === "classement") chargerClassement();
   if (b.dataset.seg === "communs") chargerCommuns();
   if (b.dataset.seg === "decouvrir") renderAnnuaire();
+});
+
+document.addEventListener("click", (e) => {
+  const c = e.target.closest("[data-chrono]");
+  if (c) { demarrerMinuteur(c.dataset.chrono, { pom: prefPom }); return; }
+  const m = e.target.closest("[data-min]");
+  if (m) {
+    const q = m.dataset.min;
+    if (q === "demarrer") demarrerMinuteur(argCourant, { pom: prefPom });
+    else if (q === "pause") basculerPause();
+    else if (q === "arreter") finirSeance();
+    else if (q === "phase") phaseSuivante();
+    return;
+  }
+  const a = e.target.closest("[data-aller]");
+  if (a) aller(a.dataset.aller);
 });
 
 document.addEventListener("change", (e) => {
