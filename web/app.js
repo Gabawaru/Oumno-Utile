@@ -449,6 +449,247 @@ function buildAcc(){
    Deux séries : le plan, en gris, sert de repère ; les heures réellement faites
    portent la couleur du statut — c'est elle qu'on vient lire. La ligne du fait
    s'arrête à aujourd'hui : on ne dessine pas un avenir qui n'existe pas. */
+/* ═════════ AGENDA IMPORTÉ ═════════
+   Amener son emploi du temps depuis Pronote, Google Agenda ou un EDT scolaire.
+
+   Par l'adresse ICS que ces services publient, jamais par un identifiant de
+   connexion : un cookie de session Pronote donne accès aux notes, aux absences
+   et à la messagerie de quelqu'un, et souvent d'un mineur. L'adresse ICS ne
+   donne que l'emploi du temps, en lecture seule. Elle reste malgré tout un
+   secret — qui l'a, voit l'emploi du temps — donc elle n'est pas conservée :
+   on la recolle pour réimporter. */
+
+let apercu = null;   // { evenements, nombre, source }
+
+async function lireAgenda(adresse) {
+  const r = await fetch("/api/agenda", {
+    method: "POST",
+    headers: { "Content-Type": "application/json",
+               Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ adresse }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `Erreur ${r.status}`);
+  return d;
+}
+
+/** Ne garde que ce que le planning sait placer, et jette le reste. */
+function enEvenements(bruts) {
+  const out = [];
+  for (const e of bruts) {
+    if (!e.debut || !e.titre) continue;
+    const j = String(e.debut.iso).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(j)) continue;
+    if (e.debut.jour) {
+      out.push({ id: "ics-" + (e.uid || out.length), jour: j, debut: "08:00", fin: "18:00",
+                 titre: e.titre, visible: false, importe: true });
+      continue;
+    }
+    const h = (x) => String(x.iso).slice(11, 16) || "08:00";
+    out.push({ id: "ics-" + (e.uid || out.length), jour: j,
+               debut: h(e.debut), fin: e.fin ? h(e.fin) : "23:59",
+               titre: e.titre + (e.lieu ? ` · ${e.lieu}` : ""),
+               visible: false, importe: true });
+  }
+  return out;
+}
+
+function renderAgenda() {
+  const box = $("agendaBox");
+  if (!box || !canEdit) return;
+  box.innerHTML = `
+    <p class="aide">Pronote, Google Agenda et la plupart des emplois du temps publient
+      une <b>adresse ICS</b> — une adresse en lecture seule qui ne donne que l'agenda.
+      Colle-la ici. Elle n'est pas conservée : recolle-la pour réimporter.</p>
+    <label class="ch"><span>Adresse ICS</span>
+      <input id="icsUrl" type="url" inputmode="url" autocomplete="off"
+        placeholder="https://…/ical/…ics"></label>
+    <div class="actes">
+      <button class="btn pri" id="icsLire">Lire l'agenda</button>
+    </div>
+    <div id="icsEtat" class="fl2"></div>
+    <div id="icsApercu"></div>`;
+
+  $("icsLire").onclick = async () => {
+    const u = ($("icsUrl").value || "").trim();
+    const etat = $("icsEtat"), ap = $("icsApercu");
+    ap.innerHTML = ""; apercu = null;
+    if (!u) { etat.textContent = "Colle d'abord une adresse."; return; }
+    etat.textContent = "Lecture…";
+    try {
+      const d = await lireAgenda(u);
+      apercu = { evenements: d.evenements, nombre: d.nombre,
+                 source: new URL(u.replace(/^webcal:/, "https:")).hostname };
+      etat.textContent = `${plural(d.nombre, "événement")} lu${d.nombre > 1 ? "s" : ""}`
+        + (d.tronque ? " (les 600 premiers)" : "") + ` · ${apercu.source}`;
+      renderApercu();
+    } catch (e) {
+      apercu = null;
+      etat.innerHTML = `<b class="late">${esc(String(e.message || e))}</b>`;
+    }
+  };
+}
+
+function renderApercu() {
+  const ap = $("icsApercu");
+  if (!ap || !apercu) return;
+  const ev = enEvenements(apercu.evenements);
+  const premiers = ev.slice(0, 8);
+  ap.innerHTML = `
+    <div class="soustitre">Aperçu</div>
+    <div class="frise">${premiers.map((e) => `<div class="ligne ev">
+      <span class="hh">${esc(e.jour)} ${esc(e.debut)}</span>
+      <span class="quoi"><b>${esc(e.titre)}</b></span></div>`).join("")}</div>
+    ${ev.length > premiers.length
+      ? `<div class="fl2">+ ${ev.length - premiers.length} autres</div>` : ""}
+    <div class="actes" style="margin-top:.7rem">
+      <button class="btn pri" id="icsGarder">Ajouter à mon planning</button>
+      <button class="btn" id="icsEnvoyer">Envoyer en demande…</button>
+    </div>
+    <p class="aide">Les événements importés sont <b>privés</b> : les autres verront
+      « Occupé », sans titre.</p>`;
+
+  $("icsGarder").onclick = () => {
+    const n = fusionnerEvenements(ev);
+    log(`a importé ${plural(n, "événement")} depuis ${apercu.source}`);
+    saveEvents(); renderAll();
+    dialogue({ titre: "Importé", ton: "info",
+      corps: `<p class="aide">${plural(n, "événement")} ajouté${n > 1 ? "s" : ""} à ton planning.
+        Le travail se replace tout seul autour.</p>` });
+    apercu = null; renderAgenda();
+  };
+  $("icsEnvoyer").onclick = () => demanderEnvoi(ev);
+}
+
+/** Réimporter ne doit pas doubler : un même identifiant d'événement remplace. */
+function fusionnerEvenements(nouveaux) {
+  const par = new Map(events.map((e) => [e.id, e]));
+  for (const e of nouveaux) par.set(e.id, e);
+  events = [...par.values()];
+  return nouveaux.length;
+}
+
+/* ═════════ DEMANDES ═════════ */
+
+/** Le mot de passe est redemandé : envoyer son emploi du temps à quelqu'un n'est
+ *  pas un geste qu'on doit pouvoir faire sur un téléphone laissé déverrouillé. */
+function demanderEnvoi(ev) {
+  dialogue({
+    titre: "Envoyer en demande",
+    ton: "info",
+    corps: `<p class="aide">La demande part vers un <b>identifiant unique</b>
+        (${plural(ev.length, "événement")}). Ton adresse ICS n'est pas transmise —
+        seulement les événements lus.</p>
+      <label class="ch"><span>Identifiant du destinataire</span>
+        <input id="dmUid" placeholder="ID12345678" autocomplete="off"
+          maxlength="10" style="text-transform:uppercase"></label>
+      <label class="ch"><span>Un mot, si tu veux</span>
+        <input id="dmMot" maxlength="200" placeholder="facultatif"></label>
+      <label class="ch"><span>Ton mot de passe</span>
+        <input id="dmMdp" type="password" autocomplete="current-password"></label>
+      <div id="dmEtat" class="fl2"></div>`,
+    actions: [
+      { texte: "Envoyer", pri: true, faire: null },
+      { texte: "Annuler" },
+    ],
+  });
+  // On reprend la main sur le bouton : le dialogue se ferme de lui-même, et on
+  // veut pouvoir refuser sans le perdre.
+  setTimeout(() => {
+    const b = document.querySelector("#modalA button");
+    if (!b) return;
+    b.onclick = async () => {
+      const uid = ($("dmUid").value || "").trim().toUpperCase();
+      const mdp = ($("dmMdp").value || "");
+      const mot = ($("dmMot").value || "").trim();
+      const etat = $("dmEtat");
+      if (!/^ID\d{8}$/.test(uid)) { etat.innerHTML = `<b class="late">Un identifiant ressemble à ID12345678.</b>`; return; }
+      if (!mdp) { etat.innerHTML = `<b class="late">Ton mot de passe est demandé pour envoyer.</b>`; return; }
+      b.disabled = true; etat.textContent = "Vérification…";
+      const { error: mauvais } = await sb.auth.verifierMotDePasse(session.user.email, mdp);
+      if (mauvais) { b.disabled = false; etat.innerHTML = `<b class="late">Mot de passe incorrect.</b>`; return; }
+      etat.textContent = "Envoi…";
+      const { error } = await sb.rpc("envoyer_demande", {
+        vers: uid, charge_j: ev, source_t: apercu ? apercu.source : null, message_t: mot || null });
+      b.disabled = false;
+      if (error) { etat.innerHTML = `<b class="late">${esc(messageDemande(error))}</b>`; return; }
+      fermerDialogue();
+      log(`a envoyé une demande à ${uid}`);
+      dialogue({ titre: "Demande envoyée", ton: "info",
+        corps: `<p class="aide">${esc(uid)} la verra dans ses demandes.</p>` });
+    };
+  }, 60);
+}
+
+const messageDemande = (e) => {
+  const m = String(e.message || e);
+  if (m.includes("destinataire_inconnu")) return "Aucun compte ne porte cet identifiant.";
+  if (m.includes("destinataire_soi")) return "C'est ton propre identifiant.";
+  if (m.includes("demande_deja_en_attente")) return "Une demande attend déjà chez cette personne.";
+  if (m.includes("demande_vide")) return "Il n'y a rien à envoyer.";
+  if (m.includes("demande_trop_grande")) return "Cet agenda est trop gros pour une demande.";
+  return "Envoi impossible : " + m;
+};
+
+let demandesPlanning = [];
+
+async function chargerDemandesPlanning() {
+  const { data } = await sb.rpc("mes_demandes");
+  demandesPlanning = Array.isArray(data) ? data : [];
+  renderDemandesPlanning();
+}
+
+function renderDemandesPlanning() {
+  const box = $("demandesBox");
+  if (!box) return;
+  const recues = demandesPlanning.filter((d) => d.sens === "recue");
+  const envoyees = demandesPlanning.filter((d) => d.sens === "envoyee");
+  if (!recues.length && !envoyees.length) {
+    box.innerHTML = `<div class="vide">Aucune demande.</div>`;
+    return;
+  }
+  const bloc = (l, titre, recue) => !l.length ? "" : `
+    <div class="tetel"><h3>${titre}</h3><span class="nb">${l.length}</span></div>
+    ${l.map((d) => `<details class="dem${d.etat !== "attente" ? " clos" : ""}">
+      <summary>
+        <span class="duid">${esc(d.qui_uid || "—")}</span>
+        <span class="dqui">${recue ? "une nouvelle demande" : "envoyée"}${
+          d.source ? ` · ${esc(d.source)}` : ""}</span>
+        <span class="dnb">${plural(d.nombre, "événement")}</span>
+        ${d.etat !== "attente" ? `<span class="detat ${esc(d.etat)}">${
+          d.etat === "accepte" ? "acceptée" : "refusée"}</span>` : ""}
+      </summary>
+      <div class="demcorps">
+        ${d.message ? `<p class="aide">« ${esc(d.message)} »</p>` : ""}
+        ${recue && d.charge && d.charge.length ? `<div class="frise">${
+          d.charge.slice(0, 8).map((e) => `<div class="ligne ev">
+            <span class="hh">${esc(e.jour || "")} ${esc(e.debut || "")}</span>
+            <span class="quoi"><b>${esc(e.titre || "")}</b></span></div>`).join("")}</div>
+          ${d.charge.length > 8 ? `<div class="fl2">+ ${d.charge.length - 8} autres</div>` : ""}` : ""}
+        ${recue && d.etat === "attente" ? `<div class="actes">
+          <button class="btn pri" data-dem="oui:${esc(d.id)}">Accepter et ajouter</button>
+          <button class="btn" data-dem="non:${esc(d.id)}">Refuser</button></div>` : ""}
+      </div>
+    </details>`).join("")}`;
+  box.innerHTML = bloc(recues, "Reçues", true) + bloc(envoyees, "Envoyées", false);
+}
+
+async function repondreDemande(id, accepte) {
+  const d = demandesPlanning.find((x) => x.id === id);
+  const { error } = await sb.rpc("repondre_demande", { quelle: id, accepte });
+  if (error) {
+    dialogue({ titre: "Réponse impossible", corps: `<p class="aide">${esc(String(error.message || error))}</p>` });
+    return;
+  }
+  if (accepte && d && Array.isArray(d.charge) && d.charge.length) {
+    const n = fusionnerEvenements(d.charge.filter((e) => e && e.jour && e.titre));
+    log(`a accepté une demande de ${d.qui_uid} (${plural(n, "événement")})`);
+    saveEvents();
+  } else if (d) log(`a refusé une demande de ${d.qui_uid}`);
+  await chargerDemandesPlanning();
+  renderAll();
+}
+
 /* ═════════ SÉANCES ET MINUTEUR ═════════
    L'application savait ce qu'on valide, jamais ce que ça coûte. Une étape de six
    heures finie en trois et une finie en dix se ressemblaient exactement dans les
@@ -4500,7 +4741,8 @@ function peupler(v, arg) {
     if (sousPlanning === "cal") renderCal();
     if (sousPlanning === "dispo") renderDispo();
   }
-  if (v === "moi") { renderCapacites(); renderProfil(); renderProgramme(); renderCompte(); renderJoignable(); }
+  if (v === "moi") { renderCapacites(); renderProfil(); renderProgramme(); renderCompte(); renderJoignable();
+                     renderAgenda(); chargerDemandesPlanning(); }
   if (v === "contacts") { renderSocial(); chargerCommuns(); }
   if (v === "fil") chargerFil();
   if (v === "messages") chargerFils();
@@ -4542,6 +4784,12 @@ document.addEventListener("click", (e) => {
     else if (q === "pause") basculerPause();
     else if (q === "arreter") finirSeance();
     else if (q === "phase") phaseSuivante();
+    return;
+  }
+  const dm = e.target.closest("[data-dem]");
+  if (dm) {
+    const [q, id] = dm.dataset.dem.split(":");
+    repondreDemande(id, q === "oui");
     return;
   }
   const a = e.target.closest("[data-aller]");

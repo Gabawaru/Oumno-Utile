@@ -91,6 +91,12 @@ export function creerClient(url, cle) {
       retenir(data); prevenir("SIGNED_IN");
       return { data: { session: data }, error: null };
     },
+    /** Vérifie un mot de passe sans toucher à la session : re-demander son mot
+     *  de passe avant un geste sensible ne doit pas déconnecter-reconnecter. */
+    async verifierMotDePasse(email, password) {
+      const { error } = await appelAuth("token?grant_type=password", { email, password });
+      return { error };
+    },
     async signOut() {
       if (session) await appelAuth("logout", {}).catch(() => {});
       retenir(null); prevenir("SIGNED_OUT");

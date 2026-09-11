@@ -334,6 +334,59 @@ Une dernière contrainte, imposée par les navigateurs et qu'on assume :
 `userVisibleOnly` oblige à afficher quelque chose à chaque poussée. Une poussée
 silencieuse servirait à pister ; le navigateur la refuse, et c'est bien.
 
+### Aller chercher une adresse que quelqu'un d'autre a écrite
+
+Importer un agenda demande au serveur de joindre une adresse fournie par
+l'utilisateur. C'est le manuel de la **falsification de requête côté serveur** :
+sans garde, on offre à n'importe qui un client HTTP à l'intérieur du réseau de
+l'hébergeur — y compris le service de métadonnées du nuage, sur `169.254.169.254`,
+qui rend des jetons d'accès.
+
+Quatre verrous, dans `api/_ics.js` :
+
+1. **Le protocole** — `http` et `https` seulement ; `file:`, `gopher:` et le reste
+   sont refusés. `webcal:` est traduit en `https`. Une adresse portant des
+   identifiants est rejetée.
+2. **L'adresse résolue, pas seulement écrite** — un nom de domaine public peut
+   pointer vers `127.0.0.1`. On résout, et on juge chaque adresse obtenue.
+3. **Toutes les formes privées** — bouclage, `10/8`, `172.16/12`, `192.168/16`,
+   lien-local, espace partagé des opérateurs, multidiffusion, et leurs équivalents
+   IPv6. Y compris l'**IPv4 déguisée en IPv6** : `::ffff:127.0.0.1` s'écrit aussi
+   `::ffff:7f00:1`, forme que Node produit en normalisant, et c'est exactement par
+   là que le premier jet passait. Vingt adresses interdites sont éprouvées, et une
+   IPv6 publique doit passer — le garde n'est pas un refus général.
+4. **Les redirections suivies à la main** — laisser `fetch` les suivre
+   contournerait tout ce qui précède, puisqu'on ne verrait jamais l'arrivée.
+   Trois sauts au plus, chacun re-contrôlé.
+
+S'y ajoutent une borne de 2 Mo appliquée au flux (l'en-tête `content-length` peut
+mentir), un délai de 12 s, et une session vérifiée auprès de Supabase avant tout :
+on ne prête pas un client HTTP à des inconnus.
+
+**Ce qui est rapatrié.** Un titre, un début, une fin, un lieu. Ni participants, ni
+organisateur, ni description : importer un agenda ne doit pas importer un carnet
+d'adresses.
+
+**Ce qui n'est pas demandé.** Aucun identifiant de connexion, jamais. Un cookie de
+session Pronote donne accès aux notes, aux absences, à la messagerie et à
+l'identité de quelqu'un — souvent d'un mineur. Le collecter, même avec l'accord de
+la personne, ferait de l'éditeur le gardien d'un accès qu'il ne peut pas protéger,
+sans base légale et contre les conditions du service. L'adresse ICS ne donne que
+l'agenda ; elle reste un secret, et n'est donc pas conservée.
+
+### Une demande, et le mot de passe qu'elle exige
+
+Une demande s'adresse par identifiant unique, et la fonction ne rend jamais l'uuid
+de la cible : connaître un `ID12345678` permet d'écrire à quelqu'un, pas d'apprendre
+qui est derrière. Une seule demande en attente à la fois vers la même personne —
+sans quoi l'envoi devient un moyen d'inonder une boîte. Un blocage la rend
+indiscernable d'un identifiant inexistant.
+
+Le mot de passe est redemandé avant l'envoi, et vérifié **sans remplacer la
+session** : re-prouver son identité ne doit pas déconnecter-reconnecter. Onze
+vérifications par bascule de rôle : un tiers ne voit aucune demande, ne peut pas
+répondre à la place du destinataire, et rien ne part sans compte.
+
 ### Un identifiant qu'on ne choisit pas
 
 `ID12345678`, tiré à l'inscription. Le pseudonyme et le `@slug` se changent ; cet

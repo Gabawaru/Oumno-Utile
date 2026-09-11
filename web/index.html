@@ -531,6 +531,25 @@ label.cap{flex-wrap:wrap}
 .rcourbe .tr{fill:none;stroke:var(--c);stroke-width:1.6;stroke-linejoin:round}
 .rcourbe .pt{fill:var(--c)}
 
+/* ── agenda importé et demandes ─────────────────────────── */
+.dem{border-left:2px solid var(--rule);background:var(--sunk);margin-bottom:.4rem}
+.dem[open]{border-left-color:var(--sig)}
+.dem.clos{opacity:.6}
+.dem>summary{cursor:pointer;padding:.5rem .65rem;display:flex;gap:.5rem;align-items:baseline;
+  flex-wrap:wrap;font-size:.78rem;list-style:none}
+.dem>summary::-webkit-details-marker{display:none}
+.dem>summary::before{content:"▸";color:var(--ink3);font-size:.7rem}
+.dem[open]>summary::before{content:"▾"}
+.duid{font-family:"IBM Plex Mono",monospace;font-weight:600;letter-spacing:.03em}
+.dqui{color:var(--ink2)}
+.dnb{margin-left:auto;font-size:.7rem;color:var(--ink3);
+  font-family:"IBM Plex Mono",monospace}
+.detat{font-size:.66rem;padding:.05rem .3rem;border-radius:2px}
+.detat.accepte{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.detat.refuse{background:color-mix(in srgb,var(--late) 18%,transparent);color:var(--late)}
+.demcorps{padding:0 .65rem .65rem}
+b.late{color:var(--late)}
+
 /* ── identifiant unique ─────────────────────────────────── */
 .uid{display:inline-flex;align-items:center;gap:.35rem;margin-top:.3rem;padding:.2rem .45rem;
   background:var(--sunk);border:1px solid var(--rule);border-radius:3px;cursor:pointer;
@@ -1668,6 +1687,7 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
     <div class="segs" data-segs="moi">
       <button data-seg="profil" aria-selected="true">Profil</button>
       <button data-seg="travail">Mon travail</button>
+      <button data-seg="agenda">Agenda</button>
       <button data-seg="compte">Compte</button>
     </div>
 
@@ -1684,6 +1704,12 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
       <details class="repli"><summary>Mes notes</summary>
         <div class="hnums" id="gsum"></div>
         <div class="scroll"><table class="gtab" id="gtab"></table></div></details>
+    </div>
+
+    <div data-vol="agenda" hidden>
+      <div id="agendaBox"></div>
+      <div class="soustitre">Demandes</div>
+      <div id="demandesBox"></div>
     </div>
 
     <div data-vol="compte" hidden>
