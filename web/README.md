@@ -119,6 +119,21 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
   ré-essai part tout seul avec un recul croissant, et l'événement `online` du
   navigateur reprend la main dès que la connexion revient. Quand une copie locale
   existe, elle est ouverte plutôt que l'écran d'erreur.
+- **Importer son emploi du temps** — Pronote, Google Agenda et la plupart des EDT
+  scolaires publient une **adresse ICS**, en lecture seule, faite pour ça. On la
+  colle, on voit l'aperçu, on ajoute. Les événements importés sont privés : les
+  autres voient « Occupé ». Réimporter ne double pas — un même identifiant
+  d'événement remplace le précédent.
+  **Jamais par un identifiant de connexion.** Un cookie de session Pronote donne
+  accès aux notes, aux absences et à la messagerie de quelqu'un, souvent d'un
+  mineur ; l'adresse ICS ne donne que l'agenda. Elle reste un secret — qui l'a,
+  voit l'emploi du temps — donc elle n'est pas conservée : on la recolle pour
+  réimporter.
+- **Les demandes** — on envoie son emploi du temps à quelqu'un par son identifiant
+  unique. La demande arrive repliée, annoncée par cet identifiant ; dépliée, elle
+  montre ce qu'elle contient avant qu'on accepte. **Le mot de passe est redemandé
+  avant l'envoi** : ce n'est pas un geste à faire sur un téléphone laissé
+  déverrouillé. Une seule demande en attente à la fois vers la même personne.
 - **Un identifiant unique par compte** — `ID12345678`, tiré à l'inscription, jamais
   choisi et jamais modifiable. Le pseudonyme et l'identifiant public (`@slug`) se
   changent ; celui-ci désigne quelqu'un sans ambiguïté, y compris après un
@@ -187,6 +202,8 @@ web/
 ├── api/pousser.js       toutes les 30 min : envoie les notifications en attente
 ├── api/_push.js         Web Push écrit à la main — VAPID et chiffrement aes128gcm
 ├── api/vapid.js         la clé publique, que le navigateur doit connaître
+├── api/agenda.js        va chercher un agenda ICS, pour le compte de l'appelant
+├── api/_ics.js          gardes anti-SSRF et lecture RFC 5545
 └── vercel.json          planification du cron
 ```
 
@@ -259,7 +276,7 @@ Le planning : `ciel_profiles`, `ciel_state`, `ciel_journal`, `ciel_subs`,
 
 Le réseau : `ciel_posts`, `ciel_commentaires`, `ciel_jaime`, `ciel_fils`,
 `ciel_messages`, `ciel_blocages`, `ciel_signalements`, `ciel_dispos`, `ciel_scores`,
-`ciel_veilles`, `ciel_push`.
+`ciel_veilles`, `ciel_push`, `ciel_demandes`.
 
 Deux seaux de stockage : `avatars` (public, 1 Mo) et `photos` (privé, 3 Mo, servi par
 adresse signée). L'écriture est bornée au dossier `<uuid>/` de chacun.
@@ -289,6 +306,9 @@ des fonctions `security definer` font le travail et n'exposent que le nécessair
 | `nouveautes()` | connecté | ce qui a bougé depuis la dernière visite, en six sources réunies |
 | `marquer_nouveautes_vues()` | connecté | repose la date de dernière consultation |
 | `supprimer_mon_compte()` | connecté | efface tout, en cascade, fichiers compris |
+| `envoyer_demande(text,jsonb,…)` | connecté | adresse une demande par identifiant unique, sans jamais rendre l'uuid de la cible |
+| `mes_demandes()` | connecté | les demandes reçues et envoyées, avec l'identifiant d'en face |
+| `repondre_demande(uuid,bool)` | connecté | accepte ou refuse une demande reçue |
 | `a_pousser()` | `service_role` seul | ce qui mérite de faire sonner un téléphone |
 | `marquer_pousse(uuid,timestamptz)` | `service_role` seul | avance la borne des poussées |
 | `oublier_appareil(text)` | `service_role` seul | efface un appareil que le service déclare mort |
