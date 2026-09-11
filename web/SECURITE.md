@@ -505,6 +505,26 @@ migration n'est pas facultatif.
 
 ## Journal des audits
 
+**11 septembre 2026 — une régression que j'ai posée, et qui a tenu deux jours.**
+En refactorisant `prive.ciel_visible`, j'ai révoqué `EXECUTE` dessus « par
+cohérence » avec les fonctions exposées par l'API. Erreur de raisonnement :
+celle-ci n'est pas appelée par l'API, elle est appelée **par les politiques RLS**,
+qui s'évaluent sous le rôle de celui qui interroge. Sans le droit, un visiteur sans
+compte ne pouvait plus lire un planning public — « permission denied for function
+ciel_visible ». La consultation libre était cassée depuis le 10 au soir.
+
+Ses sœurs du même schéma — `bloque`, `fil_de`, `lit_post`, `peut_ecrire` — sont
+restées au réglage par défaut, et c'est le bon : le schéma `prive` n'est pas exposé
+par PostgREST, donc personne ne peut les appeler de l'extérieur. C'est le contre-
+exemple que j'aurais dû regarder avant de révoquer. `ciel_visible_pour` reste
+réservée, elle : elle n'est appelée que depuis des fonctions `security definer`,
+qui s'exécutent sous leur propriétaire.
+
+Ce qui a permis de passer à côté : mes contrôles externes vérifiaient que les
+routes réservées **refusent**, jamais que les routes ouvertes **acceptent**. Une
+protection qui se referme trop est aussi un défaut, et elle ne déclenche aucune
+alarme. Les contrôles vérifient désormais les deux sens.
+
 **11 septembre 2026 — le minuteur, et ce qu'il mesure.** L'application savait ce
 qu'on valide, jamais ce que ça coûte : une étape de six heures finie en trois et
 une finie en dix se ressemblaient exactement. Les séances enregistrent désormais
