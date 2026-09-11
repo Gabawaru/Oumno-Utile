@@ -40,7 +40,7 @@ const T0=qStart(0).getTime(),T1=qEnd(19).getTime();
    connaît que des étapes avec un volume d'heures et une période — le référentiel
    CNED n'est qu'un modèle parmi d'autres. */
 let GROUPES=[], ALL=[], DEVS=[], TOTAL_H=0, byId={};
-let avance={}, seances=[], fiches={};
+let avance={}, seances=[], fiches={}, bloques={};
 
 function chargerProgramme(prog){
   GROUPES = versGroupes(prog);
@@ -154,6 +154,7 @@ function appliquerEtat(d){
   avance    = d.avance    || {};
   seances   = Array.isArray(d.seances) ? d.seances : [];
   fiches    = d.fiches    || {};
+  bloques   = d.bloques   || {};
   events    = d.evenements|| d.events || [];
   grades    = d.notes     || d.grades || {};
   capacites = normaliserCapacites(d.capacites);
@@ -169,8 +170,8 @@ function appliquerEtat(d){
   lireMinuteur();
   if (minuteur) battre();
 }
-const etat=()=>({done,avance,seances,fiches,evenements:events,notes:grades,capacites,reports,
-                 partJour,programme,demarrage:demarrageFait});
+const etat=()=>({done,avance,seances,fiches,bloques,evenements:events,notes:grades,capacites,
+                 reports,partJour,programme,demarrage:demarrageFait});
 
 /* ═════════ HEURES POSÉES ═════════
    `done` disait oui ou non. Cocher une tranche d'une heure sur une étape de six
@@ -201,6 +202,12 @@ function migrerAvance(){
 const EPS=0.01;
 /** Le reste d'une étape, corrigé de ce qu'elle coûte réellement à cette personne.
  *  Borné : un facteur tiré d'une seule séance courte ne doit pas tordre l'année. */
+/** Ce qu'il reste à placer dans le planning. Une étape bloquée n'y entre pas :
+ *  la reproposer chaque matin ne fait avancer personne. */
+function restePlanifiable(s2){ return estBloque(s2.id) ? 0 : resteReel(s2); }
+
+/** Ce qu'il reste à faire, bloqué compris. Le travail ne disparaît pas parce
+ *  qu'on attend quelqu'un : la montagne et le retard le comptent toujours. */
 function resteReel(s2){
   const r=resteDe(s2); if(r<=EPS) return 0;
   const m=mesureDe(s2.id); if(!m||m.seances<2) return r;
@@ -340,7 +347,9 @@ function renderToday(){
   $("journee").innerHTML = friseHTML(cle, { compact: true, depuis: mnt, max: 6 });
 
   // Retard : on ne montre le bloc que s'il y a quelque chose dedans.
-  const lates = st.late.sort((a, b) => a.t1 - b.t1);
+  // Le retard global compte tout ; la liste du jour, elle, ne réclame que ce
+  // qu'on peut réellement faire. Les bloquées ont leur propre bloc.
+  const lates = st.late.filter((x) => !estBloque(x.id)).sort((a, b) => a.t1 - b.t1);
   $("blocRetard").hidden = lates.length === 0;
   if (lates.length) {
     $("lateNote").textContent = `${lates.length} en retard`;
@@ -698,6 +707,83 @@ async function repondreDemande(id, accepte) {
   renderAll();
 }
 
+/* ═════════ BLOCAGES ═════════
+   Certaines étapes ne peuvent pas avancer sans quelqu'un : une question au
+   tuteur, un corrigé qui n'est pas encore sorti. L'application les reproposait
+   chaque matin et les comptait en retard — ce qui n'aide en rien et décourage.
+
+   Une étape bloquée sort du planning du jour. Elle ne sort pas du retard :
+   le travail reste à faire, la montagne le compte toujours. Seule l'alarme
+   quotidienne se tait, parce qu'elle réclamait l'impossible. */
+
+const estBloque = (id) => Boolean(bloques[id]);
+const heuresBloquees = () => ALL.reduce((a, s2) => a + (estBloque(s2.id) ? resteDe(s2) : 0), 0);
+
+function basculerBlocage(id, bloque, note = "") {
+  const s2 = byId[id];
+  if (!s2 || !canEdit) return;
+  if (bloque) {
+    bloques[id] = { n: String(note || "").slice(0, 500), le: new Date(NOW).toISOString() };
+    log(`s'est déclaré bloqué sur ${s2.row.n} · ${s2.n}`);
+  } else {
+    delete bloques[id];
+    log(`n'est plus bloqué sur ${s2.row.n} · ${s2.n}`);
+  }
+  saveProgress(); renderAll();
+  // renderAll ne connaît pas la fiche : sans ceci, la coche s'enregistre mais
+  // le champ de note n'apparaît jamais.
+  if (vueCourante === "fiche") renderFiche();
+}
+
+/**
+ * La note s'écrit à deux endroits : dans la fiche et dans le panneau des
+ * blocages. On tient les deux en accord sans tout redessiner — un rendu complet
+ * pendant qu'on tape volerait le curseur et effacerait la fin du mot.
+ */
+function noterBlocage(id, note) {
+  if (!bloques[id]) return;
+  const v = String(note || "").slice(0, 500);
+  if (bloques[id].n === v) return;
+  bloques[id].n = v;
+  document.querySelectorAll(`[data-note="${CSS.escape(id)}"], #ficheBloqueNote`)
+    .forEach((t) => { if (t !== document.activeElement && t.value !== v) t.value = v; });
+  saveState();
+}
+
+function renderEtapesBloquees() {
+  const box = $("bloquees");
+  if (!box) return;
+  const l = ALL.filter((s2) => estBloque(s2.id));
+  const bloc = $("blocbloc");
+  if (bloc) bloc.hidden = l.length === 0;
+  if (!l.length) { box.innerHTML = ""; return; }
+
+  const h = heuresBloquees();
+  box.innerHTML = `
+    <p class="aide">Ces étapes ne sont plus proposées dans ta journée. Elles restent
+      dans ton retard : <b>${unH(h)}</b> qui attendent quelqu'un, pas toi.</p>
+    ${l.map((s2) => {
+      const b = bloques[s2.id];
+      return `<details class="blq" style="--c:${esc(s2.g.c)}">
+        <summary>
+          <span class="bnom"><b>${esc(s2.n)}</b> <em>${esc(s2.row.n)}</em></span>
+          <span class="bh">${unH(resteDe(s2))}</span>
+          <span class="bdate">depuis le ${fmtDY(Date.parse(b.le) || NOW)}</span>
+        </summary>
+        <div class="blqcorps">
+          <label class="ch"><span>De quoi as-tu besoin ?</span>
+            <textarea data-note="${esc(s2.id)}" rows="2" maxlength="500"
+              placeholder="La question à poser au tuteur, ce qui manque…"
+              ${canEdit ? "" : "readonly"}>${esc(b.n || "")}</textarea></label>
+          <div class="actes">
+            <button class="btn" data-fiche="${esc(s2.id)}">Ma fiche</button>
+            ${canEdit ? `<button class="btn pri" data-debloque="${esc(s2.id)}">Je ne suis plus bloqué</button>` : ""}
+          </div>
+        </div>
+      </details>`;
+    }).join("")}`;
+}
+
 /* ═════════ LA MONTAGNE ═════════
    Une montagne qu'on construit en ne travaillant pas sera toujours plus dure à
    franchir qu'une plaine encore plate. Ce n'est pas une image : c'est
@@ -736,7 +822,7 @@ function terrain() {
   else if (raideur >= 1.25) allure = "montee";
   else allure = "randonnee";
 
-  return { reste, fin, requis, capacite, declaree, raideur, allure,
+  return { reste, fin, requis, capacite, declaree, raideur, allure, bloquees: heuresBloquees(),
            aujourdhui, depuis, jours: Math.max(0, (fin - NOW) / DAY) };
 }
 
@@ -839,6 +925,7 @@ function renderMontagne() {
         <span><b>${unH(t.requis)}</b> par jour à tenir</span>
         ${t.capacite && t.reste > 0.01
           ? `<span><b>${unH(t.capacite)}</b> par jour mesuré chez toi</span>` : ""}
+        ${t.bloquees > 0.01 ? `<span><b>${unH(t.bloquees)}</b> en attente de quelqu'un</span>` : ""}
         ${t.depuis != null && t.depuis >= 1
           ? `<span class="late"><b>${plural(t.depuis, "jour")}</b> sans rien poser</span>`
           : t.aujourdhui > 0.01 ? `<span class="ok"><b>${unH(t.aujourdhui)}</b> aujourd'hui</span>` : ""}
@@ -938,6 +1025,19 @@ async function renderFiche() {
       placeholder="Ce que tu as compris, une formule, un piège à ne pas refaire…">${esc(f.t || "")}</textarea>
     <div class="fl2" id="ficheEtat"></div>
 
+    <div class="zbloc${estBloque(id) ? " on" : ""}">
+      <label class="bascule"><input type="checkbox" id="ficheBloque"
+          ${estBloque(id) ? "checked" : ""}${canEdit ? "" : " disabled"}>
+        <span class="piste"></span>
+        <span class="dit">Je suis bloqué — il me faut de l'aide pour avancer</span></label>
+      ${estBloque(id) ? `<label class="ch"><span>De quoi as-tu besoin ?</span>
+        <textarea id="ficheBloqueNote" rows="2" maxlength="500"
+          placeholder="La question à poser au tuteur, ce qui manque…"
+          ${canEdit ? "" : "readonly"}>${esc((bloques[id] || {}).n || "")}</textarea></label>
+        <p class="aide">Cette étape ne sera plus proposée dans ta journée.
+          Elle reste dans ton retard — le travail est toujours à faire.</p>` : ""}
+    </div>
+
     <div class="soustitre">Photos</div>
     <div class="fichephotos" id="fichePhotos"></div>
     ${canEdit ? `<input type="file" id="ficheFichier" accept="image/*" class="horsvue">
@@ -951,15 +1051,26 @@ async function renderFiche() {
   t.oninput = () => {
     clearTimeout(minuterie);
     $("ficheEtat").textContent = "…";
-    // On n'enregistre pas à chaque frappe : la fiche part une seconde après
-    // qu'on a cessé d'écrire, sinon c'est une requête par lettre.
+    // L'état part en entier à chaque enregistrement. On attend donc que la frappe
+    // se soit vraiment arrêtée, et on ne renvoie rien si le texte n'a pas bougé —
+    // sinon écrire dix minutes renvoie l'état des centaines de fois.
     minuterie = setTimeout(() => {
-      poserFiche(id, { t: t.value.slice(0, 20000) });
+      const v = t.value.slice(0, 20000);
+      if (v === (laFiche(id) || {}).t) { $("ficheEtat").textContent = ""; return; }
+      poserFiche(id, { t: v });
       $("ficheEtat").textContent = "enregistrée";
       setTimeout(() => { const e = $("ficheEtat"); if (e && e.textContent === "enregistrée") e.textContent = ""; }, 1500);
       majFichePastilles();
-    }, 1000);
+    }, 2500);
   };
+
+  const fb = $("ficheBloque");
+  if (fb) fb.onchange = () => basculerBlocage(id, fb.checked, (bloques[id] || {}).n || "");
+  const fbn = $("ficheBloqueNote");
+  if (fbn) {
+    let m = null;
+    fbn.oninput = () => { clearTimeout(m); m = setTimeout(() => noterBlocage(id, fbn.value), 2500); };
+  }
 
   $("fichePhoto").onclick = () => $("ficheFichier").click();
   $("ficheFichier").onchange = async (e) => {
@@ -1227,7 +1338,7 @@ function renderMinuteur() {
       <label class="bascule chropom"><input type="checkbox" id="pomOn"
           ${pom ? "checked" : ""}${actif && !minuteur.pom ? "" : ""}>
         <span class="piste"></span>
-        <span class="etiq">Pomodoro — 25 min de travail, 5 de pause</span></label>
+        <span class="dit">Pomodoro — 25 min de travail, 5 de pause</span></label>
 
       <div class="chrofaits">
         <div class="cf"><div class="k">Cette étape</div>
@@ -1939,6 +2050,7 @@ function syncChecks(){
         st.classList.toggle("lt",!!s2&&isLate(s2));
         const f=s2?faitDe(s2.id):0;
         st.classList.toggle("part",!!s2&&!on&&f>0.01);
+        st.classList.toggle("bloq",!!s2&&estBloque(s2.id));
         const hh=st.querySelector(".hh");
         if(hh&&s2) hh.textContent = (!on&&f>0.01) ? `${unH(f)} / ${unH(s2.h)}` : unH(s2.h);
       }
@@ -1950,7 +2062,7 @@ let painting=false;
 function renderAll(){
   painting=true;
   replanifier();
-  renderToday();renderMontagne();renderCourbe();renderProjection();renderRendement();renderPrevision();
+  renderToday();renderEtapesBloquees();renderMontagne();renderCourbe();renderProjection();renderRendement();renderPrevision();
   paintGantt();renderGrades();renderJournal();
   // Reconstruire les champs de réglage sous les doigts de quelqu'un qui écrit
   // efface ce qu'il tape : on ne les redessine que s'ils sont à l'écran.
@@ -2009,7 +2121,7 @@ function replanifier() {
   // en heures réelles : une étape qui coûte 1,4× prend 1,4× de place. Sans ça,
   // la projection annonçait une date que le rythme mesuré contredisait déjà.
   const base = { etapes: ALL, done, evenements: events, capacites, reports,
-                 maintenant: NOW, fin: FIN_ANNEE, reste: resteReel };
+                 maintenant: NOW, fin: FIN_ANNEE, reste: restePlanifiable };
   if (!partJour || partJour.date !== cle) {
     const brut = planifier(base);
     partJour = { date: cle, h: brut.jours.get(cle)?.travailPose ?? 0 };
@@ -5083,6 +5195,7 @@ function peupler(v, arg) {
   if (v === "nouveautes") ouvrirNouveautes();
   if (v === "minuteur") { renderMinuteur(); if (minuteur) battre(); }
   if (v === "fiche") renderFiche();
+  if (v === "jour") renderEtapesBloquees();
 }
 
 addEventListener("hashchange", appliquerRoute);
@@ -5112,6 +5225,8 @@ document.addEventListener("click", (e) => {
   if (c) { demarrerMinuteur(c.dataset.chrono, { pom: prefPom }); return; }
   const fi = e.target.closest("[data-fiche]");
   if (fi) { ouvrirFiche2(fi.dataset.fiche); return; }
+  const db = e.target.closest("[data-debloque]");
+  if (db) { basculerBlocage(db.dataset.debloque, false); return; }
   const fp = e.target.closest("[data-fph]");
   if (fp) { retirerPhotoFiche(fp.dataset.fph); return; }
   const m = e.target.closest("[data-min]");
@@ -5131,6 +5246,14 @@ document.addEventListener("click", (e) => {
   }
   const a = e.target.closest("[data-aller]");
   if (a) aller(a.dataset.aller);
+});
+
+document.addEventListener("input", (e) => {
+  const n = e.target.closest("[data-note]");
+  if (n) {
+    clearTimeout(n._m);
+    n._m = setTimeout(() => noterBlocage(n.dataset.note, n.value), 2500);
+  }
 });
 
 document.addEventListener("change", (e) => {

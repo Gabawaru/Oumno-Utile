@@ -23,6 +23,14 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
   au menton**, tant que rien n'a été posé — à regarder la montagne grandir.
   La raideur est comprimée en racine pour le dessin : devoir tenir 4 h par jour
   quand on en tient dix minutes donne ×26, et un mur vertical ne montre plus rien.
+- **« Je suis bloqué »** — certaines étapes n'avancent pas sans quelqu'un : une
+  question au tuteur, un corrigé pas encore sorti. L'application les reproposait
+  chaque matin et les comptait en retard, ce qui n'aide en rien. Une coche dans la
+  fiche, une note (*de quoi as-tu besoin ?*), et l'étape **sort de la journée**.
+  Elle ne sort **pas du retard** : le travail reste à faire, la montagne le compte
+  toujours, et la part bloquée est dite à part. Seule l'alarme quotidienne se tait,
+  parce qu'elle réclamait l'impossible. Un panneau les rassemble, avec leurs notes,
+  pour la prochaine fois qu'on parle au tuteur.
 - **Les fiches** — l'application gardait d'une étape : faite ou non, les heures
   posées, une note si c'était un devoir. Rien de ce qu'on y avait compris. Chaque
   étape porte maintenant sa fiche : du texte, des photos d'une page manuscrite.

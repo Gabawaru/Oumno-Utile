@@ -505,6 +505,38 @@ migration n'est pas facultatif.
 
 ## Journal des audits
 
+**11 septembre 2026 — audit complet, et ce qu'il n'a pas trouvé.** Passage au
+crible de tout ce qui a été ajouté cette semaine. Deux affirmations que j'avais
+faites de tête se sont révélées fausses en les vérifiant : il n'y a **aucun
+doublon** dans le journal (c'étaient deux étapes distinctes, tronquées à
+l'affichage), et **aucune fonction morte** (`publier` et `verifier` sont passées
+en gestionnaires, pas appelées par leur nom).
+
+Ce qui a été trouvé, en revanche :
+
+- **L'état repart en entier à chaque enregistrement de fiche.** 36 Ko mesurés avec
+  380 séances et trois fiches ; extrapolé aux 121 étapes, ~220 Ko renvoyés une
+  seconde après chaque pause de frappe. Corrigé : on n'enregistre plus si le texte
+  n'a pas changé, et le délai passe à 2,5 s. La vraie correction — sortir les
+  fiches dans leur propre table — reste à faire.
+- **Six clés étrangères sans index**, dont `ciel_demandes.de`. Sans effet à sept
+  comptes ; à noter pour plus tard.
+- **Le journal ne se purge jamais en base** : 89 lignes en cinq jours, et chaque
+  coche en écrit une.
+- **Une collision de classe CSS** : `.etiq` existait déjà en capitales mono, et le
+  libellé d'une case à cocher s'affichait en criant. Même piège que `.bulle` la
+  semaine dernière — réutiliser un nom de classe dans une feuille unique.
+
+Éprouvé, et bon : une demande hostile portant `<img src=x onerror=…>` dans son
+titre, sa source, son message et ses événements produit **cinq occurrences, cinq
+échappées**, aucun élément portant l'attribut, aucun script exécuté — avant comme
+après acceptation. C'est le seul chemin où la donnée d'un autre utilisateur entre
+dans le DOM. Toutes les tables ont RLS activée et au moins une politique.
+
+Mesures, sur un compte chargé de six mois : premier rendu utile **347 ms**, 3 460
+nœuds, 262 SVG. Acceptable, et c'est aussi la mesure chiffrée d'une densité qui
+augmente plus vite que l'usage.
+
 **11 septembre 2026 — une régression que j'ai posée, et qui a tenu deux jours.**
 En refactorisant `prive.ciel_visible`, j'ai révoqué `EXECUTE` dessus « par
 cohérence » avec les fonctions exposées par l'API. Erreur de raisonnement :
