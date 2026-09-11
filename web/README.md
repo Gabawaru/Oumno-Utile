@@ -12,6 +12,22 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
 - **Comptes** — chacun crée le sien (adresse + mot de passe). Une seule inscription
   par adresse, **nom affiché unique**, mot de passe oublié par courriel, conditions et
   politique de confidentialité acceptées à l'inscription et datées en base.
+- **La pente devant toi** — une montagne qu'on construit en ne travaillant pas sera
+  toujours plus dure à franchir qu'une plaine encore plate. Ce n'est pas une image :
+  c'est `reste ÷ jours restants`, et chaque jour sans rien poser redresse la pente
+  du lendemain. Le terrain est donc calculé, jamais dessiné d'avance — son
+  inclinaison est le rythme qu'il faudrait tenir, comparé à celui qu'on tient
+  vraiment. Un tracé en pointillés montre ce qu'était la pente il y a une semaine.
+  Un bonhomme s'y tient : il **randonne** quand le terrain est plat, **grimpe**
+  quand ça monte, sort le **piolet** quand c'est raide, et **reste immobile, la main
+  au menton**, tant que rien n'a été posé — à regarder la montagne grandir.
+  La raideur est comprimée en racine pour le dessin : devoir tenir 4 h par jour
+  quand on en tient dix minutes donne ×26, et un mur vertical ne montre plus rien.
+- **Les fiches** — l'application gardait d'une étape : faite ou non, les heures
+  posées, une note si c'était un devoir. Rien de ce qu'on y avait compris. Chaque
+  étape porte maintenant sa fiche : du texte, des photos d'une page manuscrite.
+  Elle vit là où le planning a rangé l'étape, donc on la retrouve en révisant sans
+  se souvenir où on l'avait mise. Une pastille signale les étapes qui en ont une.
 - **Le minuteur** — chaque tâche de la journée porte une icône de minuteur. Elle
   ouvre un écran dédié : le temps qui court, une pause, et un **pomodoro
   facultatif** (25 min de travail, 5 de pause) qui annonce la fin d'une phase mais
