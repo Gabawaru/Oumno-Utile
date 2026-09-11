@@ -531,6 +531,18 @@ label.cap{flex-wrap:wrap}
 .rcourbe .tr{fill:none;stroke:var(--c);stroke-width:1.6;stroke-linejoin:round}
 .rcourbe .pt{fill:var(--c)}
 
+/* ── identifiant unique ─────────────────────────────────── */
+.uid{display:inline-flex;align-items:center;gap:.35rem;margin-top:.3rem;padding:.2rem .45rem;
+  background:var(--sunk);border:1px solid var(--rule);border-radius:3px;cursor:pointer;
+  font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink2);
+  letter-spacing:.03em;transition:border-color .15s,color .15s}
+.uid:hover,.uid:focus-visible{border-color:var(--sig);color:var(--ink)}
+.uid svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round;opacity:.7}
+.uid.copie{border-color:var(--ok);color:var(--ok)}
+.uid.copie svg{display:none}
+.uid.copie span::after{content:" — copié"}
+
 /* ── retard sur le diagramme ────────────────────────────── */
 .bar .retard{position:absolute;right:3px;top:50%;transform:translateY(-50%);
   background:var(--late);color:var(--paper);font-family:"IBM Plex Mono",monospace;

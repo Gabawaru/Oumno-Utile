@@ -1954,6 +1954,10 @@ function renderProfil() {
         <div style="min-width:0;flex:1">
           <h2>${esc(vue.nom)}</h2>
           <div class="arobase">@${esc(vue.slug)}</div>
+          ${vue.uid ? `<button class="uid" id="copierUid" title="Copier">
+            <span>${esc(vue.uid)}</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/>
+              <path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>` : ""}
           <div class="actes" style="margin-top:.5rem">
             <input type="file" id="pfFichier" accept="image/*" class="horsvue">
             <button class="btn" id="pfPhoto">${vue.avatar ? "Changer la photo" : "Ajouter une photo"}</button>
@@ -2224,6 +2228,13 @@ function renderProgramme() {
     </div>`;
 
   if (perso) renderMatieres();
+
+  const cu = $("copierUid");
+  if (cu) cu.onclick = async () => {
+    try { await navigator.clipboard.writeText(vue.uid); cu.classList.add("copie");
+          setTimeout(() => cu.classList.remove("copie"), 1200); }
+    catch { /* le presse-papiers peut être refusé : l'identifiant reste lisible */ }
+  };
 
   const vp = $("versPerso");
   if (vp) vp.onclick = () => {

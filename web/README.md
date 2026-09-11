@@ -119,6 +119,12 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
   ré-essai part tout seul avec un recul croissant, et l'événement `online` du
   navigateur reprend la main dès que la connexion revient. Quand une copie locale
   existe, elle est ouverte plutôt que l'écran d'erreur.
+- **Un identifiant unique par compte** — `ID12345678`, tiré à l'inscription, jamais
+  choisi et jamais modifiable. Le pseudonyme et l'identifiant public (`@slug`) se
+  changent ; celui-ci désigne quelqu'un sans ambiguïté, y compris après un
+  changement de nom. Pour en avoir un autre il faut un autre compte : l'unicité est
+  posée en base, et le déclencheur de validation recopie l'ancienne valeur à chaque
+  écriture — comme il le fait déjà pour la date de consentement.
 - **Pseudonyme, et vrai nom sur autorisation** — le pseudonyme est public et unique ;
   le vrai nom est facultatif, rangé dans une table à part, et montré aux seules
   personnes pour lesquelles on coche ce droit.

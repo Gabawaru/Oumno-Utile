@@ -334,6 +334,19 @@ Une dernière contrainte, imposée par les navigateurs et qu'on assume :
 `userVisibleOnly` oblige à afficher quelque chose à chaque poussée. Une poussée
 silencieuse servirait à pister ; le navigateur la refuse, et c'est bien.
 
+### Un identifiant qu'on ne choisit pas
+
+`ID12345678`, tiré à l'inscription. Le pseudonyme et le `@slug` se changent ; cet
+identifiant-là, non. Il sert à désigner quelqu'un sans ambiguïté — deux comptes
+peuvent porter le même pseudonyme demain, jamais le même identifiant.
+
+L'immuabilité ne tient pas à l'interface, qui n'expose aucun champ, mais au
+déclencheur : `new.uid := old.uid` à chaque écriture, comme pour la date de
+consentement. Éprouvé par bascule de rôle — un `update` depuis son propre compte
+laisse la valeur intacte, et réutiliser l'identifiant d'un autre est rejeté par la
+contrainte d'unicité. La forme est imposée en base (`^ID[0-9]{8}$`), pas seulement
+à la génération.
+
 ### Ce que le réseau oblige
 
 Héberger des publications, des images et des conversations fait de l'éditeur un
