@@ -466,6 +466,27 @@ label.cap{flex-wrap:wrap}
 .ligne.trav.avenir:hover{background:transparent}
 .ligne.trav.coche b{text-decoration:line-through;text-decoration-thickness:1px}
 
+/* ── étapes bloquées ────────────────────────────────────── */
+.blq{border-left:2px solid var(--c);background:var(--sunk);margin-bottom:.4rem}
+.blq>summary{cursor:pointer;padding:.5rem .65rem;display:flex;gap:.5rem;align-items:baseline;
+  flex-wrap:wrap;font-size:.78rem;list-style:none}
+.blq>summary::-webkit-details-marker{display:none}
+.blq>summary::before{content:"▸";color:var(--ink3);font-size:.7rem}
+.blq[open]>summary::before{content:"▾"}
+.bnom{flex:1;min-width:0}
+.bnom em{font-style:normal;color:var(--ink3);font-size:.73rem}
+.bh{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--ink2)}
+.bdate{font-size:.68rem;color:var(--ink3);width:100%}
+.blqcorps{padding:0 .65rem .65rem}
+.blqcorps textarea,.zbloc textarea{width:100%;padding:.5rem .6rem;font:inherit;font-size:.8rem;
+  border:1px solid var(--rule);background:var(--card);color:var(--ink);resize:vertical}
+.zbloc{margin:.8rem 0;padding:.6rem .7rem;background:var(--sunk);
+  border-left:2px solid var(--rule)}
+.zbloc.on{border-left-color:var(--warn)}
+.bascule .dit{font-size:.8rem;line-height:1.4;color:var(--ink2);text-align:left}
+.step.bloq{opacity:.65}
+.step.bloq .lbl::before{content:"⏸ ";color:var(--warn)}
+
 /* ── la montagne ────────────────────────────────────────── */
 .montbloc{--c1:color-mix(in srgb,var(--sig) 26%,transparent);
   --c2:color-mix(in srgb,var(--sig) 4%,transparent)}
@@ -564,7 +585,7 @@ label.cap{flex-wrap:wrap}
   padding:.55rem .7rem;font-size:.78rem;max-width:26rem}
 .chroboutons{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
 .chropom{font-size:.75rem;color:var(--ink2)}
-.chropom .etiq{text-align:left}
+.chropom .dit{text-align:left}
 .chrofaits{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.5rem;
   width:100%;max-width:34rem;text-align:left}
 .cf{background:var(--sunk);padding:.55rem .65rem;border-left:2px solid var(--rule)}
@@ -1568,6 +1589,12 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
       <div class="hsub" id="hsub"></div>
       <div class="gtrack"><div class="gfill" id="gfill"></div><div class="gmark" id="gmark"></div></div>
       <div class="hpied" id="hpied"></div>
+    </div>
+
+    <div class="panel" id="blocbloc" hidden>
+      <div class="phead"><h2>En attente de quelqu'un</h2>
+        <div class="note">Retiré de ta journée, pas de ton retard</div></div>
+      <div id="bloquees"></div>
     </div>
 
     <div class="panel montbloc" id="montbloc">
