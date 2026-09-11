@@ -466,6 +466,111 @@ label.cap{flex-wrap:wrap}
 .ligne.trav.avenir:hover{background:transparent}
 .ligne.trav.coche b{text-decoration:line-through;text-decoration-thickness:1px}
 
+/* ── minuteur ───────────────────────────────────────────── */
+.ligne.trav{cursor:default}
+.zcoche{flex:none;display:flex;align-items:center;cursor:pointer;padding:.1rem .15rem}
+.chrono{flex:none;background:transparent;border:1px solid var(--rule);border-radius:50%;
+  width:30px;height:30px;display:grid;place-items:center;cursor:pointer;color:var(--ink3);
+  padding:0;transition:color .15s,border-color .15s,background .15s}
+.chrono:hover,.chrono:focus-visible{color:var(--c);border-color:var(--c);
+  background:color-mix(in srgb,var(--c) 10%,transparent)}
+.chrono svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round}
+.ligne .part .fr{color:var(--sig);font-variant-numeric:tabular-nums}
+
+.chro{display:flex;flex-direction:column;gap:1rem;align-items:center;text-align:center;
+  padding:.6rem 0 1.2rem}
+.chrotete .matiere{font-family:"IBM Plex Mono",monospace;font-size:.64rem;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--c)}
+.chrotete h2{margin:.25rem 0 .1rem;font-size:clamp(1.1rem,4vw,1.5rem)}
+.chrotete .ssq{font-size:.76rem;color:var(--ink3)}
+.cadran{width:min(72vw,15rem);aspect-ratio:1;border-radius:50%;display:grid;place-content:center;
+  border:3px solid var(--rule2);background:var(--sunk);transition:border-color .3s}
+.cadran.tourne{border-color:var(--c)}
+.cadran.repos{border-color:var(--ok)}
+.cadran .temps{font-family:"IBM Plex Mono",monospace;font-size:clamp(2rem,11vw,3rem);
+  font-weight:500;font-variant-numeric:tabular-nums;line-height:1}
+.cadran .sous{font-size:.72rem;color:var(--ink3);margin-top:.35rem}
+.pomAlerte{background:color-mix(in srgb,var(--ok) 14%,var(--sunk));border-left:2px solid var(--ok);
+  padding:.55rem .7rem;font-size:.78rem;max-width:26rem}
+.chroboutons{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
+.chropom{font-size:.75rem;color:var(--ink2)}
+.chropom .etiq{text-align:left}
+.chrofaits{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.5rem;
+  width:100%;max-width:34rem;text-align:left}
+.cf{background:var(--sunk);padding:.55rem .65rem;border-left:2px solid var(--rule)}
+.cf .k{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink3)}
+.cf .v{font-size:1.15rem;font-weight:600;font-variant-numeric:tabular-nums;margin-top:.1rem}
+.cf .v .u{font-size:.75rem;font-weight:400;color:var(--ink3)}
+.cf .d{font-size:.7rem;line-height:1.45;color:var(--ink2);margin-top:.2rem}
+.ch{display:flex;flex-direction:column;gap:.25rem;font-size:.8rem;margin:.6rem 0}
+.ch input{padding:.5rem .6rem;font:inherit;border:1px solid var(--rule);background:var(--card);
+  color:var(--ink);width:100%}
+
+/* ── rythme réel ────────────────────────────────────────── */
+.rglobal{font-size:.78rem;line-height:1.55;color:var(--ink2);margin-bottom:.8rem}
+.rglobal b{color:var(--ink);font-variant-numeric:tabular-nums}
+.rends{display:flex;flex-direction:column;gap:.75rem}
+.rend{border-left:2px solid var(--c);padding:.15rem 0 .15rem .65rem}
+.rtete{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem}
+.rnom{font-weight:600;font-size:.84rem}
+.rfac{font-family:"IBM Plex Mono",monospace;font-size:.95rem;font-variant-numeric:tabular-nums}
+.rend.lent .rfac{color:var(--late)}
+.rend.vite .rfac{color:var(--ok)}
+.rend.juste .rfac{color:var(--ink2)}
+.rbarre{position:relative;height:5px;background:var(--sunk);margin:.35rem 0 .3rem;border-radius:3px}
+.rbarre u{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--rule)}
+.rbarre i{position:absolute;top:-3px;width:11px;height:11px;border-radius:50%;background:var(--c);
+  transform:translateX(-50%);border:2px solid var(--card)}
+.rdetail{font-size:.7rem;color:var(--ink3)}
+.rdetail b.vite{color:var(--ok)}
+.rdetail b.lent{color:var(--late)}
+.rcourbe{width:100%;max-width:22rem;height:auto;display:block;margin-top:.3rem}
+.rcourbe .un{stroke:var(--rule);stroke-width:1;stroke-dasharray:3 3}
+.rcourbe .tr{fill:none;stroke:var(--c);stroke-width:1.6;stroke-linejoin:round}
+.rcourbe .pt{fill:var(--c)}
+
+/* ── identifiant unique ─────────────────────────────────── */
+.uid{display:inline-flex;align-items:center;gap:.35rem;margin-top:.3rem;padding:.2rem .45rem;
+  background:var(--sunk);border:1px solid var(--rule);border-radius:3px;cursor:pointer;
+  font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--ink2);
+  letter-spacing:.03em;transition:border-color .15s,color .15s}
+.uid:hover,.uid:focus-visible{border-color:var(--sig);color:var(--ink)}
+.uid svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round;opacity:.7}
+.uid.copie{border-color:var(--ok);color:var(--ok)}
+.uid.copie svg{display:none}
+.uid.copie span::after{content:" — copié"}
+
+/* ── retard sur le diagramme ────────────────────────────── */
+.bar .retard{position:absolute;right:3px;top:50%;transform:translateY(-50%);
+  background:var(--late);color:var(--paper);font-family:"IBM Plex Mono",monospace;
+  font-size:.56rem;letter-spacing:.02em;padding:.05rem .25rem;border-radius:2px;
+  white-space:nowrap;pointer-events:none}
+.legend .sw.vide{background:var(--sunk);border:1px solid var(--rule)}
+
+/* ── prévision par matière ──────────────────────────────── */
+table.prev{width:100%;border-collapse:collapse;font-size:.75rem}
+table.prev th{text-align:left;font-weight:600;color:var(--ink3);font-size:.65rem;
+  letter-spacing:.05em;text-transform:uppercase;padding:.3rem .45rem;
+  border-bottom:1px solid var(--rule);white-space:nowrap}
+table.prev td{padding:.4rem .45rem;border-bottom:1px solid var(--rule2);vertical-align:middle}
+table.prev .num{text-align:right;font-variant-numeric:tabular-nums;
+  font-family:"IBM Plex Mono",monospace}
+table.prev th.num{text-align:right}
+table.prev .pastille{display:inline-block;width:8px;height:8px;border-radius:2px;
+  margin-right:.35rem;vertical-align:baseline}
+table.prev .verdict{font-weight:600;white-space:nowrap}
+table.prev .par{font-size:.62rem;color:var(--ink3);font-family:inherit}
+table.prev tr.ok .verdict{color:var(--ok)}
+table.prev tr.serre .verdict{color:var(--warn)}
+table.prev tr.late .verdict{color:var(--late)}
+table.prev tr.fini .verdict{color:var(--ink3)}
+table.prev tr.a-retard td:first-child{box-shadow:inset 2px 0 0 var(--late)}
+.mini-rt{display:inline-block;margin-left:.35rem;font-size:.6rem;color:var(--late);
+  font-family:"IBM Plex Mono",monospace}
+
 /* ── sonnerie : notifications poussées ─────────────────── */
 .sonnerie{display:flex;gap:.7rem;align-items:flex-start;background:var(--sunk);
   padding:.7rem .8rem;border-left:2px solid var(--rule);margin-bottom:.8rem}
@@ -1480,6 +1585,10 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
   </section>
 
   <!-- ─────────── NOUVEAUTÉS ─────────── -->
+  <section data-panel="minuteur" class="stack" hidden>
+    <div id="minuteurBox"></div>
+  </section>
+
   <section data-panel="nouveautes" class="stack" hidden>
     <div id="sonnerie"></div>
     <div id="nouveautes"></div>
@@ -1536,6 +1645,16 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
       <div class="courbe" id="courbe"></div>
       <div class="ckey" id="ckey"></div>
       <div class="proj" id="proj"></div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2>Mon rythme réel</h2>
+        <div class="note">Temps passé, face au temps indicatif</div></div>
+      <div id="rendement"></div>
+    </div>
+    <div class="panel">
+      <div class="phead"><h2>Prévision par matière</h2>
+        <div class="note">Où mène ton rythme, matière par matière</div></div>
+      <div id="prevision"></div>
     </div>
     <div class="panel">
       <div class="phead"><h2>Vue d'ensemble de l'année</h2></div>

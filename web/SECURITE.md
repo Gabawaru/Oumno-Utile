@@ -334,6 +334,19 @@ Une dernière contrainte, imposée par les navigateurs et qu'on assume :
 `userVisibleOnly` oblige à afficher quelque chose à chaque poussée. Une poussée
 silencieuse servirait à pister ; le navigateur la refuse, et c'est bien.
 
+### Un identifiant qu'on ne choisit pas
+
+`ID12345678`, tiré à l'inscription. Le pseudonyme et le `@slug` se changent ; cet
+identifiant-là, non. Il sert à désigner quelqu'un sans ambiguïté — deux comptes
+peuvent porter le même pseudonyme demain, jamais le même identifiant.
+
+L'immuabilité ne tient pas à l'interface, qui n'expose aucun champ, mais au
+déclencheur : `new.uid := old.uid` à chaque écriture, comme pour la date de
+consentement. Éprouvé par bascule de rôle — un `update` depuis son propre compte
+laisse la valeur intacte, et réutiliser l'identifiant d'un autre est rejeté par la
+contrainte d'unicité. La forme est imposée en base (`^ID[0-9]{8}$`), pas seulement
+à la génération.
+
 ### Ce que le réseau oblige
 
 Héberger des publications, des images et des conversations fait de l'éditeur un
@@ -438,6 +451,24 @@ Il a trouvé les deux erreurs de droits décrites plus haut : le passer après t
 migration n'est pas facultatif.
 
 ## Journal des audits
+
+**11 septembre 2026 — le minuteur, et ce qu'il mesure.** L'application savait ce
+qu'on valide, jamais ce que ça coûte : une étape de six heures finie en trois et
+une finie en dix se ressemblaient exactement. Les séances enregistrent désormais
+le temps réel, d'où le facteur de réalité — temps passé sur temps indicatif — qui
+nourrit le planificateur et la prévision.
+
+Rien de tout cela ne sort du compte : les séances vivent dans l'état personnel,
+comme le reste, sans nouvelle table ni nouvelle surface d'API. Le minuteur lui-même
+ne quitte pas le navigateur.
+
+Trois défauts trouvés en chemin. Le panneau était réécrit en entier chaque seconde,
+ce qui détruisait le focus et la case sous le doigt — seule l'horloge bouge
+maintenant. La vue était peuplée depuis le rafraîchissement des nouveautés au lieu
+du routeur, donc le minuteur n'apparaissait pas. Et la prévision annonçait « 14 juil.
+2036, 3331 jours de trop » : arithmétiquement juste, humainement inutile. Au-delà de
+dix-huit mois on écrit « au-delà » et on donne le rythme hebdomadaire à tenir, qui
+est le seul chiffre sur lequel on peut agir.
 
 **10 septembre 2026 — notifications poussées.** Web Push écrit à la main, sans
 dépendance : VAPID (RFC 8292) et chiffrement `aes128gcm` (RFC 8291) avec

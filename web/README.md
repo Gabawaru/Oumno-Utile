@@ -12,6 +12,30 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
 - **Comptes** — chacun crée le sien (adresse + mot de passe). Une seule inscription
   par adresse, **nom affiché unique**, mot de passe oublié par courriel, conditions et
   politique de confidentialité acceptées à l'inscription et datées en base.
+- **Le minuteur** — chaque tâche de la journée porte une icône de minuteur. Elle
+  ouvre un écran dédié : le temps qui court, une pause, et un **pomodoro
+  facultatif** (25 min de travail, 5 de pause) qui annonce la fin d'une phase mais
+  ne coupe jamais tout seul. À l'arrêt, l'application ne demande pas le temps passé
+  — elle le connaît — mais **ce que ça a fait avancer** : c'est justement l'écart
+  entre les deux qu'elle apprend. Puis elle pose la question que rien ne permettait
+  jusque-là : on repart dessus, ou on décale ?
+  Le minuteur ne vit pas en mémoire mais dans le navigateur, en horodatages : un
+  téléphone qui verrouille son écran gèle l'onglet, et un compteur qui s'incrémente
+  à la seconde perdrait tout.
+- **Le facteur de réalité** — temps réel divisé par temps indicatif. Au-dessus de 1,
+  une matière coûte plus cher que ce que le CNED annonce ; au-dessous, moins. C'est
+  le seul chiffre qui dise si le plan parle de toi ou d'un élève moyen, et il nourrit
+  désormais le planificateur : une étape à 1,4× occupe 1,4× plus de place. Une courbe
+  par matière montre l'évolution séance après séance — un facteur qui descend, c'est
+  qu'on apprend.
+- **Prévision par matière** — un tableau : ce qui reste, ce que ça coûtera vraiment,
+  la fin prévue face à l'échéance de la matière (pas celle de l'examen), et le rythme
+  hebdomadaire qu'il faudrait tenir. Au-delà de dix-huit mois la date cesse d'être une
+  prévision : on écrit « au-delà » et on donne l'effort à fournir, qui est le seul
+  chiffre sur lequel on peut agir.
+- **Le retard, nommé sur le diagramme** — la vue d'ensemble garde sa forme. Le vide
+  disait déjà qu'il manque quelque chose ; une pastille dit maintenant depuis combien
+  de jours l'échéance est passée, et la légende explique les deux signes.
 - **Heures posées, pas étapes cochées** — le travail se valide à la tranche. Cocher
   une heure de la journée sur une étape de six crédite une heure, pas six : la table
   `avance` retient ce qui a été fait, quel jour, et le planificateur ne replanifie
@@ -95,6 +119,12 @@ publient, et surtout on repère les moments où l'on est libres en même temps.
   ré-essai part tout seul avec un recul croissant, et l'événement `online` du
   navigateur reprend la main dès que la connexion revient. Quand une copie locale
   existe, elle est ouverte plutôt que l'écran d'erreur.
+- **Un identifiant unique par compte** — `ID12345678`, tiré à l'inscription, jamais
+  choisi et jamais modifiable. Le pseudonyme et l'identifiant public (`@slug`) se
+  changent ; celui-ci désigne quelqu'un sans ambiguïté, y compris après un
+  changement de nom. Pour en avoir un autre il faut un autre compte : l'unicité est
+  posée en base, et le déclencheur de validation recopie l'ancienne valeur à chaque
+  écriture — comme il le fait déjà pour la date de consentement.
 - **Pseudonyme, et vrai nom sur autorisation** — le pseudonyme est public et unique ;
   le vrai nom est facultatif, rangé dans une table à part, et montré aux seules
   personnes pour lesquelles on coche ce droit.
