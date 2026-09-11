@@ -40,7 +40,7 @@ const T0=qStart(0).getTime(),T1=qEnd(19).getTime();
    connaît que des étapes avec un volume d'heures et une période — le référentiel
    CNED n'est qu'un modèle parmi d'autres. */
 let GROUPES=[], ALL=[], DEVS=[], TOTAL_H=0, byId={};
-let avance={}, seances=[];
+let avance={}, seances=[], fiches={};
 
 function chargerProgramme(prog){
   GROUPES = versGroupes(prog);
@@ -153,6 +153,7 @@ function appliquerEtat(d){
   done      = d.done      || {};
   avance    = d.avance    || {};
   seances   = Array.isArray(d.seances) ? d.seances : [];
+  fiches    = d.fiches    || {};
   events    = d.evenements|| d.events || [];
   grades    = d.notes     || d.grades || {};
   capacites = normaliserCapacites(d.capacites);
@@ -168,8 +169,8 @@ function appliquerEtat(d){
   lireMinuteur();
   if (minuteur) battre();
 }
-const etat=()=>({done,avance,seances,evenements:events,notes:grades,capacites,reports,partJour,
-                 programme,demarrage:demarrageFait});
+const etat=()=>({done,avance,seances,fiches,evenements:events,notes:grades,capacites,reports,
+                 partJour,programme,demarrage:demarrageFait});
 
 /* ═════════ HEURES POSÉES ═════════
    `done` disait oui ou non. Cocher une tranche d'une heure sur une étape de six
@@ -431,10 +432,17 @@ function buildAcc(){
        <div><div class="rowhd">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.n)} ↗</a>`:esc(r.n)}
          <span class="rh" data-rh="${r.id}">0/${r.h} h</span></div>
        <div class="steps">${r.steps.map(s=>`
-         <label class="step" data-step="${s.id}">
-           <input type="checkbox" class="cb" data-cb="${esc(s.id)}">
+         <div class="step" data-step="${s.id}">
+           <label class="zcoche"><input type="checkbox" class="cb" data-cb="${esc(s.id)}"></label>
            <span class="lbl">${esc(s.n)}${s.date?` <b class="mono" style="color:var(--sig)">${s.date}</b>`:""}</span>
-           <span class="hh">${unH(s.h)}</span></label>`).join("")}</div></div>`).join("")}</div>
+           <span class="hh">${unH(s.h)}</span>
+           <button class="fic" data-fiche="${esc(s.id)}" title="Ma fiche sur cette étape"
+             aria-label="Ma fiche"><svg viewBox="0 0 24 24" aria-hidden="true">
+             <path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></svg></button>
+           <button class="chrono" data-chrono="${esc(s.id)}" title="Lancer le minuteur"
+             aria-label="Minuteur"><svg viewBox="0 0 24 24" aria-hidden="true">
+             <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg></button>
+         </div>`).join("")}</div></div>`).join("")}</div>
    </div>`).join("");
   document.querySelectorAll(".grphd").forEach(hd=>{
     const t=()=>{const b=hd.parentElement;b.classList.toggle("open");
@@ -690,6 +698,324 @@ async function repondreDemande(id, accepte) {
   renderAll();
 }
 
+/* ═════════ LA MONTAGNE ═════════
+   Une montagne qu'on construit en ne travaillant pas sera toujours plus dure à
+   franchir qu'une plaine encore plate. Ce n'est pas une image : c'est
+   `reste ÷ jours restants`. Chaque jour sans rien poser augmente la pente qu'il
+   faudra gravir le lendemain, et la montagne se construit toute seule pendant
+   qu'on la regarde.
+
+   Le terrain est donc calculé, jamais dessiné à l'avance : sa hauteur en un
+   point est le rythme qu'il faudrait tenir si l'on s'y mettait ce jour-là. */
+
+/** Le rythme requis à une date donnée, en heures par jour, à reste constant. */
+function penteAu(t, reste, fin) {
+  const jours = Math.max(0.5, (fin - t) / DAY);
+  return reste / jours;
+}
+
+function terrain() {
+  const reste = ALL.reduce((a, s2) => a + resteReel(s2), 0);
+  const fin = +EXAM;
+  const ry = rythmeTravail();
+  const capacite = ry && ry.hParJour > 0 ? ry.hParJour : null;
+  const requis = penteAu(NOW, reste, fin);
+  // Le rapport entre ce qu'il faut tenir et ce qu'on tient vraiment. Sans
+  // historique, on se compare à la journée type déclarée.
+  const declaree = capaciteDeclaree();
+  const base = capacite || declaree || 4;
+  const raideur = base > 0 ? requis / base : 0;
+
+  const aujourdhui = heuresFaitesLe(isoJour(new Date(NOW)));
+  const depuis = joursSansRien();
+
+  let allure;
+  if (reste <= 0.01) allure = "sommet";
+  else if (depuis >= 1 && aujourdhui <= 0.01) allure = "arret";
+  else if (raideur >= 2.2) allure = "alpinisme";
+  else if (raideur >= 1.25) allure = "montee";
+  else allure = "randonnee";
+
+  return { reste, fin, requis, capacite, declaree, raideur, allure,
+           aujourdhui, depuis, jours: Math.max(0, (fin - NOW) / DAY) };
+}
+
+/** Ce que la journée type déclare, en heures : le repère quand rien n'est mesuré. */
+function capaciteDeclaree() {
+  try {
+    const j = capacites && capacites.lun ? capacites : null;
+    if (!j) return null;
+    const tot = Object.values(j).reduce((a, plages) => a +
+      (Array.isArray(plages) ? plages.reduce((b, [d, f]) =>
+        b + Math.max(0, (enMin(f) - enMin(d)) / 60), 0) : 0), 0);
+    return tot / 7;
+  } catch { return null; }
+}
+
+/** Jours pleins écoulés depuis la dernière heure posée. */
+function joursSansRien() {
+  let dernier = null;
+  for (const id in avance) {
+    if (!byId[id]) continue;
+    for (const j in avance[id]) if (!dernier || j > dernier) dernier = j;
+  }
+  if (!dernier) return null;
+  const t = Date.parse(dernier + "T23:59:59");
+  return Math.max(0, Math.floor((NOW - t) / DAY) + 1);
+}
+
+const MOTS = {
+  sommet: ["Au sommet", "Tout est posé. Il n'y a plus de pente devant toi."],
+  arret: ["Arrêté devant la pente",
+    "Tu regardes la montagne en cherchant par où passer. Elle grandit pendant ce temps."],
+  alpinisme: ["En alpinisme",
+    "La pente est devenue raide. Chaque jour sans rien poser la redresse encore."],
+  montee: ["En montée", "Ça grimpe, mais ça se marche."],
+  randonnee: ["En randonnée", "Le terrain est plat devant toi. C'est le bon moment."],
+};
+
+function renderMontagne() {
+  const box = $("montagne");
+  if (!box) return;
+  const t = terrain();
+  const [titre, phrase] = MOTS[t.allure];
+
+  const L = 760, H = 260, sol = H - 34, cime = 18;
+  const utile = sol - cime;
+
+  // La rampe monte d'autant plus vite qu'il faut en faire plus par jour que ce
+  // qu'on tient. Pente 1 : on arrive tout juste au sommet le jour de l'examen.
+  // Pente 2 : la montagne sort du cadre — et c'est exactement ce qu'on veut voir.
+  const X = (u) => 10 + u * (L - 20);
+  // La raideur n'est pas bornée : devoir tenir 4 h par jour quand on en tient dix
+  // minutes donne ×26, et un mur vertical au départ, qui ne montre plus rien.
+  // La racine comprime sans inverser l'ordre : ×1 fait une pente à mi-hauteur,
+  // ×4 un mur qui remplit le cadre, au-delà c'est le même message.
+  const dessine = (r) => Math.min(1, Math.sqrt(Math.max(0, r) / 4));
+  const Y = (r, u) => sol - Math.min(1, Math.max(0, dessine(r) * u)) * utile;
+  const rampe = (r) => {
+    const pts = [];
+    for (let i = 0; i <= 40; i++) { const u = i / 40; pts.push([X(u), Y(r, u)]); }
+    return pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  };
+
+  const ligne = rampe(t.raideur);
+  const aire = `${ligne} L${X(1).toFixed(1)} ${sol} L${X(0).toFixed(1)} ${sol} Z`;
+
+  // Ce que la pente était il y a une semaine, à travail égal : plus douce. C'est
+  // la montagne qu'on a construite en ne faisant rien, rendue visible.
+  const avant = t.jours > 0 ? t.raideur * (t.jours / (t.jours + 7)) : 0;
+  // On ne montre le tracé d'avant que si l'écart se voit à l'écran.
+  const montree = t.reste > 0.01 && dessine(t.raideur) - dessine(avant) > 0.05;
+
+  // Le bonhomme se tient au départ de la rampe, sur la pente.
+  const u0 = 0.07;
+  const bx = X(u0), by = Y(t.raideur, u0);
+
+  // Le panneau porte l'allure : c'est lui qui donne sa couleur au massif.
+  const bloc = $("montbloc");
+  if (bloc) bloc.className = "panel montbloc " + t.allure;
+
+  box.innerHTML = `
+    <svg class="mont ${esc(t.allure)}" viewBox="0 0 ${L} ${H}" role="img"
+        aria-label="${esc(titre)} — ${esc(phrase)}">
+      <defs><linearGradient id="gcimes" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="var(--c1)"/><stop offset="1" stop-color="var(--c2)"/>
+      </linearGradient></defs>
+      <line class="sol" x1="0" x2="${L}" y1="${sol}" y2="${sol}"/>
+      <path class="massif" d="${aire}"/>
+      ${montree ? `<path class="jadis" d="${rampe(avant)}"/>
+        <text class="jal jadis-t" x="${X(0.99)}" y="${Y(avant, 0.99) - 6}" text-anchor="end">
+          la pente d'il y a une semaine</text>` : ""}
+      <path class="crete" d="${ligne}"/>
+      ${bonhomme(bx, by, t.allure)}
+      <text class="jal" x="${X(1)}" y="${sol + 20}" text-anchor="end">examen</text>
+      <text class="jal" x="${X(0)}" y="${sol + 20}">aujourd'hui</text>
+    </svg>
+    <div class="montdit">
+      <div class="mtitre">${esc(titre)}</div>
+      <div class="mphrase">${esc(phrase)}</div>
+      <div class="mchif">
+        <span><b>${unH(t.requis)}</b> par jour à tenir</span>
+        ${t.capacite && t.reste > 0.01
+          ? `<span><b>${unH(t.capacite)}</b> par jour mesuré chez toi</span>` : ""}
+        ${t.depuis != null && t.depuis >= 1
+          ? `<span class="late"><b>${plural(t.depuis, "jour")}</b> sans rien poser</span>`
+          : t.aujourdhui > 0.01 ? `<span class="ok"><b>${unH(t.aujourdhui)}</b> aujourd'hui</span>` : ""}
+      </div>
+    </div>`;
+}
+
+/** Un bonhomme, dessiné selon ce que le terrain lui demande. */
+function bonhomme(x, y, allure) {
+  // 1,6× : à 760 de large, un bonhomme à l'échelle 1 fait quatre pixels sur un
+  // téléphone. Il porte le message, il doit se voir.
+  const g = (contenu, extra = "") =>
+    `<g class="rando ${esc(allure)}" transform="translate(${x.toFixed(1)},${(y - 3).toFixed(1)}) scale(1.6)"${extra}>${contenu}</g>`;
+  const tete = `<circle class="corps" cx="0" cy="-26" r="5"/>`;
+  const tronc = `<path class="corps" d="M0 -21v13"/>`;
+
+  if (allure === "arret") {
+    // Immobile, la main au menton, regardant ce qu'il va bien falloir gravir.
+    return g(`${tete}${tronc}
+      <path class="corps" d="M0 -8l-5 9M0 -8l5 9"/>
+      <path class="corps" d="M0 -17l7 3-4 -7"/>
+      <path class="pense" d="M9 -34a3 3 0 1 1 .1 0M14 -40a4 4 0 1 1 .1 0"/>`);
+  }
+  if (allure === "alpinisme") {
+    // Penché dans la pente, un piolet planté plus haut.
+    return g(`${tete}${tronc}
+      <path class="corps" d="M0 -8l-7 8M0 -8l6 9"/>
+      <path class="corps" d="M0 -18l10 -9"/>
+      <path class="piolet" d="M10 -27l7 -6M14 -31l5 1"/>`, ' transform-origin="0 0"');
+  }
+  if (allure === "sommet") {
+    return g(`${tete}${tronc}
+      <path class="corps" d="M0 -8l-6 9M0 -8l6 9"/>
+      <path class="corps" d="M0 -18l-8 -8M0 -18l8 -8"/>`);
+  }
+  // Randonnée et montée : il marche, avec un bâton.
+  return g(`${tete}${tronc}
+    <path class="corps jambes" d="M0 -8l-6 9M0 -8l6 9"/>
+    <path class="corps bras" d="M0 -17l8 4"/>
+    <path class="baton" d="M8 -13v14"/>`);
+}
+
+/* ═════════ FICHES ═════════
+   Ce que l'application gardait d'une étape : faite ou non, les heures posées,
+   une note si c'était un devoir. Rien de ce qu'on y avait compris. On validait
+   « SP 6 · Mission 1 » et il n'en restait aucune trace.
+
+   Une fiche tient le reste : le texte qu'on écrit, les photos d'une page
+   manuscrite. Elle vit à l'endroit où le planning a rangé l'étape, donc on la
+   retrouve en révisant sans avoir à se souvenir où on l'avait mise. */
+
+const laFiche = (id) => fiches[id] || null;
+const aUneFiche = (id) => { const f = fiches[id]; return Boolean(f && (f.t || (f.p || []).length)); };
+
+function poserFiche(id, champs) {
+  const f = fiches[id] || (fiches[id] = { t: "", p: [] });
+  Object.assign(f, champs, { m: new Date(NOW).toISOString() });
+  if (!f.t && !(f.p || []).length) delete fiches[id];
+  saveState();
+}
+
+let ficheOuverte = null;
+
+function ouvrirFiche2(id) {
+  const s2 = byId[id];
+  if (!s2) return;
+  ficheOuverte = id;
+  aller("fiche", id);
+}
+
+async function renderFiche() {
+  const box = $("ficheBox");
+  if (!box) return;
+  const id = argCourant || ficheOuverte;
+  const s2 = byId[id];
+  if (!s2) {
+    box.innerHTML = `<div class="vide">Cette étape n'existe plus.
+      <button class="btn" data-aller="planning">Revenir</button></div>`;
+    return;
+  }
+  const f = laFiche(id) || { t: "", p: [] };
+  const fait = faitDe(id);
+
+  box.innerHTML = `
+    <div class="fichetete" style="--c:${esc(s2.g.c)}">
+      <div class="matiere">${esc(s2.g.name)}</div>
+      <h2>${esc(s2.n)}</h2>
+      <div class="ssq">${esc(s2.row.n)} · ${unH(fait)} sur ${unH(s2.h)}
+        ${f.m ? ` · modifiée le ${fmtDY(Date.parse(f.m))}` : ""}</div>
+      <div class="actes">
+        <button class="btn" data-chrono="${esc(id)}">Travailler dessus</button>
+        ${s2.row.url ? `<a class="btn" href="${esc(s2.row.url)}" target="_blank" rel="noopener">Ouvrir le cours ↗</a>` : ""}
+      </div>
+    </div>
+
+    <textarea id="ficheTexte" class="fichetexte" ${canEdit ? "" : "readonly"}
+      placeholder="Ce que tu as compris, une formule, un piège à ne pas refaire…">${esc(f.t || "")}</textarea>
+    <div class="fl2" id="ficheEtat"></div>
+
+    <div class="soustitre">Photos</div>
+    <div class="fichephotos" id="fichePhotos"></div>
+    ${canEdit ? `<input type="file" id="ficheFichier" accept="image/*" class="horsvue">
+      <button class="btn" id="fichePhoto">Ajouter une photo</button>` : ""}`;
+
+  renderFichePhotos(id);
+
+  if (!canEdit) return;
+  const t = $("ficheTexte");
+  let minuterie = null;
+  t.oninput = () => {
+    clearTimeout(minuterie);
+    $("ficheEtat").textContent = "…";
+    // On n'enregistre pas à chaque frappe : la fiche part une seconde après
+    // qu'on a cessé d'écrire, sinon c'est une requête par lettre.
+    minuterie = setTimeout(() => {
+      poserFiche(id, { t: t.value.slice(0, 20000) });
+      $("ficheEtat").textContent = "enregistrée";
+      setTimeout(() => { const e = $("ficheEtat"); if (e && e.textContent === "enregistrée") e.textContent = ""; }, 1500);
+      majFichePastilles();
+    }, 1000);
+  };
+
+  $("fichePhoto").onclick = () => $("ficheFichier").click();
+  $("ficheFichier").onchange = async (e) => {
+    const fichier = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!fichier) return;
+    const etat = $("ficheEtat");
+    etat.textContent = "préparation…";
+    try {
+      const { deposer } = await import("./photos.js");
+      // 1600 px : une page manuscrite doit rester lisible une fois agrandie.
+      const chemin = await deposer(sb, "photos", session.user.id, fichier, 1600, 0.82);
+      const fi = laFiche(id) || { t: "", p: [] };
+      poserFiche(id, { p: [...(fi.p || []), chemin].slice(0, 20) });
+      etat.textContent = "";
+      renderFichePhotos(id);
+      majFichePastilles();
+    } catch (err) {
+      etat.innerHTML = `<b class="late">${esc(String(err.message || err))}</b>`;
+    }
+  };
+}
+
+async function renderFichePhotos(id) {
+  const box = $("fichePhotos");
+  if (!box) return;
+  const f = laFiche(id);
+  const l = (f && f.p) || [];
+  if (!l.length) { box.innerHTML = `<div class="fl2">Aucune photo.</div>`; return; }
+  // Le seau est privé : il faut une adresse signée, qui expire.
+  const { data } = await sb.stockage.signer("photos", l, 3600);
+  const par = new Map((data || []).map((x) => [x.path, x.signedURL]));
+  box.innerHTML = l.map((c) => `<figure class="fph">
+    <img src="${esc(par.get(c) || "")}" alt="Photo de la fiche" loading="lazy">
+    ${canEdit ? `<button class="btn mini" data-fph="${esc(c)}" title="Retirer">✕</button>` : ""}
+  </figure>`).join("");
+}
+
+function retirerPhotoFiche(chemin) {
+  const id = argCourant || ficheOuverte;
+  const f = laFiche(id);
+  if (!f) return;
+  poserFiche(id, { p: (f.p || []).filter((x) => x !== chemin) });
+  sb.stockage.supprimer("photos", [chemin]).catch(() => {});
+  renderFichePhotos(id);
+  majFichePastilles();
+}
+
+/** Une étape qui porte une fiche se signale dans la liste : sans ça, on ne sait
+ *  pas où l'on a déjà écrit, et on réécrit. */
+function majFichePastilles() {
+  document.querySelectorAll(".step[data-step]").forEach((l) => {
+    l.classList.toggle("afiche", aUneFiche(l.dataset.step));
+  });
+}
+
 /* ═════════ SÉANCES ET MINUTEUR ═════════
    L'application savait ce qu'on valide, jamais ce que ça coûte. Une étape de six
    heures finie en trois et une finie en dix se ressemblaient exactement dans les
@@ -888,6 +1214,8 @@ function renderMinuteur() {
       <div class="pomAlerte" id="pomAlerte" hidden></div>
 
       <div class="chroboutons">
+        <button class="btn" data-fiche="${esc(s2.id)}">Ma fiche${
+          aUneFiche(s2.id) ? " ✓" : ""}</button>
         ${!actif
           ? `<button class="btn pri gros" data-min="demarrer">Démarrer</button>`
           : `<button class="btn gros" data-min="pause">${minuteur.pause ? "Reprendre" : "Pause"}</button>
@@ -1616,12 +1944,13 @@ function syncChecks(){
       }
     }
     cb.disabled=!canEdit;});
+  majFichePastilles();
 }
 let painting=false;
 function renderAll(){
   painting=true;
   replanifier();
-  renderToday();renderCourbe();renderProjection();renderRendement();renderPrevision();
+  renderToday();renderMontagne();renderCourbe();renderProjection();renderRendement();renderPrevision();
   paintGantt();renderGrades();renderJournal();
   // Reconstruire les champs de réglage sous les doigts de quelqu'un qui écrit
   // efface ce qu'il tape : on ne les redessine que s'ils sont à l'écran.
@@ -4640,6 +4969,7 @@ const VUES = {
   personne: { panneau: "personne", titre: "Profil",      retour: "contacts" },
   nouveautes: { panneau: "nouveautes", titre: "Nouveautés", retour: "jour" },
   minuteur: { panneau: "minuteur", titre: "En cours", retour: "jour" },
+  fiche:    { panneau: "fiche",    titre: "Ma fiche",  retour: "planning" },
 };
 const TITRES = { cal: "Calendrier", dispo: "Quand je suis libre", todo: "Étapes" };
 
@@ -4650,6 +4980,7 @@ function versAdresse(v, arg) {
   if (v === "personne") return `#/p/${arg}`;
   if (v === "planning") return `#/planning/${arg || sousPlanning}`;
   if (v === "minuteur" && arg) return `#/minuteur/${encodeURIComponent(arg)}`;
+  if (v === "fiche" && arg) return `#/fiche/${encodeURIComponent(arg)}`;
   return `#/${v}`;
 }
 
@@ -4671,6 +5002,7 @@ function lireAdresse() {
   // sur l'application par un raccourci ne doit pas perdre la séance.
   if (v === "minuteur") return ["minuteur", m[1] ? decodeURIComponent(m[1])
                                                  : (minuteur && minuteur.etape) || null];
+  if (v === "fiche") return ["fiche", m[1] ? decodeURIComponent(m[1]) : ficheOuverte];
   return [VUES[v] ? v : "jour", null];
 }
 
@@ -4750,6 +5082,7 @@ function peupler(v, arg) {
   if (v === "personne") ouvrirFiche(arg);
   if (v === "nouveautes") ouvrirNouveautes();
   if (v === "minuteur") { renderMinuteur(); if (minuteur) battre(); }
+  if (v === "fiche") renderFiche();
 }
 
 addEventListener("hashchange", appliquerRoute);
@@ -4777,6 +5110,10 @@ document.addEventListener("click", (e) => {
 document.addEventListener("click", (e) => {
   const c = e.target.closest("[data-chrono]");
   if (c) { demarrerMinuteur(c.dataset.chrono, { pom: prefPom }); return; }
+  const fi = e.target.closest("[data-fiche]");
+  if (fi) { ouvrirFiche2(fi.dataset.fiche); return; }
+  const fp = e.target.closest("[data-fph]");
+  if (fp) { retirerPhotoFiche(fp.dataset.fph); return; }
   const m = e.target.closest("[data-min]");
   if (m) {
     const q = m.dataset.min;
