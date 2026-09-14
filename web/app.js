@@ -715,13 +715,17 @@ function renderDemandesPlanning() {
       </summary>
       <div class="demcorps">
         ${d.message ? `<p class="aide">« ${esc(d.message)} »</p>` : ""}
-        ${recue && d.charge && d.charge.length ? `<div class="frise">${
-          d.charge.slice(0, 8).map((e) => `<div class="ligne ev">
-            <span class="hh">${esc(e.jour || "")} ${esc(e.debut || "")}</span>
+        ${recue && d.charge && d.charge.length ? `<div class="frise recue">${
+          d.charge.map((e) => `<div class="ligne ev">
+            <span class="hh">${esc(e.jour || "")} ${esc(e.debut || "")}${
+              e.fin ? `–${esc(e.fin)}` : ""}</span>
             <span class="quoi"><b>${esc(e.titre || "")}</b></span></div>`).join("")}</div>
-          ${d.charge.length > 8 ? `<div class="fl2">+ ${d.charge.length - 8} autres</div>` : ""}` : ""}
+          <p class="aide">Ce planning reste le sien. Rien n'est écrit dans le tien —
+            tu le lis, tu l'exportes si tu en as besoin, c'est tout.</p>
+          <div class="actes"><button class="btn" data-dem="ics:${esc(d.id)}"
+            >Exporter en .ics</button></div>` : ""}
         ${recue && d.etat === "attente" ? `<div class="actes">
-          <button class="btn pri" data-dem="oui:${esc(d.id)}">Accepter et ajouter</button>
+          <button class="btn pri" data-dem="oui:${esc(d.id)}">Accepter</button>
           <button class="btn" data-dem="non:${esc(d.id)}">Refuser</button></div>` : ""}
       </div>
     </details>`).join("")}`;
@@ -735,13 +739,43 @@ async function repondreDemande(id, accepte) {
     dialogue({ titre: "Réponse impossible", corps: `<p class="aide">${esc(String(error.message || error))}</p>` });
     return;
   }
-  if (accepte && d && Array.isArray(d.charge) && d.charge.length) {
-    const n = fusionnerEvenements(d.charge.filter((e) => e && e.jour && e.titre));
-    log(`a accepté une demande de ${d.qui_uid} (${plural(n, "événement")})`);
-    saveEvents();
-  } else if (d) log(`a refusé une demande de ${d.qui_uid}`);
+  /* Accepter dit à l'autre « c'est pris », et rien de plus. Ça n'écrit pas une
+     ligne dans mon planning : le sien reste le sien. Une demande est une boîte
+     de réception, pas une greffe. Avant, accepter recopiait ses événements chez
+     moi — ils occupaient mes journées, décalaient mon travail et changeaient mon
+     retard ; et comme la fusion se faisait par identifiant, un envoi bien choisi
+     pouvait remplacer mes propres événements sans que rien ne se voie. */
+  if (d) log(accepte ? `a accepté une demande de ${d.qui_uid}`
+                     : `a refusé une demande de ${d.qui_uid}`);
+  saveState();
   await chargerDemandesPlanning();
   renderAll();
+}
+
+/** Ce qu'on a reçu, en fichier, pour pouvoir s'en servir ailleurs. */
+function exporterDemande(id) {
+  const d = demandesPlanning.find((x) => x.id === id);
+  if (!d || !Array.isArray(d.charge) || !d.charge.length) return;
+  const pad = (n) => String(n).padStart(2, "0");
+  const hz = (j, h) => `${String(j).replace(/-/g, "")}T${String(h || "00:00").replace(":", "")}00`;
+  const lignes = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Repere//Demande//FR", "CALSCALE:GREGORIAN"];
+  d.charge.forEach((e, i) => {
+    if (!e || !e.jour) return;
+    lignes.push("BEGIN:VEVENT",
+      `UID:${String(e.id || i)}@repere`,
+      `DTSTART:${hz(e.jour, e.debut)}`,
+      `DTEND:${hz(e.jour, e.fin || e.debut)}`,
+      // Les virgules et points-virgules ferment un champ en RFC 5545 : on les échappe.
+      `SUMMARY:${String(e.titre || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\n/g, " ")}`,
+      "END:VEVENT");
+  });
+  lignes.push("END:VCALENDAR");
+  const blob = new Blob([lignes.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `demande-${(d.qui_uid || "planning")}.ics`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 /* ═════════ BLOCAGES ═════════
@@ -3254,22 +3288,46 @@ function renderCompte() {
   const box = $("compteBox");
   if (!box) return;
   if (!canEdit || !session) { box.innerHTML = ""; return; }
+  const nue = sansAdresse();
   box.innerHTML = `
-    <p class="aide">Compte <b>${esc(session.user.email)}</b>.
-      Tout ce qui est enregistré est visible dans cet onglet et modifiable.
+    <p class="aide">${nue
+      ? `Compte <b>sans adresse électronique</b>. Tout ce qui est enregistré est
+         visible dans cet onglet et modifiable.`
+      : `Compte <b>${esc(session.user.email)}</b>.
+         Tout ce qui est enregistré est visible dans cet onglet et modifiable.`}
       Le détail est dans la
       <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</p>
+    ${nue ? `<div class="zaction pose">
+      <div><b>Ajouter une adresse électronique</b>
+        <em>Ton compte ne tient aujourd'hui qu'à ce navigateur : effacer les données
+          du site l'efface, et il n'y a aucun moyen de le retrouver. Une adresse le
+          rend récupérable, ouvre le fil, les messages et les contacts, et te permet
+          de l'ouvrir sur un autre appareil. Ton planning, tes fiches et tes heures
+          restent exactement là où ils sont.</em></div>
+      <form class="carte mince" id="formLier">
+        <div class="champ"><label class="fl" for="lierEmail">Adresse électronique</label>
+          <input id="lierEmail" type="email" autocomplete="email" required></div>
+        <div class="champ"><label class="fl" for="lierMdp">Mot de passe</label>
+          <input id="lierMdp" type="password" autocomplete="new-password" minlength="8" required>
+          <div class="fl2">8 caractères au minimum.</div></div>
+        <div class="fl2" id="lierEtat"></div>
+        <button class="btn pri" type="submit">Poser mon adresse</button>
+      </form>
+    </div>` : ""}
     <div class="zaction">
       <div><b>Se déconnecter</b>
-        <em>Ferme la session sur cet appareil. Ton planning n'est pas touché.</em></div>
-      <button class="btn" id="deco">Se déconnecter</button>
+        <em>${nue
+          ? `Attention : sans adresse, se déconnecter ferme la seule porte. Ce compte
+             et son planning deviennent inaccessibles, pour de bon.`
+          : `Ferme la session sur cet appareil. Ton planning n'est pas touché.`}</em></div>
+      <button class="btn${nue ? " danger" : ""}" id="deco">Se déconnecter</button>
     </div>
-    <div class="zaction">
+    ${nue ? "" : `<div class="zaction">
       <div><b>Changer mon mot de passe</b>
         <em>Un lien part vers ${esc(session.user.email)}. Il n'y a pas d'autre chemin :
           personne, pas même l'éditeur, ne peut lire ni fixer ton mot de passe.</em></div>
       <button class="btn" id="mdpLien">Recevoir le lien</button>
-    </div>
+    </div>`}
     <div class="zdanger">
       <div><b>Supprimer mon compte</b>
         <em>Efface immédiatement le compte, le planning, le journal, les partages,
@@ -3279,6 +3337,7 @@ function renderCompte() {
     </div>
     <div id="blocages"></div>`;
   renderBlocages();
+  if (nue) brancherLiaison();
   $("deco").onclick = async () => {
     await sb.auth.signOut();
     session = null; moi = null; vue = null; canEdit = false;
@@ -3286,7 +3345,7 @@ function renderCompte() {
     history.replaceState(null, "", location.pathname);
     await lancer();
   };
-  $("mdpLien").onclick = async () => {
+  if (!nue) $("mdpLien").onclick = async () => {
     const b = $("mdpLien");
     b.disabled = true; b.textContent = "Envoi…";
     const { error } = await sb.auth.resetPasswordForEmail(session.user.email,
@@ -3811,6 +3870,7 @@ async function ouvrir(profil) {
   // L'en-tête ne montre plus l'adresse électronique : c'était en donner un
   // morceau à quiconque regarde l'écran par-dessus l'épaule.
   majBoutonCompte();
+  majAccesSansAdresse();
   chargerNouveautes().catch(() => {});
   montrer("appli");
   buildGantt(); buildAcc();
@@ -4164,6 +4224,107 @@ async function verifierNom() {
   zone.textContent = data ? "Ce nom est libre." : "Ce nom est déjà pris. Choisis-en un autre.";
   return Boolean(data);
 }
+
+/* ═════════ COMPTE SANS ADRESSE ═════════
+   On peut se servir de Repère sans donner d'adresse électronique. Ce que ça
+   coûte est net, et l'application le dit avant, pendant et après : le compte ne
+   tient qu'à ce navigateur. Pas d'adresse, donc rien pour le retrouver si le
+   stockage est effacé, et rien pour l'ouvrir sur un autre appareil.
+
+   Ce qui marche : le planning, le minuteur, les fiches, la montagne, les
+   blocages, l'import de son propre agenda, les notifications sur cet appareil.
+   Ce qui ne marche pas : tout ce qui sort du compte — le fil, les messages, les
+   contacts, le classement, publier son planning, envoyer sa demande à quelqu'un.
+
+   Ces refus ne sont pas une affaire d'écran caché : ils sont tenus en base par
+   un déclencheur sur chaque table concernée, qui lit « is_anonymous » dans le
+   jeton. L'interface ne fait que ne pas proposer de portes qui ne s'ouvrent pas. */
+
+const sansAdresse = () => Boolean(session && session.user && session.user.is_anonymous);
+const VUES_ADRESSE = ["fil", "messages", "contacts"];
+
+/** Les sections qui supposent une adresse disparaissent de la barre du bas. */
+function majAccesSansAdresse() {
+  const nue = sansAdresse();
+  const bar = $("sansAdrBar");
+  if (bar) bar.hidden = !nue || !canEdit;
+  document.querySelectorAll("#socle button[data-vue]").forEach((b) => {
+    if (VUES_ADRESSE.includes(b.dataset.vue)) b.hidden = nue;
+  });
+}
+
+async function creerSansAdresse(nom) {
+  messageAuth("Création du compte…", true);
+  const { error } = await sb.auth.signInAnonymously({
+    data: { nom: nom || "Membre", public: false, conditions: "1", modele: modeleChoisi },
+  });
+  if (error) {
+    // Le fournisseur se règle côté Supabase : tant qu'il est fermé, mieux vaut
+    // le dire que de laisser un bouton qui ne fait rien.
+    const ferme = /anonymous|disabled|422/i.test(String(error.message || ""));
+    return messageAuth(ferme
+      ? "Les comptes sans adresse ne sont pas encore ouverts sur ce serveur."
+      : String(error.message || "Création impossible."));
+  }
+  messageAuth("");
+  await lancer();
+}
+
+/** Poser une adresse sur un compte qui n'en avait pas. Rien n'est perdu. */
+function brancherLiaison() {
+  const f = $("formLier");
+  if (!f) return;
+  f.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const etat = $("lierEtat");
+    const email = $("lierEmail").value.trim().toLowerCase();
+    const mdp = $("lierMdp").value;
+    if (mdp.length < 8) { etat.textContent = "Le mot de passe doit faire au moins 8 caractères."; return; }
+    etat.textContent = "Envoi…";
+    const { error } = await sb.auth.updateUser({ email, password: mdp });
+    if (error) {
+      etat.textContent = /already|exists|registered/i.test(String(error.message))
+        ? "Cette adresse est déjà prise par un autre compte."
+        : String(error.message);
+      return;
+    }
+    etat.textContent = "";
+    const { data } = await sb.auth.getSession();
+    session = data.session;
+    // Si le serveur demande une confirmation, le drapeau ne tombe qu'au clic sur
+    // le lien : on ne prétend pas que c'est fait tant que le jeton dit le contraire.
+    const encoreNue = sansAdresse();
+    dialogue({ ton: "info", titre: encoreNue ? "Presque" : "Adresse posée",
+      corps: encoreNue
+        ? `<p>Ouvre le courriel envoyé à <b>${esc(email)}</b> et suis le lien : ton compte
+             sera confirmé et tout s'ouvrira.</p>
+           <p class="petit">Tant que ce n'est pas fait, le compte reste lié à ce
+             navigateur — ne vide pas les données du site.</p>`
+        : `<p>Ton compte a maintenant une adresse. Le fil, les messages et les contacts
+             sont ouverts, et tu peux l'ouvrir sur un autre appareil.</p>
+           <p class="petit">Ton planning, tes fiches et tes heures n'ont pas bougé.</p>` });
+    majAccesSansAdresse();
+    renderCompte(); renderProfil();
+  };
+}
+
+$("insSansAdresse").addEventListener("click", () => {
+  const nom = $("insNom").value.trim();
+  dialogue({
+    ton: "warn",
+    titre: "Un compte sans adresse, c'est un compte sans filet",
+    corps: `<p>Il ne tient qu'à <b>ce navigateur</b>. Si tu effaces les données du site,
+        changes d'appareil ou te déconnectes, le compte et son planning sont perdus —
+        il n'existe aucun moyen de les retrouver, pas même pour nous.</p>
+      <p>Le planning, le minuteur, les fiches et les blocages fonctionnent normalement.
+        Le fil, les messages et les contacts demandent une adresse.</p>
+      <p class="petit">Tu pourras en poser une plus tard, dans « Moi », sans rien perdre.</p>`,
+    actions: [
+      { texte: "Créer sans adresse", pri: true, faire: () => creerSansAdresse(nom) },
+      { texte: "Revenir" },
+    ],
+  });
+});
 
 $("formInscription").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -5175,6 +5336,9 @@ async function chargerCommuns() {
 
 async function publierDispos() {
   if (!session || !canEdit || !plan) return;
+  // Un compte sans adresse ne publie ni créneaux ni heures : la base le refuse,
+  // et tenter quand même ferait une requête perdue à chaque enregistrement.
+  if (sansAdresse()) return;
   const lignes = [];
   const debut = minuitLocal(NOW);
   for (let i = 0; i < 15; i++) {
@@ -5222,7 +5386,11 @@ function entrerEnVisite() {
 
 function routeDepart() {
   modeVisite = false;
+  // On sort peut-être du mode visite, qui ne laissait que « Fil » : on rouvre
+  // tout, puis on laisse majAccesSansAdresse retirer ce qui doit l'être. L'ordre
+  // compte — l'inverse rouvrirait les sections qu'on vient de fermer.
   document.querySelectorAll("#socle button").forEach((b) => (b.hidden = false));
+  majAccesSansAdresse();
   let dernier = null;
   try { dernier = sessionStorage.getItem("ciel.vue"); } catch {}
   if (location.hash.startsWith("#/")) return appliquerRoute();
@@ -5361,6 +5529,11 @@ function mesurerEnTete() {
 addEventListener("resize", mesurerEnTete);
 
 function montrerVue(v, arg) {
+  // Un compte sans adresse n'a pas ces sections : on le ramène à sa journée
+  // plutôt que de lui montrer un panneau qui ne se remplira jamais.
+  if (sansAdresse() && canEdit && (VUES_ADRESSE.includes(v) || v === "conv" || v === "personne")) {
+    return aller("jour", null, { remplacer: true });
+  }
   const def = VUES[v] || VUES.jour;
   vueCourante = v; argCourant = arg;
   if (v === "planning") sousPlanning = VUES.planning.volets.includes(arg) ? arg : sousPlanning;
@@ -5471,7 +5644,8 @@ document.addEventListener("click", (e) => {
   const dm = e.target.closest("[data-dem]");
   if (dm) {
     const [q, id] = dm.dataset.dem.split(":");
-    repondreDemande(id, q === "oui");
+    if (q === "ics") exporterDemande(id);
+    else repondreDemande(id, q === "oui");
     return;
   }
   const a = e.target.closest("[data-aller]");
