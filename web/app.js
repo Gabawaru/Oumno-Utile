@@ -3,7 +3,7 @@ import { MONTHS, MFULL, DOW, DAY, TZ, CNED, EXAM } from "./planning.js";
 import { versGroupes, MODELES, QUINZAINES, COULEURS, depuisModele } from "./modeles.js";
 import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree,
          trouverCreneaux, creneauxTexte, plusLongCreneau, normaliserCapacites,
-         journeeType, REGLES, JOURNEE,
+         journeeType, normaliserRepos, REGLES, JOURNEE, REPOS, URGENCE, AVANCE_MAX,
          hhmm as enHeure, min as enMin, iso as isoJour } from "./planificateur.js";
 import { preparer as preparerImage, deposer as deposerImage,
          recadrer as recadrerImage } from "./photos.js";
@@ -17,6 +17,9 @@ let session = null;      // session Supabase
 let moi = null;          // mon profil
 let vue = null;          // profil consulté
 let capacites = { 0: 2, 1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 3 };
+let repos = [...REPOS];  // jours où l'on ne pose rien : le week-end par défaut
+const NOMS_JOURS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+const auRepos = (j) => repos.includes(Number(j));
 let reports = {};        // échéances repoussées à la main
 let programme = null;    // modèle choisi, ou matières déclarées à la main
 let modeleEnAttente = null;  // modèle retenu à l'inscription, posé à la 1re ouverture
@@ -189,6 +192,7 @@ function appliquerEtat(d){
   events    = d.evenements|| d.events || [];
   grades    = d.notes     || d.grades || {};
   capacites = normaliserCapacites(d.capacites);
+  repos     = [...normaliserRepos(d.repos)].sort();
   reports   = d.reports   || {};
   partJour  = d.partJour  || null;
   demarrageFait = Boolean(d.demarrage);
@@ -202,7 +206,7 @@ function appliquerEtat(d){
   if (minuteur) battre();
 }
 const etat=()=>({done,avance,seances,fiches,bloques,evenements:events,notes:grades,capacites,
-                 reports,partJour,programme,demarrage:demarrageFait});
+                 repos,reports,partJour,programme,demarrage:demarrageFait});
 
 /* ═════════ HEURES POSÉES ═════════
    `done` disait oui ou non. Cocher une tranche d'une heure sur une étape de six
@@ -372,9 +376,12 @@ function renderToday(){
   const reste = jAuj ? jAuj.travailPose : 0;
   const cible = $("dateJour");
   const avant = cible.dataset.reste;
+  // Un jour de repos n'a pas « fait sa part » : il n'en avait pas.
   cible.innerHTML = `${fmtDL(NOW)} — ` + (reste >= 0.05
     ? `<b>${reste} h</b> à faire`
-    : `<b class="fini">part du jour faite</b>`);
+    : jAuj && jAuj.repos
+      ? `<b class="fini">jour de repos</b>`
+      : `<b class="fini">part du jour faite</b>`);
   cible.dataset.reste = String(reste);
   if (avant !== undefined && avant !== String(reste) && !SOBRE.matches) {
     const b = cible.querySelector("b");
@@ -902,18 +909,23 @@ function terrain() {
   const aujourdhui = heuresFaitesLe(isoJour(new Date(NOW)));
   const depuis = joursSansRien();
   const bloquees = heuresBloquees();
+  const jourDeRepos = auRepos(new Date(NOW).getDay());
 
   let allure;
   if (reste <= EPS) allure = "sommet";
   // Tout ce qui reste attend quelqu'un d'autre : ce n'est pas de l'arrêt, et on
   // ne lui met pas sur le dos une pente qu'il n'a pas le droit de gravir.
   else if (bloquees >= reste - EPS) allure = "attente";
+  // Un jour de repos non plus n'est pas un arrêt. Sans ce cas, l'application
+  // reprochait tout le week-end une pause qu'on lui a demandé de réserver.
+  else if (jourDeRepos && aujourdhui <= EPS) allure = "repos";
   else if (depuis >= 1 && aujourdhui <= EPS) allure = "arret";
   else if (raideur >= 2.2) allure = "alpinisme";
   else if (raideur >= 1.25) allure = "montee";
   else allure = "randonnee";
 
   return { reste, fin, requis, capacite, declaree, raideur, allure, bloquees,
+           repos: jourDeRepos,
            aujourdhui, depuis, jours: Math.max(0, (fin - NOW) / DAY),
            part: partFranchie(), suivante: prochaineEtape(),
            faits: ALL.reduce((a, s2) => a + (estFait(s2) ? 1 : 0), 0), total: ALL.length };
@@ -931,7 +943,9 @@ function capaciteDeclaree() {
   } catch { return null; }
 }
 
-/** Jours pleins écoulés depuis la dernière heure posée. */
+/** Jours ouverts écoulés depuis la dernière heure posée. Les jours de repos
+ *  n'en font pas partie : un week-end réservé n'est pas du temps perdu, et le
+ *  compter ferait dire « trois jours sans rien poser » tous les lundis. */
 function joursSansRien() {
   let dernier = null;
   for (const id in avance) {
@@ -940,13 +954,21 @@ function joursSansRien() {
   }
   if (!dernier) return null;
   const t = Date.parse(dernier + "T23:59:59");
-  return Math.max(0, Math.floor((NOW - t) / DAY) + 1);
+  const bruts = Math.max(0, Math.floor((NOW - t) / DAY) + 1);
+  let n = 0;
+  for (let i = 0; i < bruts; i++) {
+    const d = new Date(t + i * DAY);
+    if (!auRepos(d.getDay())) n++;
+  }
+  return n;
 }
 
 const MOTS = {
   sommet: ["Au sommet", "Tout est posé. Il n'y a plus de pente devant toi."],
   attente: ["En attente",
     "Tout ce qui reste attend quelqu'un d'autre. Il s'assoit : relance ton tuteur."],
+  repos: ["Au repos",
+    "C'est ton jour. La pente ne bouge pas d'ici demain, et elle t'attendra."],
   arret: ["Arrêté devant la pente",
     "Tu regardes la montagne en cherchant par où passer. Elle grandit pendant ce temps."],
   alpinisme: ["En alpinisme",
@@ -1128,9 +1150,9 @@ function bonhomme(allure) {
       </g>`);
   }
 
-  if (allure === "attente") {
-    // Assis sur un bloc, une jambe qui balance : il ne peut rien faire d'autre
-    // que d'attendre une réponse.
+  if (allure === "attente" || allure === "repos") {
+    // Assis sur un bloc, une jambe qui balance. Deux situations, la même image :
+    // il attend une réponse, ou c'est son jour de repos.
     return g(`${os("M-12 0h21l-4.5 -8.5h-12z", "rocher")}
       <circle class="tete" cx="-5" cy="-26" r="4"/>
       ${os("M-5 -22l1.5 12.5")}
@@ -2321,7 +2343,7 @@ function replanifier() {
   // Le planificateur raisonnait en heures du référentiel. Il raisonne maintenant
   // en heures réelles : une étape qui coûte 1,4× prend 1,4× de place. Sans ça,
   // la projection annonçait une date que le rythme mesuré contredisait déjà.
-  const base = { etapes: ALL, done, evenements: events, capacites, reports,
+  const base = { etapes: ALL, done, evenements: events, capacites, repos, reports,
                  maintenant: NOW, fin: FIN_ANNEE, reste: restePlanifiable };
   if (!partJour || partJour.date !== cle) {
     const brut = planifier(base);
@@ -2368,10 +2390,13 @@ function renderCal() {
     const evs = evOn(t, tE), scans = scanOn(t, tE);
     const passe = t < minuitLocal(NOW);
     const pleine = b && b.plein;
-    const deborde = b && b.tardif > 0;
+    // Un jour de repos entamé par une urgence se signale comme un débordement :
+    // c'est bien une exception, et elle doit se voir d'un coup d'œil sur le mois.
+    const deborde = b && (b.tardif > 0 || b.urgent > 0);
 
     h += `<div class="day${d.getMonth() !== calCur.getMonth() ? " out" : ""}${
       sameDay(d, auj) ? " today" : ""}${calSel && sameDay(d, calSel) ? " sel" : ""}${
+      b && b.repos ? " repos" : ""}${
       deborde ? " deborde" : pleine ? " pleine" : ""}" data-d="${t}">
       <span class="num">${d.getDate()}</span>
       ${scans.map(() => `<span class="chip ev sys">Scan CNED</span>`).join("")}
@@ -2406,7 +2431,9 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
     ...(b.creneaux || []).filter((s2) => s2[1] - s2[0] >= 30).map((s2) => ({ d: s2[0], f: s2[1], type: "libre" })),
   ].sort((x, y) => x.d - y.d);
 
-  if (!items.length) return `<div class="empty">Journée entièrement libre.</div>`;
+  if (!items.length) return b.repos
+    ? `<div class="empty">Jour de repos. Rien n'y est posé, et rien ne s'y posera.</div>`
+    : `<div class="empty">Journée entièrement libre.</div>`;
   // Une étape peut revenir en deux tranches dans la même journée, coupées par une
   // pause : chacune doit savoir combien d'heures la précèdent.
   const cumulJour = {};
@@ -2451,7 +2478,7 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
       // La ligne porte deux gestes qu'il ne faut pas confondre : cocher ce qui est
       // fait, et ouvrir le minuteur. Un <label> englobant volait le second.
       const mesure = mesureDe(e.id);
-      return `<div class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}${coche ? " coche" : ""}${futur ? " avenir" : ""}" style="--c:${esc(e.g.c)}">
+      return `<div class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}${x.bloc.urgence ? " urgence" : ""}${coche ? " coche" : ""}${futur ? " avenir" : ""}" style="--c:${esc(e.g.c)}">
         <span class="hh">${plage}</span>
         ${futur ? "" : `<label class="zcoche" title="J'ai fait cette tranche">
           <input type="checkbox" class="cb" data-cb="${esc(e.id)}"
@@ -2461,7 +2488,9 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
           ${compact ? "" : `<span class="part">${unH(bh)} sur ${unH(e.h)}${part < 100 ? ` · ${part} %` : ""}${
             fait > 0.01 && fait < e.h - 0.01 ? ` · déjà ${unH(fait)}` : ""}${
             mesure ? ` · <b class="fr">×${mesure.facteur.toFixed(2).replace(".", ",")}</b> pour toi` : ""}</span>`}
-          ${x.bloc.tard ? `<span class="lt">hors horaires</span>` : x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
+          ${x.bloc.urgence ? `<span class="lt">urgent et important</span>`
+            : x.bloc.tard ? `<span class="lt">hors horaires</span>`
+            : x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
           ${e.row.url ? `<a href="${esc(e.row.url)}" target="_blank" rel="noopener">cours ↗</a>` : ""}
         </span>
         ${futur || !canEdit ? "" : `<button class="chrono" data-chrono="${esc(e.id)}"
@@ -2490,7 +2519,8 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
        <div class="frise">${liste.map(ligne).join("")}</div></details>` : "";
   return repli(passes, `${plural(passes.length, "moment")} déjà ${passes.length > 1 ? "passés" : "passé"}`)
     + (vus.length ? `<div class="frise">${vus.map(ligne).join("")}</div>`
-                  : `<div class="empty">Plus rien de prévu aujourd'hui.</div>`)
+                  : `<div class="empty">${b.repos ? "Jour de repos."
+                                                  : "Plus rien de prévu aujourd'hui."}</div>`)
     + repli(apres, `La suite de la journée (${apres.length})`);
 }
 
@@ -2504,9 +2534,13 @@ function renderZone() {
   if (b) {
     const libres = creneauxTexte(b);
     h += `<div class="jlegende">
-      <span><b class="mono">${b.travail} h</b> de travail</span>
+      ${b.repos && b.travail <= 0.01
+        ? `<span class="repos-t"><b>Repos</b> — rien n'est posé ce jour-là</span>`
+        : `<span><b class="mono">${b.travail} h</b> de travail</span>`}
       ${b.occupe > 0 ? `<span class="occ-t"><b class="mono">${b.occupe} h</b> d'événements</span>` : ""}
       ${b.tardif > 0 ? `<span class="tard-t"><b class="mono">${b.tardif} h</b> hors horaires</span>` : ""}
+      ${b.urgent > 0 ? `<span class="tard-t"><b class="mono">${b.urgent} h</b> sur ton repos —
+        urgent et important</span>` : ""}
       <span class="lib-t">Libre : ${libres.length ? libres.join(" · ") : "rien"}</span>
     </div>`;
   }
@@ -2549,7 +2583,7 @@ function nouvelEvenement() {
 function baseplan() {
   const cle = isoJour(new Date(NOW));
   return {
-    etapes: ALL, done, evenements: events, capacites, reports,
+    etapes: ALL, done, evenements: events, capacites, repos, reports,
     plafonds: partJour && partJour.date === cle
       ? { [cle]: Math.max(0, partJour.h - heuresFaitesLe(cle)) } : {},
     maintenant: NOW, fin: FIN_ANNEE,
@@ -2651,15 +2685,24 @@ function ajouter(force) {
 /* ═════════ CAPACITÉS ═════════ */
 function renderCapacites() {
   const box = $("caps"); if (!box) return;
-  const noms = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-  const total = [0,1,2,3,4,5,6].reduce((a, j) =>
-    a + (capacites[j] || []).reduce((x, s2) => x + (enMin(s2[1]) - enMin(s2[0])) / 60, 0), 0);
+  const heuresDe = (j) => (capacites[j] || []).reduce((x, s2) => x + (enMin(s2[1]) - enMin(s2[0])) / 60, 0);
+  // Les jours de repos ne comptent pas dans le total : c'est le nombre d'heures
+  // sur lesquelles le planning peut vraiment compter qu'on veut lire ici.
+  const total = [0,1,2,3,4,5,6].reduce((a, j) => a + (auRepos(j) ? 0 : heuresDe(j)), 0);
+  const noms = NOMS_JOURS;
   box.innerHTML = [1,2,3,4,5,6,0].map((j) => {
     const txt = (capacites[j] || []).map((s2) => `${s2[0]}-${s2[1]}`).join(", ");
-    const h = (capacites[j] || []).reduce((x, s2) => x + (enMin(s2[1]) - enMin(s2[0])) / 60, 0);
-    return `<label class="cap"><span>${noms[j]}</span>
+    const off = auRepos(j);
+    const h = heuresDe(j);
+    return `<div class="cap${off ? " off" : ""}">
+      <span class="jr">${noms[j]}</span>
+      <label class="rep" title="Aucune heure de travail n'est posée ce jour-là">
+        <input type="checkbox" data-repos="${j}"${off ? " checked" : ""}${canEdit ? "" : " disabled"}>
+        <span>repos</span></label>
       <input type="text" data-cap="${j}" value="${txt}" placeholder="09:00-12:00, 14:00-18:00"
-        ${canEdit ? "" : "disabled"}> <em>${h ? h.toFixed(1).replace(".0","") + " h" : "—"}</em></label>`;
+        ${canEdit && !off ? "" : "disabled"}>
+      <em>${off ? "repos" : h ? h.toFixed(1).replace(".0","") + " h" : "—"}</em>
+    </div>`;
   }).join("") +
     `<div class="captot">Soit <b class="mono">${total.toFixed(1).replace(".0","")} h</b> déclarées
       par semaine — un peu moins une fois les pauses déduites : ${REGLES.pause} min après chaque
@@ -2667,18 +2710,26 @@ function renderCapacites() {
       <div class="petit">Ce qui n'y tient pas glisse sur des heures inhabituelles
       (jusqu'à ${JOURNEE[1]}), et seulement en rattrapage. Le reste de la journée
       ${JOURNEE[0]}–${JOURNEE[1]} apparaît comme temps libre pour ton entourage.</div>
-      ${canEdit ? `<button class="btn" id="capType">Revenir à la journée type 9 h – 16 h</button>` : ""}
+      <div class="petit">Un jour coché <b>repos</b> ne reçoit rien : ni travail, ni soirée de
+      rattrapage. Une seule chose peut l'ouvrir, et jamais plus de ${URGENCE.max} h : une étape
+      <b>à la fois urgente et importante</b> — un devoir noté dont l'échéance est passée ou
+      tombe dans les ${URGENCE.jours} jours. Important mais pas urgent attend lundi.</div>
+      <div class="petit">Pour éviter d'avoir un mois vide à côté d'un mois plein, une étape peut
+      démarrer jusqu'à ${AVANCE_MAX / 7} semaines avant sa date prévue. Son échéance, elle, ne
+      bouge pas.</div>
+      ${canEdit ? `<button class="btn" id="capType">Revenir à la semaine type</button>` : ""}
     </div>`;
   const bt = $("capType");
   if (bt) bt.onclick = () => dialogue({
-    ton: "warn", titre: "Revenir à la journée type ?",
-    corps: `<p>Lundi au vendredi 9 h – 12 h 15 et 13 h 15 – 16 h, samedi matin,
-      dimanche au repos. Tes plages actuelles seront remplacées.</p>`,
+    ton: "warn", titre: "Revenir à la semaine type ?",
+    corps: `<p>Lundi au vendredi 9 h – 12 h 15 et 13 h 15 – 16 h. Samedi et dimanche au repos.
+      Tes plages et tes jours de repos actuels seront remplacés.</p>`,
     actions: [
       { texte: "Annuler", pri: true },
       { texte: "Remplacer", faire: () => {
           capacites = journeeType();
-          log("a repris la journée type 9 h – 16 h");
+          repos = [...REPOS];
+          log("a repris la semaine type 9 h – 16 h, week-end au repos");
           saveState(); renderAll();
         } },
     ],
@@ -5410,9 +5461,20 @@ document.addEventListener("input", (e) => {
   if (c && canEdit) {
     differer("capacites:" + c.dataset.cap, 700, () => {
       capacites[c.dataset.cap] = lirePlages(c.value);
-      log(`a modifié ses heures de travail du ${["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"][c.dataset.cap]}`);
+      log(`a modifié ses heures de travail du ${NOMS_JOURS[c.dataset.cap].toLowerCase()}`);
       saveState(); renderAll();
     });
+  }
+  const r = e.target.closest("input[data-repos]");
+  if (r && canEdit) {
+    const j = Number(r.dataset.repos);
+    repos = r.checked ? [...new Set([...repos, j])].sort() : repos.filter((x) => x !== j);
+    // La part du jour a été arrêtée sous l'ancien réglage ; elle ne veut plus
+    // rien dire. Sans ça, rouvrir aujourd'hui le laissait vide jusqu'à minuit.
+    partJour = null;
+    log(r.checked ? `a mis son ${NOMS_JOURS[j].toLowerCase()} au repos`
+                  : `a rouvert son ${NOMS_JOURS[j].toLowerCase()}`);
+    saveState(); renderAll();
   }
 });
 document.addEventListener("click", (e) => {

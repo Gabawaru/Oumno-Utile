@@ -27,6 +27,32 @@ export const REPAS = [["12:15", "13:15"]];
  *  faux. Ce qui dépasse remonte en alerte plutôt que d'être posé. */
 export const MAX_RATTRAPAGE = 2.5;
 
+/** Jours de repos, le week-end par défaut. On ne s'y repose pas « s'il reste du
+ *  temps » : aucune heure n'y est posée, ni en journée ni le soir. La seule
+ *  porte qui reste est la réserve ci-dessous. */
+export const REPOS = [0, 6];
+
+/** Matrice d'Eisenhower. Seul le quadrant 1 — urgent ET important — ouvre un
+ *  jour de repos. Important : ce qui est noté (devoir, évaluation) ou marqué
+ *  comme tel. Urgent : l'échéance est passée, ou elle tombe dans les sept
+ *  jours. Important sans urgence attend lundi ; urgent sans importance n'a
+ *  jamais mérité un dimanche. La réserve se prend le matin, et elle est
+ *  plafonnée : un week-end sauvé n'est pas un week-end travaillé. */
+export const URGENCE = { jours: 7, max: 3, plage: ["09:00", "19:00"] };
+export const importante = (e) => Boolean(e && (e.dev || e.important));
+export const urgente = (ech, maintenant) => ech - maintenant <= URGENCE.jours * DAY;
+export const quadrant1 = (e, ech, maintenant) => importante(e) && urgente(ech, maintenant);
+
+/** Prendre de l'avance, oui — pas six mois. Une étape peut commencer jusqu'à
+ *  quatre semaines avant sa date prévue : de quoi vider un mois creux dans le
+ *  mois plein qui suit, sans réviser un cours qu'on n'a pas encore lu. */
+export const AVANCE_MAX = 28;
+
+/** Une journée prise en avance doit être franchement plus légère que celles de
+ *  la fenêtre, sinon on reste chez soi. Sans ce seuil, un écart d'arrondi
+ *  suffirait à sortir de la période prévue. */
+export const PREFERENCE = 0.75;
+
 export const iso = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -96,10 +122,18 @@ export const TYPE = {
   0: [],                          // dimanche au repos
   1: [MATIN, APREM], 2: [MATIN, APREM], 3: [MATIN, APREM],
   4: [MATIN, APREM], 5: [MATIN, APREM],
-  6: [MATIN],                     // samedi matin
+  6: [],                          // samedi au repos
 };
 /** Journée type, prête à être enregistrée dans les réglages. */
 export const journeeType = () => JSON.parse(JSON.stringify(TYPE));
+
+/** Jours de repos déclarés → ensemble d'indices sûrs. Une liste vide est un
+ *  choix (travailler sept jours sur sept) ; seul l'absence de liste rend la
+ *  valeur par défaut. */
+export function normaliserRepos(v) {
+  if (!Array.isArray(v)) return new Set(REPOS);
+  return new Set(v.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6));
+}
 
 /** Ancien format (un nombre d'heures par jour) → plages, pour ne rien perdre. */
 export function normaliserCapacites(cap) {
@@ -143,7 +177,8 @@ function materialiser(restant, file) {
     const s = restant[i];
     if (s[1] - s[0] < REGLES.minBloc) { i++; session = 0; continue; }
     const t = Math.min(p.reste, REGLES.session - session, s[1] - s[0]);
-    blocs.push({ etape: p.etape, debut: s[0], fin: s[0] + t, retard: p.retard, tard: p.tard });
+    blocs.push({ etape: p.etape, debut: s[0], fin: s[0] + t,
+                 retard: p.retard, tard: p.tard, urgence: p.urgence });
     s[0] += t; p.reste -= t; session += t;
     if (p.reste <= 0.5) k++;
     if (session >= REGLES.session - 0.5) {
@@ -163,9 +198,11 @@ export function capaciteTravail(segs) {
 }
 
 /* ── grille des jours ──────────────────────────────────── */
-export function grille(debut, fin, capacites, evenements) {
+export function grille(debut, fin, capacites, evenements, repos) {
   const cap = normaliserCapacites(capacites);
+  const auRepos = normaliserRepos(repos);
   const vie = [[min(JOURNEE[0]), min(JOURNEE[1])]];
+  const reserve = [[min(URGENCE.plage[0]), min(URGENCE.plage[1])]];
   const repas = REPAS.map((s) => [min(s[0]), min(s[1])]);
   const parJour = new Map();
   for (const e of evenements || []) {
@@ -178,23 +215,35 @@ export function grille(debut, fin, capacites, evenements) {
     const cle = iso(d);
     const evs = (parJour.get(cle) || []).sort((a, b) => a.plage[0] - b.plage[0]);
     const occupees = evs.map((e) => e.plage);
-    const travail = segmentsJour(cap, d.getDay());
+    const repose = auRepos.has(d.getDay());
+    // Un jour de repos n'a ni heures de travail ni soirée de rattrapage. Ses
+    // plages déclarées sont ignorées : c'est le repos qui décide, pas l'oubli
+    // d'avoir vidé la case samedi.
+    const travail = repose ? [] : segmentsJour(cap, d.getDay());
     const dispo = soustraire(travail, occupees);
     // Heures inhabituelles : tout le reste de la journée vécue, repas exclu.
     // On n'y pose du travail qu'en dernier recours, et le plus tard possible :
     // le rattrapage se fait le soir, jamais au petit matin s'il y a le choix.
-    const rallonge = ordreRattrapage(soustraire(vie, [...occupees, ...travail, ...repas]), travail);
+    const rallonge = repose ? []
+      : ordreRattrapage(soustraire(vie, [...occupees, ...travail, ...repas]), travail);
+    // La réserve du jour de repos, elle, se prend dans l'ordre du matin : si un
+    // devoir en retard doit manger un samedi, autant que le reste du jour soit
+    // rendu entier.
+    const secours = repose ? soustraire(reserve, [...occupees, ...repas]) : [];
     jours.set(cle, {
-      cle, t, jourSemaine: d.getDay(),
+      cle, t, jourSemaine: d.getDay(), repos: repose,
       evenements: evs,
       plagesTravail: travail,   // plages déclarées pour travailler
       dispo,                    // ce qu'il en reste après les événements
       rallonge,                 // heures inhabituelles, réservées au rattrapage
+      secours,                  // jour de repos : réservé au quadrant 1
       restant: copie(dispo),
       restantRallonge: copie(rallonge),
+      restantSecours: copie(secours),
       blocs: [], pauses: [],
       cap: capaciteTravail(dispo),
       capRallonge: Math.min(capaciteTravail(rallonge), MAX_RATTRAPAGE),
+      capUrgence: Math.min(capaciteTravail(secours), URGENCE.max),
       occupe: arrondi(heures(occupees)),
       perdu: arrondi(heures(travail) - heures(dispo)),
     });
@@ -204,12 +253,20 @@ export function grille(debut, fin, capacites, evenements) {
 
 /* ── répartition ───────────────────────────────────────── */
 /**
- * Deux passages. Le premier étale les étapes sur leurs heures normales, à parts
- * égales sur toute leur fenêtre plutôt qu'empilées au plus tôt. Le second
- * reprend ce qui n'y tient pas et le pose au plus tôt sur les heures
- * inhabituelles : le retard se rattrape le soir, pas en repoussant l'échéance.
- * Ce qui ne tient toujours nulle part remonte dans `manques` — c'est le signal
- * que le planning est devenu intenable.
+ * Trois passages, du plus souhaitable au moins souhaitable.
+ *
+ *   1. Les heures normales, en égalisant la charge des jours : on remplit
+ *      d'abord les moins chargés. Une étape peut mordre jusqu'à `AVANCE_MAX`
+ *      jours avant sa date prévue — c'est ce qui vide un mois creux dans le
+ *      mois plein qui le suit, au lieu de laisser les deux côte à côte.
+ *   2. Les heures inhabituelles du soir, au plus tôt : le retard se rattrape,
+ *      il ne repousse pas l'échéance.
+ *   3. La réserve des jours de repos, et seulement pour le quadrant 1 de la
+ *      matrice d'Eisenhower — urgent ET important. Tout le reste attend lundi.
+ *
+ * Ce qui ne tient toujours nulle part remonte dans `manques` : c'est le signal
+ * que le planning est devenu intenable, et il vaut mieux le lire que de le
+ * noyer dans un dimanche.
  */
 /**
  * `reste(etape)` dit combien d'heures il faut encore poser. Sans lui, une étape
@@ -217,12 +274,13 @@ export function grille(debut, fin, capacites, evenements) {
  * faites. Par défaut, une étape cochée dans `done` ne reste pas à faire.
  */
 export function planifier({ etapes, done, evenements, capacites, reports = {},
-                            plafonds = {}, maintenant, fin, reste }) {
+                            plafonds = {}, maintenant, fin, reste, repos }) {
   const restant = reste || ((s) => (done[s.id] ? 0 : s.h));
-  const jours = grille(maintenant, fin, capacites, evenements);
+  const jours = grille(maintenant, fin, capacites, evenements, repos);
   const cles = [...jours.keys()];
   const libre = new Map(cles.map((c) => [c, jours.get(c).cap]));
   const extra = new Map(cles.map((c) => [c, jours.get(c).capRallonge]));
+  const reserve = new Map(cles.map((c) => [c, jours.get(c).capUrgence]));
 
   // Part du jour : une journée dont le quota est fixé ne se remplit pas parce
   // qu'on l'a terminée. Ce qui n'y tient plus part sur les jours suivants.
@@ -230,10 +288,13 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
     const j = jours.get(cle);
     if (!j) continue;
     const n = Math.max(0, Math.min(j.cap, h));
+    const r = Math.max(0, Math.min(j.capRallonge, h - n));
     libre.set(cle, n);
-    extra.set(cle, Math.max(0, Math.min(j.capRallonge, h - n)));
+    extra.set(cle, r);
+    reserve.set(cle, Math.max(0, Math.min(j.capUrgence, h - n - r)));
     j.cap = n;
-    j.capRallonge = extra.get(cle);
+    j.capRallonge = r;
+    j.capUrgence = reserve.get(cle);
     j.plafonne = true;
   }
 
@@ -250,34 +311,54 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
   const debordent = [];
   for (const t of restantes) {
     const enRetard = t.ech < maintenant;
-    const depart = minuit(Math.max(maintenant, t.etape.t0 ?? maintenant));
+    const prevu = minuit(t.etape.t0 ?? maintenant);
+    // La date prévue n'est plus un mur : on peut la devancer de quatre semaines
+    // au plus. L'échéance, elle, reste un mur.
+    const depart = Math.max(minuit(maintenant), prevu - AVANCE_MAX * DAY);
     const fenetre = cles.filter((c) => {
       const j = jours.get(c);
       return j.t >= depart && (enRetard || j.t <= t.ech);
     });
-    const reste = etaler(libre, parts, fenetre, t.etape, t.h, enRetard);
+    const reste = etaler(libre, jours, parts, fenetre, t.etape, t.h, enRetard, prevu);
     if (reste > 0.01) debordent.push({ etape: t.etape, h: reste, ech: t.ech, enRetard, depart });
   }
 
   // Second passage : les heures inhabituelles, au plus tôt.
-  const manques = [];
+  const trainent = [];
   let tardif = 0;
   for (const d of debordent) {
     const fenetre = cles.filter((c) => jours.get(c).t >= d.depart);
-    const reste = auPlusTot(extra, parts, fenetre, d.etape, d.h, d.enRetard);
+    const reste = auPlusTot(extra, parts, fenetre, d.etape, d.h, d.enRetard, "tard");
     tardif += d.h - reste;
+    if (reste > 0.01) trainent.push({ ...d, h: arrondi(reste) });
+  }
+
+  // Troisième passage : le week-end, et uniquement pour le quadrant 1. Une
+  // étape qui n'est pas à la fois urgente et importante préfère manquer que
+  // manger un jour de repos — c'est le manque qu'il faut voir, pas le dimanche.
+  const manques = [];
+  let weekend = 0;
+  for (const d of trainent) {
+    if (!quadrant1(d.etape, d.ech, maintenant)) {
+      manques.push({ etape: d.etape, h: d.h, ech: d.ech, enRetard: d.enRetard });
+      continue;
+    }
+    const fenetre = cles.filter((c) => jours.get(c).repos && jours.get(c).t >= d.depart);
+    const reste = auPlusTot(reserve, parts, fenetre, d.etape, d.h, d.enRetard, "urgence");
+    weekend += d.h - reste;
     if (reste > 0.01) manques.push({ etape: d.etape, h: arrondi(reste), ech: d.ech, enRetard: d.enRetard });
   }
 
   // Les heures deviennent des plages concrètes, dans l'ordre de la journée.
   for (const [cle, liste] of parts) {
     const j = jours.get(cle);
-    const normal = liste.filter((p) => !p.tard).map((p) => ({ ...p, reste: p.h * 60 }));
-    const tard = liste.filter((p) => p.tard).map((p) => ({ ...p, reste: p.h * 60 }));
-    const a = materialiser(j.restant, normal);
-    const b = materialiser(j.restantRallonge, tard);
-    j.blocs = [...a.blocs, ...b.blocs].filter((x) => x.fin - x.debut >= 5).sort((x, y) => x.debut - y.debut);
-    j.pauses = [...a.pauses, ...b.pauses].sort((x, y) => x[0] - y[0]);
+    const file = (garder) => liste.filter(garder).map((p) => ({ ...p, reste: p.h * 60 }));
+    const a = materialiser(j.restant, file((p) => !p.tard && !p.urgence));
+    const b = materialiser(j.restantRallonge, file((p) => p.tard));
+    const c = materialiser(j.restantSecours, file((p) => p.urgence));
+    j.blocs = [...a.blocs, ...b.blocs, ...c.blocs]
+      .filter((x) => x.fin - x.debut >= 5).sort((x, y) => x.debut - y.debut);
+    j.pauses = [...a.pauses, ...b.pauses, ...c.pauses].sort((x, y) => x[0] - y[0]);
   }
   // Les heures déjà écoulées ne sont pas du temps libre : à 21 h, personne n'est
   // disponible « de 12 h 15 à 13 h 15 ». On les retire de la journée en cours.
@@ -287,17 +368,21 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
   for (const j of jours.values()) {
     j.travailPose = arrondi(j.blocs.reduce((a, b) => a + (b.fin - b.debut) / 60, 0));
     j.tardif = arrondi(j.blocs.filter((b) => b.tard).reduce((a, b) => a + (b.fin - b.debut) / 60, 0));
+    j.urgent = arrondi(j.blocs.filter((b) => b.urgence).reduce((a, b) => a + (b.fin - b.debut) / 60, 0));
     j.libre = arrondi(capaciteTravail(j.restant));
     j.libreRallonge = arrondi(Math.max(0, j.capRallonge - j.tardif));
     j.plein = j.cap > 0 && j.libre <= 0.01;
-    j.sature = j.libre <= 0.01 && j.libreRallonge <= 0.01;
+    // Un jour de repos n'est pas saturé : il est fermé. Les confondre ferait
+    // dire à l'application « tes journées suivantes sont pleines » un vendredi
+    // soir, alors qu'il ne s'agit que du week-end.
+    j.sature = !j.repos && j.libre <= 0.01 && j.libreRallonge <= 0.01;
     j.creneaux = soustraire(
       [[min(JOURNEE[0]), min(JOURNEE[1])]],
       [...j.evenements.map((e) => e.plage), ...j.blocs.map((b) => [b.debut, b.fin]), ...j.pauses,
        ...(j.cle === cleAuj ? [[0, dejaPasse]] : [])]
     );
   }
-  return { jours, manques, tardif: arrondi(tardif) };
+  return { jours, manques, tardif: arrondi(tardif), weekend: arrondi(weekend) };
 }
 
 /** Plus petite tranche de travail qu'on accepte de poser dans une journée.
@@ -305,52 +390,71 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
  *  minutes : juste, mais illisible et intravaillable. */
 export const GRAIN = 1;
 
-/** `n` jours répartis sur toute la liste, premier et dernier compris. */
-function echantillon(liste, n) {
-  if (n >= liste.length) return liste;
-  if (n <= 1) return [liste[0]];
-  const out = [];
-  for (let i = 0; i < n; i++) out.push(liste[Math.round((i * (liste.length - 1)) / (n - 1))]);
-  return [...new Set(out)];
-}
-
 /**
- * Étale `h` heures sur la fenêtre — mais par tranches d'au moins `GRAIN`,
- * posées sur des jours répartis d'un bout à l'autre plutôt que sur les
- * premiers. On garde l'étalement sans le saupoudrage.
+ * Étale `h` heures sur la fenêtre en égalisant la charge : on sert d'abord les
+ * jours les moins chargés, jusqu'à ce qu'ils rejoignent les autres. C'est la
+ * différence entre « chaque étape sur sa période » et « le même poids chaque
+ * jour » : la première laisse un novembre à 33 h à côté d'un décembre à 126 h,
+ * la seconde non.
+ *
+ * Deux garde-fous. `GRAIN` limite le nombre de jours servis en un tour — sans
+ * lui, étaler 1 h sur trois mois donne des blocs de deux minutes. `PREFERENCE`
+ * alourdit les jours situés avant la date prévue de l'étape : on ne prend de
+ * l'avance que sur un jour franchement plus léger.
  */
-function etaler(libre, parts, fenetre, etape, h, retard) {
+function etaler(libre, jours, parts, fenetre, etape, h, retard, prevu = 0) {
+  const charge = (c) =>
+    jours.get(c).cap - libre.get(c) + (jours.get(c).t < prevu ? PREFERENCE : 0);
   let reste = h;
-  let seuil = GRAIN / 2;
   while (reste > 0.01) {
-    let ouverts = fenetre.filter((c) => libre.get(c) > seuil);
-    if (!ouverts.length) {
-      if (seuil <= 0.002) break;
-      seuil = 0.002;            // dernier tour : on ramasse les miettes
-      continue;
-    }
+    const ouverts = fenetre.filter((c) => libre.get(c) > 0.002);
+    if (!ouverts.length) break;
     const n = Math.max(1, Math.min(ouverts.length, Math.round(reste / GRAIN)));
-    const choisis = echantillon(ouverts, n);
-    const part = reste / choisis.length;
-    let place = 0;
-    for (const cle of choisis) {
-      const dispo = libre.get(cle);
-      const pris = Math.min(part, dispo);
-      if (pris > 0.002) {
-        libre.set(cle, dispo - pris);
-        if (!parts.has(cle)) parts.set(cle, []);
-        parts.get(cle).push({ etape, h: pris, retard });
-        place += pris;
-      }
-    }
-    reste -= place;
-    if (place < 0.001) break;
+    const choisis = ouverts
+      .map((c) => [c, charge(c)])
+      .sort((a, b) => (a[1] - b[1]) || (a[0] < b[0] ? -1 : 1))
+      .slice(0, n)
+      .map((x) => x[0]);
+    const pose = niveler(libre, charge, parts, choisis, etape, reste, retard);
+    if (pose < 0.001) break;
+    reste -= pose;
   }
   return arrondi(Math.max(0, reste));
 }
 
+/**
+ * Verse jusqu'à `h` heures sur `choisis` en les montant tous au même niveau de
+ * charge — le niveau se cherche par dichotomie, puisque chaque jour plafonne à
+ * sa propre capacité. Rend ce qui a été posé.
+ */
+function niveler(libre, charge, parts, choisis, etape, h, retard) {
+  const dispo = choisis.reduce((a, c) => a + libre.get(c), 0);
+  let niveau = Infinity;                    // tout rentre : on prend tout
+  if (dispo > h + 0.002) {
+    let bas = 0, haut = Math.max(...choisis.map((c) => charge(c) + libre.get(c)));
+    for (let i = 0; i < 60; i++) {
+      const m = (bas + haut) / 2;
+      const somme = choisis.reduce(
+        (a, c) => a + Math.min(libre.get(c), Math.max(0, m - charge(c))), 0);
+      if (somme < h) bas = m; else haut = m;
+    }
+    niveau = (bas + haut) / 2;
+  }
+  let pose = 0;
+  for (const cle of choisis) {
+    const pris = Math.min(libre.get(cle), h - pose,
+                          niveau === Infinity ? Infinity : Math.max(0, niveau - charge(cle)));
+    if (!(pris > 0.002)) continue;
+    libre.set(cle, libre.get(cle) - pris);
+    if (!parts.has(cle)) parts.set(cle, []);
+    parts.get(cle).push({ etape, h: pris, retard });
+    pose += pris;
+  }
+  return pose;
+}
+
 /** Remplit les jours dans l'ordre, sans étaler : le rattrapage se fait vite. */
-function auPlusTot(libre, parts, fenetre, etape, h, retard) {
+function auPlusTot(libre, parts, fenetre, etape, h, retard, canal) {
   let reste = h;
   for (const cle of fenetre) {
     if (reste <= 0.01) break;
@@ -359,7 +463,8 @@ function auPlusTot(libre, parts, fenetre, etape, h, retard) {
     const pris = Math.min(reste, dispo);
     libre.set(cle, dispo - pris);
     if (!parts.has(cle)) parts.set(cle, []);
-    parts.get(cle).push({ etape, h: pris, retard, tard: true });
+    parts.get(cle).push({ etape, h: pris, retard,
+                          tard: canal === "tard", urgence: canal === "urgence" });
     reste -= pris;
   }
   return arrondi(Math.max(0, reste));

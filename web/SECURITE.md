@@ -97,6 +97,11 @@ Les liens saisis passent par `lienSur()`, qui n'accepte que `http:` et `https:`
 après analyse par `URL` — pas par comparaison de chaîne, sinon `JaVaScRiPt:` et
 `java\tscript:` passeraient.
 
+Les **jours de repos** suivent la même règle : `normaliserRepos()` ne garde que
+des entiers de 0 à 6, et rien de ce qui en sort n'atteint un gabarit — seulement
+un booléen par jour. Un `repos` empoisonné en base ne peut donc que fermer ou
+ouvrir des journées du planning de son propre propriétaire.
+
 ### En-têtes HTTP
 
 Posés dans `vercel.json`, sur toutes les routes :

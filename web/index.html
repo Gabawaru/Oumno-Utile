@@ -263,6 +263,9 @@ form.carte button[type=submit]{margin-top:.3rem}
 /* ── charge des jours dans le calendrier ────────────── */
 .day.pleine{background:color-mix(in srgb,var(--warn) 7%,var(--card))}
 .day.deborde{background:color-mix(in srgb,var(--late) 9%,var(--card))}
+/* Un jour de repos n'est ni plein ni vide : il est fermé, et ça se lit. */
+.day.repos{background:repeating-linear-gradient(135deg,transparent 0 5px,
+  color-mix(in srgb,var(--ink3) 7%,transparent) 5px 10px)}
 .charge{display:block;height:3px;background:var(--rule2);margin-top:auto;overflow:hidden}
 .charge i{display:block;height:100%;background:var(--ok)}
 .day.pleine .charge i{background:var(--warn)}
@@ -283,12 +286,25 @@ form.carte button[type=submit]{margin-top:.3rem}
 .qitem.retard{box-shadow:inset 3px 0 0 var(--late)}
 
 /* ── réglages ───────────────────────────────────────── */
-.caps{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.4rem}
-label.cap{display:flex;align-items:center;gap:.4rem;font-size:.76rem;color:var(--ink2);
-  background:var(--sunk);padding:.35rem .5rem}
-label.cap span{flex:1}
-label.cap input{width:62px;text-align:right;font-family:"IBM Plex Mono",monospace}
-label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--ink3);font-style:normal}
+.caps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.4rem}
+/* Deux lignes fixes : le jour et sa bascule au-dessus, la plage et son total
+   en dessous. En flex, « Dimanche » passait à la ligne tout seul et la carte
+   devenait plus haute que ses voisines. */
+.cap{display:grid;grid-template-columns:1fr auto;align-items:center;gap:.2rem .4rem;
+  font-size:.76rem;color:var(--ink2);background:var(--sunk);padding:.35rem .5rem}
+.cap .jr{grid-column:1}
+.cap .rep{grid-column:2;justify-self:end}
+.cap input[type=text]{grid-column:1;min-width:0;width:100%;text-align:left;
+  font-family:"IBM Plex Mono",monospace;font-size:.72rem}
+.cap em{grid-column:2;justify-self:end;font-family:"IBM Plex Mono",monospace;
+  font-size:.68rem;color:var(--ink3);font-style:normal}
+.cap.off{box-shadow:inset 3px 0 0 var(--ok)}
+.cap.off .jr,.cap.off em{color:var(--ok)}
+.cap.off input[type=text]{opacity:.4}
+.cap .rep{display:flex;align-items:center;gap:.25rem;cursor:pointer;font-size:.66rem;
+  text-transform:uppercase;letter-spacing:.05em;color:var(--ink3)}
+.cap .rep input{accent-color:var(--ok);width:14px;height:14px}
+.cap.off .rep{color:var(--ok)}
 .durees{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem}
 .durees .btn{font-size:.72rem;text-transform:none;letter-spacing:0;padding:.35rem .7rem}
 .resume{display:flex;flex-wrap:wrap;gap:.5rem 1.6rem;background:var(--sunk);padding:.7rem .8rem;
@@ -334,9 +350,6 @@ label.cap em{font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--
 .jourlibre .quand em{display:block;font-style:normal;font-size:.66rem;color:var(--ink3);font-weight:400}
 .jourlibre .detail b{color:var(--ok)}
 .dep{display:block;font-size:.7rem;color:var(--ink3);margin-top:.1rem}
-label.cap input[type=text]{width:auto;flex:1;min-width:150px;font-family:"IBM Plex Mono",monospace;
-  font-size:.72rem;text-align:left}
-label.cap{flex-wrap:wrap}
 .visi{display:grid;gap:.4rem;max-width:560px}
 .visi .opt{display:flex;gap:.55rem;align-items:flex-start;padding:.6rem .7rem;background:var(--sunk);
   border-left:3px solid transparent;cursor:pointer}
@@ -389,6 +402,12 @@ label.cap{flex-wrap:wrap}
 .ligne.pausep{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 7%,var(--sunk))}
 .ligne.trav.tardif{background:color-mix(in srgb,var(--warn) 9%,var(--sunk))}
 .ligne.trav.tardif .lt{color:var(--warn)}
+/* Une tranche posée sur un jour de repos : elle a passé les deux portes de la
+   matrice d'Eisenhower, et elle doit se voir comme une exception. */
+.ligne.trav.urgence{background:color-mix(in srgb,var(--late) 11%,var(--sunk));
+  box-shadow:inset 3px 0 0 var(--late)}
+.ligne.trav.urgence .lt{color:var(--late)}
+.jlegende .repos-t{color:var(--ok)}
 .ligne .lt{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.06em;
   text-transform:uppercase;color:var(--late);font-weight:600}
 .jlegende .tard-t{color:var(--warn)}
@@ -496,6 +515,10 @@ label.cap{flex-wrap:wrap}
   --c2:color-mix(in srgb,var(--ink3) 4%,transparent)}
 .montbloc.all-attente{--c1:color-mix(in srgb,var(--warn) 26%,transparent);
   --c2:color-mix(in srgb,var(--warn) 4%,transparent)}
+/* Le repos porte la couleur du calme, pas celle de l'alerte : c'est un jour
+   qui se passe comme prévu. */
+.montbloc.all-repos{--c1:color-mix(in srgb,var(--ok) 20%,transparent);
+  --c2:color-mix(in srgb,var(--ok) 3%,transparent)}
 .montbloc.all-randonnee,.montbloc.all-sommet{--c1:color-mix(in srgb,var(--ok) 26%,transparent);
   --c2:color-mix(in srgb,var(--ok) 4%,transparent)}
 .mont{width:100%;height:auto;display:block;overflow:visible}
@@ -504,6 +527,7 @@ label.cap{flex-wrap:wrap}
 .mont .crete{fill:none;stroke:var(--ink3);stroke-width:1.6;stroke-linejoin:round;opacity:.75}
 .mont.all-alpinisme .crete{stroke:var(--late)}
 .mont.all-attente .crete{stroke:var(--warn)}
+.mont.all-repos .crete{stroke:var(--ok)}
 .mont.all-montee .crete{stroke:var(--sig)}
 .mont.all-randonnee .crete,.mont.all-sommet .crete{stroke:var(--ok)}
 /* Le chemin déjà sous ses pieds : ce qu'on a franchi se voit. */
@@ -553,7 +577,8 @@ label.cap{flex-wrap:wrap}
 .mont .rando.all-randonnee,.mont .rando.all-montee{animation:marche 1.6s ease-in-out infinite}
 .mont .rando.all-montee{animation-duration:2.4s}
 .mont .rando.all-alpinisme{animation:hisse 2.4s ease-in-out infinite}
-.mont .rando.all-arret,.mont .rando.all-attente{animation:souffle 3.8s ease-in-out infinite}
+.mont .rando.all-arret,.mont .rando.all-attente,
+.mont .rando.all-repos{animation:souffle 3.8s ease-in-out infinite}
 .mont .rando.all-arret .pense{animation:songe 2.2s ease-in-out infinite}
 .mont .pas.avance{animation:avancer 1.15s cubic-bezier(.35,.1,.3,1) both}
 
