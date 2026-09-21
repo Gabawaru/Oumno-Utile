@@ -85,10 +85,16 @@ Trois barrières, chacune suffisante seule :
    qu'il veut dans son propre planning — et que ce planning est **rendu chez les
    gens qui le consultent**.
 2. **Échappement au point d'insertion** — `esc()` sur toute interpolation, y
-   compris dans les attributs. Deux failles avaient été trouvées ici et
+   compris dans les attributs. **Trois** failles ont été trouvées ici et
    reproduites avant correction : un `onload=` attaquant sortait de l'attribut
-   `style` via la couleur d'une matière, et un `javascript:` passait dans le lien
-   d'un événement.
+   `style` via la couleur d'une matière ; un `javascript:` passait dans le lien
+   d'un événement ; et le **nom** d'une matière arrivait brut dans quatre
+   gabarits — le diagramme de l'année, sa légende, l'accordéon des étapes et le
+   tableau des notes. Cette troisième-là est instructive : tout ce qui entourait
+   ces quatre points était échappé (`grp.id`, `grp.c`, `r.n`, `r.url`), seul le
+   nom ne l'était pas. Un oubli, pas une décision — et c'est la raison pour
+   laquelle la barrière 3 existe. `xss_gantt.py` sert la CSP de production et
+   vérifie qu'aucun nœud n'est injecté dans ces quatre vues.
 3. **`Content-Security-Policy: script-src 'self'`** — aucun script inline ne
    s'exécute, aucune URL `javascript:` ne fonctionne, même si 1 et 2 échouent.
    Vérifié : une injection de `<script>` est bloquée par le navigateur.

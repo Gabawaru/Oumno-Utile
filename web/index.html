@@ -153,6 +153,9 @@ input[type=radio],input[type=checkbox]{flex:none;padding:0}
 input::placeholder,textarea::placeholder{color:var(--ink3)}
 label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.09em;
   text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:.12rem}
+/* « facultatif » n'est pas la suite de l'étiquette : c'est une note à côté. */
+.opt-t{font-family:"IBM Plex Sans",system-ui,sans-serif;text-transform:none;letter-spacing:0;
+  font-size:.66rem;font-style:italic;color:var(--ink3);opacity:.75;margin-left:.35rem}
 
 .scroll{overflow-x:auto;padding-bottom:.25rem}
 .grid{min-width:800px;display:grid;grid-template-columns:236px repeat(20,minmax(22px,1fr))}
@@ -1744,7 +1747,7 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
       <form class="evf" id="evf" hidden>
         <div class="ligne1">
           <input id="evT" required maxlength="90" placeholder="Ajouter un événement…">
-          <input id="evD" type="date" required>
+          <input id="evD" type="date" required aria-label="Date de l'événement">
           <input id="evH" type="time" value="14:00" aria-label="De">
           <span class="fleche">→</span>
           <input id="evF" type="time" value="17:00" aria-label="À">

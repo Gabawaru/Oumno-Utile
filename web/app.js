@@ -368,7 +368,7 @@ function renderToday(){
       tes heures dans Réglages, ou repousse une échéance depuis le calendrier.`;
   } else if (soirs >= 0.5) {
     av.hidden = false; av.className = "bandeau warn";
-    av.innerHTML = `<b>Ça déborde sur tes soirées.</b> ${Math.round(soirs * 10) / 10} h de
+    av.innerHTML = `<b>Ça déborde sur tes soirées.</b> ${unH(soirs)} de
       rattrapage sont posées hors de tes heures normales sur les deux prochaines semaines.
       Chaque étape validée en retire d'autant.`;
   } else {
@@ -384,7 +384,7 @@ function renderToday(){
   const avant = cible.dataset.reste;
   // Un jour de repos n'a pas « fait sa part » : il n'en avait pas.
   cible.innerHTML = `${fmtDL(NOW)} — ` + (reste >= 0.05
-    ? `<b>${reste} h</b> à faire`
+    ? `<b>${unH(reste)}</b> à faire`
     : jAuj && jAuj.repos
       ? `<b class="fini">jour de repos</b>`
       : `<b class="fini">part du jour faite</b>`);
@@ -462,10 +462,10 @@ function buildGantt(){
   MONTHS.forEach((m,i)=>h+=`<div class="mcell${Math.floor(NQ/2)===i?" now":""}">${m}</div>`);
   GROUPES.forEach((grp,gi)=>{
     if(gi)h+='<div class="spacer"></div>';
-    h+=`<div class="glabel grp">${grp.name}${grp.code?`<span class="code">${grp.code}</span>`:""}<span class="code">${grp.h} h</span></div>
+    h+=`<div class="glabel grp">${esc(grp.name)}${grp.code?`<span class="code">${esc(grp.code)}</span>`:""}<span class="code">${grp.h} h</span></div>
       <div class="lane grp"><div class="bar grp" data-g="${esc(grp.id)}" style="--c:${esc(grp.c)};grid-column:${col(grp.s)}/${col(grp.e)}"><div class="fill"></div></div></div>`;
     grp.rows.forEach(r=>{
-      h+=`<div class="glabel sub" data-lab="${esc(r.id)}" title="${esc(r.n)}">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(r.n)}</a>`:esc(r.n)}${r.code?`<span class="code">${r.code}</span>`:""}</div>
+      h+=`<div class="glabel sub" data-lab="${esc(r.id)}" title="${esc(r.n)}">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(r.n)}</a>`:esc(r.n)}${r.code?`<span class="code">${esc(r.code)}</span>`:""}</div>
         <div class="lane"><div class="bar" data-r="${esc(r.id)}" style="--c:${esc(grp.c)};grid-column:${col(r.s)}/${col(r.e)}">
           <div class="fill"></div><span class="blab"></span>
           <span class="retard" data-rt="${esc(r.id)}" hidden></span></div></div>`;
@@ -488,7 +488,7 @@ function buildGantt(){
   // Le renvoi vers le CNED n'a de sens que si les lots portent un lien de cours.
   const liens=GROUPES.some(gp=>gp.rows.some(r=>r.url));
   document.getElementById("legend").innerHTML=
-    GROUPES.map(gp=>`<span class="li"><span class="sw" style="background:${gp.c}"></span>${short(gp)} — ${gp.h} h</span>`).join("")+
+    GROUPES.map(gp=>`<span class="li"><span class="sw" style="background:${esc(gp.c)}"></span>${esc(short(gp))} — ${gp.h} h</span>`).join("")+
     `<span class="li"><span class="sw vide"></span>Vide — reste à faire</span>`+
     `<span class="li"><span class="sw" style="background:var(--late)"></span>En retard — échéance passée</span>`+
     (liens?`<span class="li muted" style="margin-left:auto">Clique le nom d'un lot pour ouvrir le cours</span>`:"");
@@ -535,7 +535,7 @@ function buildAcc(){
   document.getElementById("acc").innerHTML=GROUPES.map(g=>`
    <div class="grpblk" style="--c:${esc(g.c)}">
      <div class="grphd" role="button" tabindex="0" aria-expanded="false">
-       <span class="car">▶</span><span class="nm">${g.name}</span>
+       <span class="car">▶</span><span class="nm">${esc(g.name)}</span>
        <span class="mini"><i data-mini="${g.id}"></i></span>
        <span class="ct" data-ct="${g.id}">0/${g.h} h</span></div>
      <div class="grpbody">${g.rows.map(r=>`
@@ -991,12 +991,14 @@ function terrain() {
 /** Ce que la journée type déclare, en heures : le repère quand rien n'est mesuré. */
 function capaciteDeclaree() {
   try {
-    const j = capacites && capacites.lun ? capacites : null;
-    if (!j) return null;
-    const tot = Object.values(j).reduce((a, plages) => a +
-      (Array.isArray(plages) ? plages.reduce((b, [d, f]) =>
-        b + Math.max(0, (enMin(f) - enMin(d)) / 60), 0) : 0), 0);
-    return tot / 7;
+    let tot = 0;
+    for (let j = 0; j < 7; j++) {
+      if (auRepos(j)) continue;          // un jour de repos ne déclare rien
+      const plages = capacites && capacites[j];
+      if (!Array.isArray(plages)) continue;
+      for (const [d, f] of plages) tot += Math.max(0, (enMin(f) - enMin(d)) / 60);
+    }
+    return tot > 0 ? tot / 7 : null;
   } catch { return null; }
 }
 
@@ -2289,8 +2291,8 @@ function renderGrades(){
   let h=`<thead><tr><th>Devoir ou évaluation</th><th>Matière</th><th style="text-align:right">Note /20</th></tr></thead><tbody>`;
   DEVS.forEach(s=>{
     const v=grades[s.id];
-    h+=`<tr><td>${esc(s.n)}</td><td style="color:var(--ink3)">${short(s.g)}</td>
-      <td class="num"><input type="number" min="0" max="20" step="0.25" data-gr="${s.id}"
+    h+=`<tr><td>${esc(s.n)}</td><td style="color:var(--ink3)">${esc(short(s.g))}</td>
+      <td class="num"><input type="number" min="0" max="20" step="0.25" data-gr="${esc(s.id)}"
         value="${typeof v==="number"?v:""}" placeholder="—"${canEdit?"":" disabled"}></td></tr>`;});
   document.getElementById("gtab").innerHTML=h+"</tbody>";
 }
@@ -2461,7 +2463,7 @@ function renderCal() {
       ${evs.length > 2 ? `<span class="more">+${evs.length - 2}</span>` : ""}
       ${b && !passe && b.travail > 0
         ? `<span class="charge"><i style="width:${Math.min(100, (b.travail / Math.max(b.cap, 1)) * 100)}%"></i></span>
-           <span class="hcount">${b.travail.toFixed(1)} h</span>` : ""}
+           <span class="hcount">${unH(b.travail)}</span>` : ""}
     </div>`;
   }
   $("cal").innerHTML = h;
@@ -2509,10 +2511,10 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
 
   const ligne = (x) => {
     const plage = `${enHeure(x.d)} – ${enHeure(x.f)}`;
-    const dur = ((x.f - x.d) / 60).toFixed(1).replace(".0", "");
+    const dur = unH((x.f - x.d) / 60);
     if (x.type === "libre") {
       return `<div class="ligne libre"><span class="hh">${plage}</span>
-        <span class="quoi">Libre · ${dur} h</span></div>`;
+        <span class="quoi">Libre · ${dur}</span></div>`;
     }
     if (x.type === "pause") {
       return `<div class="ligne pause"><span class="hh">${plage}</span>
@@ -2560,7 +2562,7 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
     // On ne montre le titre d'un événement que s'il est explicitement partagé.
     if (!canEdit && !e.visible) {
       return `<div class="ligne occupe"><span class="hh">${plage}</span>
-        <span class="quoi">Occupé · ${dur} h</span></div>`;
+        <span class="quoi">Occupé · ${dur}</span></div>`;
     }
     return `<div class="ligne ${x.type}"><span class="hh">${plage}</span>
       <span class="quoi"><b>${esc(e.titre || e.title || "")}</b>
@@ -2593,10 +2595,10 @@ function renderZone() {
     h += `<div class="jlegende">
       ${b.repos && b.travail <= 0.01
         ? `<span class="repos-t"><b>Repos</b> — rien n'est posé ce jour-là</span>`
-        : `<span><b class="mono">${b.travail} h</b> de travail</span>`}
-      ${b.occupe > 0 ? `<span class="occ-t"><b class="mono">${b.occupe} h</b> d'événements</span>` : ""}
-      ${b.tardif > 0 ? `<span class="tard-t"><b class="mono">${b.tardif} h</b> hors horaires</span>` : ""}
-      ${b.urgent > 0 ? `<span class="tard-t"><b class="mono">${b.urgent} h</b> sur ton repos —
+        : `<span><b class="mono">${unH(b.travail)}</b> de travail</span>`}
+      ${b.occupe > 0 ? `<span class="occ-t"><b class="mono">${unH(b.occupe)}</b> d'événements</span>` : ""}
+      ${b.tardif > 0 ? `<span class="tard-t"><b class="mono">${unH(b.tardif)}</b> hors horaires</span>` : ""}
+      ${b.urgent > 0 ? `<span class="tard-t"><b class="mono">${unH(b.urgent)}</b> sur ton repos —
         urgent et important</span>` : ""}
       <span class="lib-t">Libre : ${libres.length ? libres.join(" · ") : "rien"}</span>
     </div>`;
