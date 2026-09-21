@@ -1,9 +1,10 @@
 import { creerClient } from "./supa.js";
 import { MONTHS, MFULL, DOW, DAY, TZ, CNED, EXAM } from "./planning.js";
-import { versGroupes, MODELES, QUINZAINES, COULEURS, depuisModele } from "./modeles.js";
+import { versGroupes, MODELES, QUINZAINES, COULEURS, depuisModele,
+         assainirProgramme } from "./modeles.js";
 import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree,
          trouverCreneaux, creneauxTexte, plusLongCreneau, normaliserCapacites,
-         journeeType, REGLES, JOURNEE,
+         journeeType, normaliserRepos, REGLES, JOURNEE, REPOS, URGENCE, AVANCE_MAX,
          hhmm as enHeure, min as enMin, iso as isoJour } from "./planificateur.js";
 import { preparer as preparerImage, deposer as deposerImage,
          recadrer as recadrerImage } from "./photos.js";
@@ -17,6 +18,9 @@ let session = null;      // session Supabase
 let moi = null;          // mon profil
 let vue = null;          // profil consulté
 let capacites = { 0: 2, 1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 3 };
+let repos = [...REPOS];  // jours où l'on ne pose rien : le week-end par défaut
+const NOMS_JOURS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+const auRepos = (j) => repos.includes(Number(j));
 let reports = {};        // échéances repoussées à la main
 let programme = null;    // modèle choisi, ou matières déclarées à la main
 let modeleEnAttente = null;  // modèle retenu à l'inscription, posé à la 1re ouverture
@@ -52,14 +56,16 @@ function chargerProgramme(prog){
     const a=qStart(r.s).getTime(),b=qEnd(r.e-1).getTime(),span=b-a;
     let cum=0;
     r.steps.forEach(s=>{
+      // Deux étapes de même identifiant se voleraient leurs heures faites : le
+      // modèle a la priorité, la matière ajoutée à la main passe son tour.
+      if(byId[s.id]) return;
       s.row=r;s.g=g;s.t0=a+span*(cum/Math.max(r.h,1));cum+=s.h;s.t1=a+span*(cum/Math.max(r.h,1));
-      ALL.push(s); if(s.dev) DEVS.push(s);
+      ALL.push(s); byId[s.id]=s; if(s.dev) DEVS.push(s);
     });
   }));
   GROUPES.forEach(g=>{g.h=g.rows.reduce((a,r)=>a+r.h,0);
     g.s=Math.min(...g.rows.map(r=>r.s));g.e=Math.max(...g.rows.map(r=>r.e));});
   TOTAL_H=GROUPES.reduce((a,g)=>a+g.h,0);
-  ALL.forEach(s=>byId[s.id]=s);
 }
 
 function planned(t){let v=0;for(const s of ALL){
@@ -125,22 +131,53 @@ let done=Object.create(null), events=[], journal=[], subs=[], grades={};
 let canEdit=false;
 let pendingLog=[], subCount=0, tmr={};
 const LS="ciel.v4";
+
+/* ── Ce qui attend d'être écrit ──────────────────────────────────────────
+   Toutes les écritures de l'application sont différées : 600 ms pour l'état,
+   2,5 s pour ce qu'on tape. Une minuterie qui ne sonne jamais n'enregistre
+   rien — et sur un téléphone, poser une coche puis basculer d'application la
+   tue avant qu'elle ne sonne. C'est ainsi qu'un « je suis bloqué » coché
+   disparaissait.
+
+   Deux promesses, donc. Tout ce qui attend part quand la page se cache. Et ce
+   qui malgré tout n'est pas parti est repris au chargement suivant, parce que
+   la copie locale sait qu'elle porte du retard. */
+const differes = new Map();
+function differer(cle, ms, faire){
+  const v = differes.get(cle); if (v) clearTimeout(v.t);
+  differes.set(cle, { faire, t: setTimeout(() => { differes.delete(cle); faire(); }, ms) });
+}
+/** Tout écrire maintenant. Plusieurs tours : écrire une note rappelle
+    saveState, qui redépose une attente qu'il faut vider à son tour. */
+function viderDifferes(){
+  for (let tour = 0; tour < 3 && differes.size; tour++){
+    for (const [cle, v] of [...differes]){
+      clearTimeout(v.t); differes.delete(cle);
+      try { v.faire(); } catch(e){}
+    }
+  }
+}
+// Vrai tant que le serveur n'a pas accusé réception de la dernière modification.
+let etatSale = false;
+// La page est en train de disparaître : la requête doit survivre à sa mort.
+let enFermeture = false;
+
 /** Copie de secours dans le navigateur, pour survivre à une coupure réseau. */
 function saveLocal(){
   if(!vue||!estMoi()) return;
   // Le profil est gardé avec le planning : sans lui, une ouverture hors réseau
-  // n'a rien à ouvrir, et la copie de secours ne sert à rien.
-  try{ localStorage.setItem(LS, JSON.stringify({ id: vue.id, profil: vue, data: etat() })); }catch(e){}
+  // n'a rien à ouvrir, et la copie de secours ne sert à rien. « sale » dit que
+  // cette copie contient des modifications que le serveur n'a pas encore ;
+  // « pris » date la copie, pour savoir plus tard qui, d'elle ou du serveur,
+  // parle du travail le plus récent.
+  try{ localStorage.setItem(LS, JSON.stringify({ id: vue.id, profil: vue, data: etat(),
+        sale: etatSale, pris: new Date().toISOString() })); }catch(e){}
 }
 function lireLocal(id){
   try{
     const r = JSON.parse(localStorage.getItem(LS) || "null");
     return r && r.id === id ? r : null;
   }catch(e){ return null; }
-}
-function loadLocal(id){
-  const r = lireLocal(id);
-  return r && r.data ? r.data : null;
 }
 /** Message d'état discret, affiché dans l'en-tête. */
 function setSync(k,t){
@@ -158,10 +195,14 @@ function appliquerEtat(d){
   events    = d.evenements|| d.events || [];
   grades    = d.notes     || d.grades || {};
   capacites = normaliserCapacites(d.capacites);
+  repos     = [...normaliserRepos(d.repos)].sort();
   reports   = d.reports   || {};
   partJour  = d.partJour  || null;
   demarrageFait = Boolean(d.demarrage);
-  programme = d.programme || { modele: "cned", matieres: [] };
+  // Le programme vécu est le programme assaini, pas celui qu'on a lu. `versGroupes`
+  // le nettoyait déjà à chaque rendu, mais l'objet gardé en mémoire, lui, restait
+  // brut : une matière sans liste d'étapes suffisait à faire tomber les réglages.
+  programme = assainirProgramme(d.programme);
   chargerProgramme(programme);
   Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
   migrerAvance();
@@ -171,7 +212,7 @@ function appliquerEtat(d){
   if (minuteur) battre();
 }
 const etat=()=>({done,avance,seances,fiches,bloques,evenements:events,notes:grades,capacites,
-                 reports,partJour,programme,demarrage:demarrageFait});
+                 repos,reports,partJour,programme,demarrage:demarrageFait});
 
 /* ═════════ HEURES POSÉES ═════════
    `done` disait oui ou non. Cocher une tranche d'une heure sur une étape de six
@@ -244,25 +285,31 @@ function log(text){
   journal=journal.slice(0,150);
 }
 function saveState(){
+  etatSale = true;
   saveLocal();
   if(!canEdit) return;
-  clearTimeout(tmr.s); setSync("warn","enregistrement");
-  tmr.s=setTimeout(async()=>{
+  setSync("warn","enregistrement");
+  differer("etat", 600, async()=>{
     const lignes=pendingLog.splice(0);
     try{
       const {error}=await sb.from("ciel_state")
-        .update({data:etat(),updated_at:new Date().toISOString()})
+        .update({data:etat(),updated_at:new Date().toISOString()},
+                { garderEnVie: enFermeture })
         .eq("user_id",session.user.id);
       if(error) throw error;
       if(lignes.length){
         await sb.from("ciel_journal")
           .insert(lignes.map(body=>({user_id:session.user.id,body})));
       }
+      /* Le serveur a cette version. La copie locale ne porte plus de retard —
+         sauf si on a retapé quelque chose pendant l'aller-retour : cette
+         modification-là attend son tour, on ne va pas la déclarer enregistrée. */
+      if (!differes.has("etat")) { etatSale = false; saveLocal(); }
       setSync("ok","enregistré");
       // Ce que les autres ont le droit de savoir : mes plages libres, et rien d'autre.
       publierDispos().catch(() => {});
     }catch(e){ pendingLog.unshift(...lignes); setSync("warn","hors ligne — gardé en local"); }
-  },600);
+  });
 }
 const saveProgress=saveState, saveEvents=saveState, saveGrades=saveState;
 
@@ -321,7 +368,7 @@ function renderToday(){
       tes heures dans Réglages, ou repousse une échéance depuis le calendrier.`;
   } else if (soirs >= 0.5) {
     av.hidden = false; av.className = "bandeau warn";
-    av.innerHTML = `<b>Ça déborde sur tes soirées.</b> ${Math.round(soirs * 10) / 10} h de
+    av.innerHTML = `<b>Ça déborde sur tes soirées.</b> ${unH(soirs)} de
       rattrapage sont posées hors de tes heures normales sur les deux prochaines semaines.
       Chaque étape validée en retire d'autant.`;
   } else {
@@ -335,9 +382,12 @@ function renderToday(){
   const reste = jAuj ? jAuj.travailPose : 0;
   const cible = $("dateJour");
   const avant = cible.dataset.reste;
+  // Un jour de repos n'a pas « fait sa part » : il n'en avait pas.
   cible.innerHTML = `${fmtDL(NOW)} — ` + (reste >= 0.05
-    ? `<b>${reste} h</b> à faire`
-    : `<b class="fini">part du jour faite</b>`);
+    ? `<b>${unH(reste)}</b> à faire`
+    : jAuj && jAuj.repos
+      ? `<b class="fini">jour de repos</b>`
+      : `<b class="fini">part du jour faite</b>`);
   cible.dataset.reste = String(reste);
   if (avant !== undefined && avant !== String(reste) && !SOBRE.matches) {
     const b = cible.querySelector("b");
@@ -371,31 +421,82 @@ let calCur=null,calSel=null;
 
 /* ═════════ GANTT ═════════ */
 const col=v=>v+2;
+
+/** Une date → sa quinzaine, l'inverse de `qStart`. */
+function quinzaineDe(iso){
+  const d=new Date(iso+"T00:00");
+  const mois=(d.getFullYear()-Y0)*12+d.getMonth()-M0;
+  return Math.max(0,Math.min(19,mois*2+(d.getDate()>=16?1:0)));
+}
+
+/**
+ * Les périodes qui tiennent des semaines entières : les séries d'événements.
+ * Une vue d'ensemble bâtie sur le seul programme ne les montrait nulle part —
+ * un stage de huit semaines y était invisible, alors que c'est lui qui décide
+ * de ce qu'on peut faire d'autre pendant ce temps.
+ *
+ * Le titre suit la même règle qu'ailleurs : on ne le montre que s'il est
+ * explicitement partagé. Chez un visiteur, une période reste « Occupé ».
+ */
+function seriesEvenements(){
+  const par=new Map();
+  for(const e of events){
+    if(!e.serie||!e.date) continue;
+    const nom=(canEdit||e.visible)?(e.titre||e.title||"Période"):"Occupé";
+    const v=par.get(e.serie)||{serie:e.serie,titre:nom,jours:0,debut:e.date,fin:e.date};
+    v.jours++;
+    if(e.date<v.debut)v.debut=e.date;
+    if(e.date>v.fin)v.fin=e.date;
+    par.set(e.serie,v);
+  }
+  return [...par.values()].filter(v=>v.jours>1)
+    .map(v=>({...v,q0:quinzaineDe(v.debut),q1:quinzaineDe(v.fin)}))
+    .sort((a,b)=>a.debut.localeCompare(b.debut));
+}
+const signePeriodes=()=>seriesEvenements().map(v=>`${v.serie}:${v.q0}-${v.q1}:${v.jours}:${v.titre}`).join("|");
+let periodesDessinees=null;
+
 function buildGantt(){
   const g=document.getElementById("gantt"),NQ=nowQ();
   let h='<div class="corner"></div>';
   MONTHS.forEach((m,i)=>h+=`<div class="mcell${Math.floor(NQ/2)===i?" now":""}">${m}</div>`);
   GROUPES.forEach((grp,gi)=>{
     if(gi)h+='<div class="spacer"></div>';
-    h+=`<div class="glabel grp">${grp.name}${grp.code?`<span class="code">${grp.code}</span>`:""}<span class="code">${grp.h} h</span></div>
+    h+=`<div class="glabel grp">${esc(grp.name)}${grp.code?`<span class="code">${esc(grp.code)}</span>`:""}<span class="code">${grp.h} h</span></div>
       <div class="lane grp"><div class="bar grp" data-g="${esc(grp.id)}" style="--c:${esc(grp.c)};grid-column:${col(grp.s)}/${col(grp.e)}"><div class="fill"></div></div></div>`;
     grp.rows.forEach(r=>{
-      h+=`<div class="glabel sub" data-lab="${esc(r.id)}" title="${esc(r.n)}">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(r.n)}</a>`:esc(r.n)}${r.code?`<span class="code">${r.code}</span>`:""}</div>
+      h+=`<div class="glabel sub" data-lab="${esc(r.id)}" title="${esc(r.n)}">${r.url?`<a href="${esc(r.url)}" target="_blank" rel="noopener" style="color:inherit">${esc(r.n)}</a>`:esc(r.n)}${r.code?`<span class="code">${esc(r.code)}</span>`:""}</div>
         <div class="lane"><div class="bar" data-r="${esc(r.id)}" style="--c:${esc(grp.c)};grid-column:${col(r.s)}/${col(r.e)}">
           <div class="fill"></div><span class="blab"></span>
           <span class="retard" data-rt="${esc(r.id)}" hidden></span></div></div>`;
     });
   });
+  const periodes=seriesEvenements();
+  if(periodes.length){
+    h+='<div class="spacer"></div>';
+    h+=`<div class="glabel grp">Mes périodes<span class="code">${plural(periodes.length,"série")}</span></div>
+      <div class="lane grp"></div>`;
+    periodes.forEach(v=>{
+      h+=`<div class="glabel sub" title="${esc(v.titre)}">${esc(v.titre)}<span class="code">${plural(v.jours,"jour")}</span></div>
+        <div class="lane"><div class="bar periode" style="grid-column:${col(v.q0)}/${col(v.q1+1)}">
+          <span class="blab">${esc(fmtD(new Date(v.debut+"T00:00")))} → ${esc(fmtD(new Date(v.fin+"T00:00")))}</span>
+        </div></div>`;
+    });
+  }
+  periodesDessinees=signePeriodes();
   g.innerHTML=h;
   // Le renvoi vers le CNED n'a de sens que si les lots portent un lien de cours.
   const liens=GROUPES.some(gp=>gp.rows.some(r=>r.url));
   document.getElementById("legend").innerHTML=
-    GROUPES.map(gp=>`<span class="li"><span class="sw" style="background:${gp.c}"></span>${short(gp)} — ${gp.h} h</span>`).join("")+
+    GROUPES.map(gp=>`<span class="li"><span class="sw" style="background:${esc(gp.c)}"></span>${esc(short(gp))} — ${gp.h} h</span>`).join("")+
     `<span class="li"><span class="sw vide"></span>Vide — reste à faire</span>`+
     `<span class="li"><span class="sw" style="background:var(--late)"></span>En retard — échéance passée</span>`+
     (liens?`<span class="li muted" style="margin-left:auto">Clique le nom d'un lot pour ouvrir le cours</span>`:"");
 }
 function paintGantt(){
+  // Les périodes sont une structure, pas un remplissage : si elles ont changé,
+  // la grille est à rebâtir avant d'être repeinte.
+  if(signePeriodes()!==periodesDessinees) buildGantt();
   GROUPES.forEach(g=>{
     let gd=0;
     g.rows.forEach(r=>{
@@ -434,7 +535,7 @@ function buildAcc(){
   document.getElementById("acc").innerHTML=GROUPES.map(g=>`
    <div class="grpblk" style="--c:${esc(g.c)}">
      <div class="grphd" role="button" tabindex="0" aria-expanded="false">
-       <span class="car">▶</span><span class="nm">${g.name}</span>
+       <span class="car">▶</span><span class="nm">${esc(g.name)}</span>
        <span class="mini"><i data-mini="${g.id}"></i></span>
        <span class="ct" data-ct="${g.id}">0/${g.h} h</span></div>
      <div class="grpbody">${g.rows.map(r=>`
@@ -678,13 +779,17 @@ function renderDemandesPlanning() {
       </summary>
       <div class="demcorps">
         ${d.message ? `<p class="aide">« ${esc(d.message)} »</p>` : ""}
-        ${recue && d.charge && d.charge.length ? `<div class="frise">${
-          d.charge.slice(0, 8).map((e) => `<div class="ligne ev">
-            <span class="hh">${esc(e.jour || "")} ${esc(e.debut || "")}</span>
+        ${recue && d.charge && d.charge.length ? `<div class="frise recue">${
+          d.charge.map((e) => `<div class="ligne ev">
+            <span class="hh">${esc(e.jour || "")} ${esc(e.debut || "")}${
+              e.fin ? `–${esc(e.fin)}` : ""}</span>
             <span class="quoi"><b>${esc(e.titre || "")}</b></span></div>`).join("")}</div>
-          ${d.charge.length > 8 ? `<div class="fl2">+ ${d.charge.length - 8} autres</div>` : ""}` : ""}
+          <p class="aide">Ce planning reste le sien. Rien n'est écrit dans le tien —
+            tu le lis, tu l'exportes si tu en as besoin, c'est tout.</p>
+          <div class="actes"><button class="btn" data-dem="ics:${esc(d.id)}"
+            >Exporter en .ics</button></div>` : ""}
         ${recue && d.etat === "attente" ? `<div class="actes">
-          <button class="btn pri" data-dem="oui:${esc(d.id)}">Accepter et ajouter</button>
+          <button class="btn pri" data-dem="oui:${esc(d.id)}">Accepter</button>
           <button class="btn" data-dem="non:${esc(d.id)}">Refuser</button></div>` : ""}
       </div>
     </details>`).join("")}`;
@@ -698,13 +803,43 @@ async function repondreDemande(id, accepte) {
     dialogue({ titre: "Réponse impossible", corps: `<p class="aide">${esc(String(error.message || error))}</p>` });
     return;
   }
-  if (accepte && d && Array.isArray(d.charge) && d.charge.length) {
-    const n = fusionnerEvenements(d.charge.filter((e) => e && e.jour && e.titre));
-    log(`a accepté une demande de ${d.qui_uid} (${plural(n, "événement")})`);
-    saveEvents();
-  } else if (d) log(`a refusé une demande de ${d.qui_uid}`);
+  /* Accepter dit à l'autre « c'est pris », et rien de plus. Ça n'écrit pas une
+     ligne dans mon planning : le sien reste le sien. Une demande est une boîte
+     de réception, pas une greffe. Avant, accepter recopiait ses événements chez
+     moi — ils occupaient mes journées, décalaient mon travail et changeaient mon
+     retard ; et comme la fusion se faisait par identifiant, un envoi bien choisi
+     pouvait remplacer mes propres événements sans que rien ne se voie. */
+  if (d) log(accepte ? `a accepté une demande de ${d.qui_uid}`
+                     : `a refusé une demande de ${d.qui_uid}`);
+  saveState();
   await chargerDemandesPlanning();
   renderAll();
+}
+
+/** Ce qu'on a reçu, en fichier, pour pouvoir s'en servir ailleurs. */
+function exporterDemande(id) {
+  const d = demandesPlanning.find((x) => x.id === id);
+  if (!d || !Array.isArray(d.charge) || !d.charge.length) return;
+  const pad = (n) => String(n).padStart(2, "0");
+  const hz = (j, h) => `${String(j).replace(/-/g, "")}T${String(h || "00:00").replace(":", "")}00`;
+  const lignes = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Repere//Demande//FR", "CALSCALE:GREGORIAN"];
+  d.charge.forEach((e, i) => {
+    if (!e || !e.jour) return;
+    lignes.push("BEGIN:VEVENT",
+      `UID:${String(e.id || i)}@repere`,
+      `DTSTART:${hz(e.jour, e.debut)}`,
+      `DTEND:${hz(e.jour, e.fin || e.debut)}`,
+      // Les virgules et points-virgules ferment un champ en RFC 5545 : on les échappe.
+      `SUMMARY:${String(e.titre || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\n/g, " ")}`,
+      "END:VEVENT");
+  });
+  lignes.push("END:VCALENDAR");
+  const blob = new Blob([lignes.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `demande-${(d.qui_uid || "planning")}.ics`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
 /* ═════════ BLOCAGES ═════════
@@ -800,6 +935,22 @@ function penteAu(t, reste, fin) {
   return reste / jours;
 }
 
+/* La part du programme franchie. Un cours terminé vaut un pas entier, celui
+   qu'on a entamé vaut sa fraction : le bonhomme avance déjà pendant qu'on
+   travaille, et il a bougé d'un cran net quand le cours tombe. */
+function partFranchie() {
+  if (!ALL.length) return 0;
+  let p = 0;
+  for (const s2 of ALL) p += s2.h > 0 ? Math.min(1, faitDe(s2.id) / s2.h) : 1;
+  return Math.min(1, p / ALL.length);
+}
+
+/** L'étape vers laquelle il marche : la première à faire, blocages écartés. */
+function prochaineEtape() {
+  return ALL.find((s2) => !estFait(s2) && !estBloque(s2.id))
+      || ALL.find((s2) => !estFait(s2)) || null;
+}
+
 function terrain() {
   const reste = ALL.reduce((a, s2) => a + resteReel(s2), 0);
   const fin = +EXAM;
@@ -814,31 +965,46 @@ function terrain() {
 
   const aujourdhui = heuresFaitesLe(isoJour(new Date(NOW)));
   const depuis = joursSansRien();
+  const bloquees = heuresBloquees();
+  const jourDeRepos = auRepos(new Date(NOW).getDay());
 
   let allure;
-  if (reste <= 0.01) allure = "sommet";
-  else if (depuis >= 1 && aujourdhui <= 0.01) allure = "arret";
+  if (reste <= EPS) allure = "sommet";
+  // Tout ce qui reste attend quelqu'un d'autre : ce n'est pas de l'arrêt, et on
+  // ne lui met pas sur le dos une pente qu'il n'a pas le droit de gravir.
+  else if (bloquees >= reste - EPS) allure = "attente";
+  // Un jour de repos non plus n'est pas un arrêt. Sans ce cas, l'application
+  // reprochait tout le week-end une pause qu'on lui a demandé de réserver.
+  else if (jourDeRepos && aujourdhui <= EPS) allure = "repos";
+  else if (depuis >= 1 && aujourdhui <= EPS) allure = "arret";
   else if (raideur >= 2.2) allure = "alpinisme";
   else if (raideur >= 1.25) allure = "montee";
   else allure = "randonnee";
 
-  return { reste, fin, requis, capacite, declaree, raideur, allure, bloquees: heuresBloquees(),
-           aujourdhui, depuis, jours: Math.max(0, (fin - NOW) / DAY) };
+  return { reste, fin, requis, capacite, declaree, raideur, allure, bloquees,
+           repos: jourDeRepos,
+           aujourdhui, depuis, jours: Math.max(0, (fin - NOW) / DAY),
+           part: partFranchie(), suivante: prochaineEtape(),
+           faits: ALL.reduce((a, s2) => a + (estFait(s2) ? 1 : 0), 0), total: ALL.length };
 }
 
 /** Ce que la journée type déclare, en heures : le repère quand rien n'est mesuré. */
 function capaciteDeclaree() {
   try {
-    const j = capacites && capacites.lun ? capacites : null;
-    if (!j) return null;
-    const tot = Object.values(j).reduce((a, plages) => a +
-      (Array.isArray(plages) ? plages.reduce((b, [d, f]) =>
-        b + Math.max(0, (enMin(f) - enMin(d)) / 60), 0) : 0), 0);
-    return tot / 7;
+    let tot = 0;
+    for (let j = 0; j < 7; j++) {
+      if (auRepos(j)) continue;          // un jour de repos ne déclare rien
+      const plages = capacites && capacites[j];
+      if (!Array.isArray(plages)) continue;
+      for (const [d, f] of plages) tot += Math.max(0, (enMin(f) - enMin(d)) / 60);
+    }
+    return tot > 0 ? tot / 7 : null;
   } catch { return null; }
 }
 
-/** Jours pleins écoulés depuis la dernière heure posée. */
+/** Jours ouverts écoulés depuis la dernière heure posée. Les jours de repos
+ *  n'en font pas partie : un week-end réservé n'est pas du temps perdu, et le
+ *  compter ferait dire « trois jours sans rien poser » tous les lundis. */
 function joursSansRien() {
   let dernier = null;
   for (const id in avance) {
@@ -847,11 +1013,21 @@ function joursSansRien() {
   }
   if (!dernier) return null;
   const t = Date.parse(dernier + "T23:59:59");
-  return Math.max(0, Math.floor((NOW - t) / DAY) + 1);
+  const bruts = Math.max(0, Math.floor((NOW - t) / DAY) + 1);
+  let n = 0;
+  for (let i = 0; i < bruts; i++) {
+    const d = new Date(t + i * DAY);
+    if (!auRepos(d.getDay())) n++;
+  }
+  return n;
 }
 
 const MOTS = {
   sommet: ["Au sommet", "Tout est posé. Il n'y a plus de pente devant toi."],
+  attente: ["En attente",
+    "Tout ce qui reste attend quelqu'un d'autre. Il s'assoit : relance ton tuteur."],
+  repos: ["Au repos",
+    "C'est ton jour. La pente ne bouge pas d'ici demain, et elle t'attendra."],
   arret: ["Arrêté devant la pente",
     "Tu regardes la montagne en cherchant par où passer. Elle grandit pendant ce temps."],
   alpinisme: ["En alpinisme",
@@ -859,6 +1035,12 @@ const MOTS = {
   montee: ["En montée", "Ça grimpe, mais ça se marche."],
   randonnee: ["En randonnée", "Le terrain est plat devant toi. C'est le bon moment."],
 };
+
+/* D'un rendu à l'autre on retient où il était, pour le faire marcher jusqu'à sa
+   nouvelle place au lieu de l'y téléporter. */
+let dernierePart = null;
+
+const court = (s, n) => (s && s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s || "");
 
 function renderMontagne() {
   const box = $("montagne");
@@ -879,9 +1061,12 @@ function renderMontagne() {
   // ×4 un mur qui remplit le cadre, au-delà c'est le même message.
   const dessine = (r) => Math.min(1, Math.sqrt(Math.max(0, r) / 4));
   const Y = (r, u) => sol - Math.min(1, Math.max(0, dessine(r) * u)) * utile;
-  const rampe = (r) => {
+  const rampe = (r, de = 0, a = 1) => {
     const pts = [];
-    for (let i = 0; i <= 40; i++) { const u = i / 40; pts.push([X(u), Y(r, u)]); }
+    for (let i = 0; i <= 40; i++) {
+      const u = de + (a - de) * (i / 40);
+      pts.push([X(u), Y(r, u)]);
+    }
     return pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
   };
 
@@ -892,19 +1077,59 @@ function renderMontagne() {
   // la montagne qu'on a construite en ne faisant rien, rendue visible.
   const avant = t.jours > 0 ? t.raideur * (t.jours / (t.jours + 7)) : 0;
   // On ne montre le tracé d'avant que si l'écart se voit à l'écran.
-  const montree = t.reste > 0.01 && dessine(t.raideur) - dessine(avant) > 0.05;
+  const montree = t.reste > EPS && dessine(t.raideur) - dessine(avant) > 0.05;
 
-  // Le bonhomme se tient au départ de la rampe, sur la pente.
-  const u0 = 0.07;
+  /* Il ne se tient plus au pied de la pente : il est là où en est le programme,
+     et chaque cours fini le pousse d'un cran vers l'examen. Tant qu'il reste un
+     jalon à planter devant lui on lui garde un bout de pente : un panneau collé
+     au bord du cadre ne se lit pas. */
+  const jalonne = t.suivante && t.reste > EPS;
+  const borne = (u) => Math.min(jalonne ? 0.9 : 0.985, Math.max(0.012, u));
+  const u0 = borne(t.part);
   const bx = X(u0), by = Y(t.raideur, u0);
+  // L'angle du terrain sous ses pieds, et ce qu'il en prend : un marcheur reste
+  // plus droit que la pente, un alpiniste s'y couche. 0 pour qui ne grimpe pas.
+  const angle = Math.atan2(dessine(t.raideur) * utile, L - 20) * 180 / Math.PI;
+  const penche = { alpinisme: 1, montee: .6, randonnee: .35 }[t.allure] || 0;
+  const incl = angle * penche;
 
-  // Le panneau porte l'allure : c'est lui qui donne sa couleur au massif.
+  // S'il a gagné du terrain depuis le dernier rendu, il y marche au lieu d'y
+  // apparaître : c'est tout l'intérêt de finir un cours.
+  const avantU = dernierePart != null && t.part > dernierePart + 1e-6
+    ? borne(dernierePart) : null;
+  dernierePart = t.part;
+  const glisse = avantU == null ? "" : ` style="--dx:${(X(avantU) - bx).toFixed(1)}px;` +
+    `--dy:${(Y(t.raideur, avantU) - by).toFixed(1)}px"`;
+
+  /* Le panneau devant lui nomme la prochaine tâche. Il dit où il va, pas
+     combien il en reste : un cours sur cent vingt ne fait que six pixels, et
+     planté à la distance exacte le panneau tomberait DANS le bonhomme. On le
+     pose donc à la distance vraie OU assez loin pour se lire, la plus grande
+     des deux. Le compte exact est écrit en toutes lettres juste dessous. */
+  const uSuiv = Math.min(0.985, Math.max(
+    t.total ? (Math.floor(t.part * t.total + 1e-9) + 1) / t.total : 1, u0 + 0.075));
+  const jx = X(uSuiv), jy = Y(t.raideur, uSuiv);
+  const aGauche = uSuiv > 0.62;
+  const jalon = jalonne ? `
+      <g class="jalon">
+        <path class="hampe" d="M${jx.toFixed(1)} ${jy.toFixed(1)}v-52"/>
+        <path class="fanion" d="M${jx.toFixed(1)} ${(jy - 52).toFixed(1)}l15 5.5-15 5.5z"/>
+        <text class="jal" x="${(jx + (aGauche ? -5 : 5)).toFixed(1)}"
+          y="${(jy - 57).toFixed(1)}" text-anchor="${aGauche ? "end" : "start"}"
+          >${esc(court(t.suivante.n, 30))}</text>
+      </g>` : "";
+
+  /* Le panneau porte l'allure : c'est elle qui donne sa couleur au massif. On la
+     préfixe, sinon un nom d'allure part en classe globale et attrape la règle du
+     même nom — « attente » tombait sur l'écran de chargement et rabotait le
+     panneau à 22 rem. Toute allure ajoutée ici doit garder le préfixe. */
   const bloc = $("montbloc");
-  if (bloc) bloc.className = "panel montbloc " + t.allure;
+  if (bloc) bloc.className = "panel montbloc all-" + t.allure;
 
   box.innerHTML = `
-    <svg class="mont ${esc(t.allure)}" viewBox="0 0 ${L} ${H}" role="img"
-        aria-label="${esc(titre)} — ${esc(phrase)}">
+    <svg class="mont all-${esc(t.allure)}" viewBox="0 0 ${L} ${H}" role="img"
+        aria-label="${esc(titre)} — ${esc(phrase)} ${t.faits} ${t.faits > 1 ? "étapes franchies" : "étape franchie"} sur ${t.total}.${
+          t.suivante ? ` Prochaine étape : ${esc(t.suivante.n)}.` : ""}">
       <defs><linearGradient id="gcimes" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="var(--c1)"/><stop offset="1" stop-color="var(--c2)"/>
       </linearGradient></defs>
@@ -914,58 +1139,112 @@ function renderMontagne() {
         <text class="jal jadis-t" x="${X(0.99)}" y="${Y(avant, 0.99) - 6}" text-anchor="end">
           la pente d'il y a une semaine</text>` : ""}
       <path class="crete" d="${ligne}"/>
-      ${bonhomme(bx, by, t.allure)}
+      <path class="franchi" d="${rampe(t.raideur, 0, u0)}"/>
+      ${jalon}
+      <g class="pas${avantU == null ? "" : " avance"}"${glisse}>
+        <g transform="translate(${bx.toFixed(1)},${by.toFixed(1)}) rotate(${incl.toFixed(1)}) scale(1.75)">
+          ${bonhomme(t.allure)}
+        </g>
+      </g>
       <text class="jal" x="${X(1)}" y="${sol + 20}" text-anchor="end">examen</text>
-      <text class="jal" x="${X(0)}" y="${sol + 20}">aujourd'hui</text>
+      <text class="jal" x="${X(0)}" y="${sol + 20}">départ</text>
     </svg>
     <div class="montdit">
       <div class="mtitre">${esc(titre)}</div>
       <div class="mphrase">${esc(phrase)}</div>
       <div class="mchif">
+        <span><b>${t.faits}</b> ${t.faits > 1 ? "étapes franchies" : "étape franchie"} sur ${t.total}</span>
         <span><b>${unH(t.requis)}</b> par jour à tenir</span>
-        ${t.capacite && t.reste > 0.01
+        ${t.capacite && t.reste > EPS
           ? `<span><b>${unH(t.capacite)}</b> par jour mesuré chez toi</span>` : ""}
-        ${t.bloquees > 0.01 ? `<span><b>${unH(t.bloquees)}</b> en attente de quelqu'un</span>` : ""}
+        ${t.bloquees > EPS ? `<span><b>${unH(t.bloquees)}</b> en attente de quelqu'un</span>` : ""}
         ${t.depuis != null && t.depuis >= 1
           ? `<span class="late"><b>${plural(t.depuis, "jour")}</b> sans rien poser</span>`
-          : t.aujourdhui > 0.01 ? `<span class="ok"><b>${unH(t.aujourdhui)}</b> aujourd'hui</span>` : ""}
+          : t.aujourdhui > EPS ? `<span class="ok"><b>${unH(t.aujourdhui)}</b> aujourd'hui</span>` : ""}
       </div>
     </div>`;
 }
 
+/* ── Le bonhomme ────────────────────────────────────────────────────────
+   Le groupe parent le place ; ici on ne dessine que le corps, à l'origine,
+   les pieds sur le zéro.
+
+   Le défaut qu'on corrige venait d'un seul groupe qui portait à la fois le
+   translate/scale de placement et l'animation CSS : une animation `transform`
+   REMPLACE l'attribut `transform`, elle ne s'y ajoute pas. Le bonhomme partait
+   donc à l'angle du cadre, à l'échelle 1, hors champ — invisible dans trois
+   allures sur cinq. D'où la règle : un groupe place, un autre anime, jamais
+   le même. Elle vaut aussi pour chaque membre.
+
+   Chaque membre est donc un groupe dont l'origine EST son pivot (hanche ou
+   épaule), posé par un translate, et dont l'enfant animé porte l'une des trois
+   classes d'origine selon le sens du tracé — bas / haut / hautg. Un tracé qui
+   part ailleurs ferait tourner le membre autour du mauvais point. */
+const TETE = `<circle class="tete" cx="0" cy="-27.5" r="4"/>`;
+const TRONC = `<path class="corps" d="M0 -23.3v13.3"/>`;
+const os = (d, c = "corps") => `<path class="${c}" d="${d}"/>`;
+/** Un membre : le groupe pose le pivot, l'enfant tourne autour. */
+const membre = (cls, x, y, inner, style = "") =>
+  `<g transform="translate(${x},${y})"><g class="${cls}"${style}>${inner}</g></g>`;
+// Presque droits au repos : c'est le balancement qui les écarte, et il les
+// écarte des deux côtés parce que le pivot reste sur l'axe du corps.
+const JAMBE = os("M0 0l.8 10");
+// Le bâton est tenu dans la main : il vit dans le groupe du bras et se plante
+// avec lui. Le dessiner à part lui donnerait une vie propre, et ça se voit.
+const BRAS = os("M0 0l.8 9") + os("M.8 9l1.5 14", "baton");
+
 /** Un bonhomme, dessiné selon ce que le terrain lui demande. */
-function bonhomme(x, y, allure) {
-  // 1,6× : à 760 de large, un bonhomme à l'échelle 1 fait quatre pixels sur un
-  // téléphone. Il porte le message, il doit se voir.
-  const g = (contenu, extra = "") =>
-    `<g class="rando ${esc(allure)}" transform="translate(${x.toFixed(1)},${(y - 3).toFixed(1)}) scale(1.6)"${extra}>${contenu}</g>`;
-  const tete = `<circle class="corps" cx="0" cy="-26" r="5"/>`;
-  const tronc = `<path class="corps" d="M0 -21v13"/>`;
+function bonhomme(allure) {
+  const g = (contenu) => `<g class="rando all-${esc(allure)}">${contenu}</g>`;
 
   if (allure === "arret") {
-    // Immobile, la main au menton, regardant ce qu'il va bien falloir gravir.
-    return g(`${tete}${tronc}
-      <path class="corps" d="M0 -8l-5 9M0 -8l5 9"/>
-      <path class="corps" d="M0 -17l7 3-4 -7"/>
-      <path class="pense" d="M9 -34a3 3 0 1 1 .1 0M14 -40a4 4 0 1 1 .1 0"/>`);
+    // Immobile, la main au menton, cherchant par où passer. Rien ne marche :
+    // seuls le souffle et les bulles bougent.
+    return g(`${TETE}${TRONC}
+      ${os("M0 -10l-4.5 10M0 -10l4.5 10")}
+      ${os("M0 -22l6.5 4-3.5 -6.5")}
+      <g class="pense">
+        <circle cx="8" cy="-34" r="1.8"/><circle cx="12.5" cy="-39" r="2.6"/>
+        <circle cx="18.5" cy="-45" r="3.5"/>
+      </g>`);
   }
+
+  if (allure === "attente" || allure === "repos") {
+    // Assis sur un bloc, une jambe qui balance. Deux situations, la même image :
+    // il attend une réponse, ou c'est son jour de repos.
+    return g(`${os("M-12 0h21l-4.5 -8.5h-12z", "rocher")}
+      <circle class="tete" cx="-5" cy="-26" r="4"/>
+      ${os("M-5 -22l1.5 12.5")}
+      ${os("M-3.5 -9.5l9 -.6")}
+      ${os("M-5 -20l6.5 6")}
+      ${membre("balance lent bas", 5.5, -10.1, os("M0 0l.8 10"))}`);
+  }
+
   if (allure === "alpinisme") {
-    // Penché dans la pente, un piolet planté plus haut.
-    return g(`${tete}${tronc}
-      <path class="corps" d="M0 -8l-7 8M0 -8l6 9"/>
-      <path class="corps" d="M0 -18l10 -9"/>
-      <path class="piolet" d="M10 -27l7 -6M14 -31l5 1"/>`, ' transform-origin="0 0"');
+    // Plié dans la pente, le piolet planté plus haut, les jambes qui poussent.
+    return g(`${TETE}${TRONC}
+      ${membre("balance bas", 0, -10, JAMBE)}
+      ${membre("balance bas", 0, -10, JAMBE, ' style="animation-delay:-1.2s"')}
+      ${membre("ancre haut", 0, -22.3, os("M0 0l8.5 -8.5") + os("M8.5 -8.5l7 -6M12.5 -12.5l5 1", "piolet"))}
+      ${membre("bras bas", 0, -22.3, os("M0 0l.8 8.5"), ' style="animation-delay:-.8s"')}`);
   }
+
   if (allure === "sommet") {
-    return g(`${tete}${tronc}
-      <path class="corps" d="M0 -8l-6 9M0 -8l6 9"/>
-      <path class="corps" d="M0 -18l-8 -8M0 -18l8 -8"/>`);
+    // Les deux bras en l'air, et il les agite.
+    return g(`${TETE}${TRONC}
+      ${os("M0 -10l-5 10M0 -10l5 10")}
+      ${membre("salut haut", 0, -22.3, os("M0 0l5.5 -1l4 -8"))}
+      ${membre("salut hautg", 0, -22.3, os("M0 0l-5.5 -1l-4 -8"), ' style="animation-delay:-.6s"')}`);
   }
-  // Randonnée et montée : il marche, avec un bâton.
-  return g(`${tete}${tronc}
-    <path class="corps jambes" d="M0 -8l-6 9M0 -8l6 9"/>
-    <path class="corps bras" d="M0 -17l8 4"/>
-    <path class="baton" d="M8 -13v14"/>`);
+
+  // Randonnée et montée : il marche. Les jambes alternent, les bras suivent à
+  // contretemps, et le bâton se plante à chaque pas.
+  const lent = allure === "montee" ? " lent" : "";
+  return g(`${TETE}${TRONC}
+    ${membre("balance bas" + lent, 0, -10, JAMBE)}
+    ${membre("balance bas" + lent, 0, -10, JAMBE, ' style="animation-delay:-.8s"')}
+    ${membre("bras bas" + lent, 0, -22.3, os("M0 0l.8 9"), ' style="animation-delay:-.8s"')}
+    ${membre("bras bas" + lent, 0, -22.3, BRAS)}`);
 }
 
 /* ═════════ FICHES ═════════
@@ -1047,30 +1326,30 @@ async function renderFiche() {
 
   if (!canEdit) return;
   const t = $("ficheTexte");
-  let minuterie = null;
   t.oninput = () => {
-    clearTimeout(minuterie);
     $("ficheEtat").textContent = "…";
     // L'état part en entier à chaque enregistrement. On attend donc que la frappe
     // se soit vraiment arrêtée, et on ne renvoie rien si le texte n'a pas bougé —
     // sinon écrire dix minutes renvoie l'état des centaines de fois.
-    minuterie = setTimeout(() => {
+    differer("fiche:" + id, 2500, () => {
       const v = t.value.slice(0, 20000);
-      if (v === (laFiche(id) || {}).t) { $("ficheEtat").textContent = ""; return; }
+      if (v === (laFiche(id) || {}).t) { const e = $("ficheEtat"); if (e) e.textContent = ""; return; }
       poserFiche(id, { t: v });
-      $("ficheEtat").textContent = "enregistrée";
-      setTimeout(() => { const e = $("ficheEtat"); if (e && e.textContent === "enregistrée") e.textContent = ""; }, 1500);
+      const e = $("ficheEtat");
+      if (e) {
+        e.textContent = "enregistrée";
+        setTimeout(() => { const x = $("ficheEtat"); if (x && x.textContent === "enregistrée") x.textContent = ""; }, 1500);
+      }
       majFichePastilles();
-    }, 2500);
+    });
   };
 
   const fb = $("ficheBloque");
   if (fb) fb.onchange = () => basculerBlocage(id, fb.checked, (bloques[id] || {}).n || "");
   const fbn = $("ficheBloqueNote");
-  if (fbn) {
-    let m = null;
-    fbn.oninput = () => { clearTimeout(m); m = setTimeout(() => noterBlocage(id, fbn.value), 2500); };
-  }
+  // Même clé que le panneau des blocages : c'est la même note, elle ne doit
+  // pas partir deux fois ni se doubler elle-même.
+  if (fbn) fbn.oninput = () => differer("note:" + id, 2500, () => noterBlocage(id, fbn.value));
 
   $("fichePhoto").onclick = () => $("ficheFichier").click();
   $("ficheFichier").onchange = async (e) => {
@@ -1750,6 +2029,9 @@ function projectionNotes() {
 const unH = (h) => {
   if (h >= 10) return `${Math.round(h)} h`;
   const m = Math.round(h * 60);
+  // Une durée non nulle ne doit jamais s'afficher « 0 h » : c'est un mensonge
+  // par arrondi, et c'est exactement ce qu'on est censé ne plus faire.
+  if (m === 0 && h > 0) return "moins d'1 min";
   if (m % 60 === 0) return `${m / 60} h`;
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
 };
@@ -2009,8 +2291,8 @@ function renderGrades(){
   let h=`<thead><tr><th>Devoir ou évaluation</th><th>Matière</th><th style="text-align:right">Note /20</th></tr></thead><tbody>`;
   DEVS.forEach(s=>{
     const v=grades[s.id];
-    h+=`<tr><td>${esc(s.n)}</td><td style="color:var(--ink3)">${short(s.g)}</td>
-      <td class="num"><input type="number" min="0" max="20" step="0.25" data-gr="${s.id}"
+    h+=`<tr><td>${esc(s.n)}</td><td style="color:var(--ink3)">${esc(short(s.g))}</td>
+      <td class="num"><input type="number" min="0" max="20" step="0.25" data-gr="${esc(s.id)}"
         value="${typeof v==="number"?v:""}" placeholder="—"${canEdit?"":" disabled"}></td></tr>`;});
   document.getElementById("gtab").innerHTML=h+"</tbody>";
 }
@@ -2120,7 +2402,7 @@ function replanifier() {
   // Le planificateur raisonnait en heures du référentiel. Il raisonne maintenant
   // en heures réelles : une étape qui coûte 1,4× prend 1,4× de place. Sans ça,
   // la projection annonçait une date que le rythme mesuré contredisait déjà.
-  const base = { etapes: ALL, done, evenements: events, capacites, reports,
+  const base = { etapes: ALL, done, evenements: events, capacites, repos, reports,
                  maintenant: NOW, fin: FIN_ANNEE, reste: restePlanifiable };
   if (!partJour || partJour.date !== cle) {
     const brut = planifier(base);
@@ -2167,10 +2449,13 @@ function renderCal() {
     const evs = evOn(t, tE), scans = scanOn(t, tE);
     const passe = t < minuitLocal(NOW);
     const pleine = b && b.plein;
-    const deborde = b && b.tardif > 0;
+    // Un jour de repos entamé par une urgence se signale comme un débordement :
+    // c'est bien une exception, et elle doit se voir d'un coup d'œil sur le mois.
+    const deborde = b && (b.tardif > 0 || b.urgent > 0);
 
     h += `<div class="day${d.getMonth() !== calCur.getMonth() ? " out" : ""}${
       sameDay(d, auj) ? " today" : ""}${calSel && sameDay(d, calSel) ? " sel" : ""}${
+      b && b.repos ? " repos" : ""}${
       deborde ? " deborde" : pleine ? " pleine" : ""}" data-d="${t}">
       <span class="num">${d.getDate()}</span>
       ${scans.map(() => `<span class="chip ev sys">Scan CNED</span>`).join("")}
@@ -2178,7 +2463,7 @@ function renderCal() {
       ${evs.length > 2 ? `<span class="more">+${evs.length - 2}</span>` : ""}
       ${b && !passe && b.travail > 0
         ? `<span class="charge"><i style="width:${Math.min(100, (b.travail / Math.max(b.cap, 1)) * 100)}%"></i></span>
-           <span class="hcount">${b.travail.toFixed(1)} h</span>` : ""}
+           <span class="hcount">${unH(b.travail)}</span>` : ""}
     </div>`;
   }
   $("cal").innerHTML = h;
@@ -2205,7 +2490,9 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
     ...(b.creneaux || []).filter((s2) => s2[1] - s2[0] >= 30).map((s2) => ({ d: s2[0], f: s2[1], type: "libre" })),
   ].sort((x, y) => x.d - y.d);
 
-  if (!items.length) return `<div class="empty">Journée entièrement libre.</div>`;
+  if (!items.length) return b.repos
+    ? `<div class="empty">Jour de repos. Rien n'y est posé, et rien ne s'y posera.</div>`
+    : `<div class="empty">Journée entièrement libre.</div>`;
   // Une étape peut revenir en deux tranches dans la même journée, coupées par une
   // pause : chacune doit savoir combien d'heures la précèdent.
   const cumulJour = {};
@@ -2224,10 +2511,10 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
 
   const ligne = (x) => {
     const plage = `${enHeure(x.d)} – ${enHeure(x.f)}`;
-    const dur = ((x.f - x.d) / 60).toFixed(1).replace(".0", "");
+    const dur = unH((x.f - x.d) / 60);
     if (x.type === "libre") {
       return `<div class="ligne libre"><span class="hh">${plage}</span>
-        <span class="quoi">Libre · ${dur} h</span></div>`;
+        <span class="quoi">Libre · ${dur}</span></div>`;
     }
     if (x.type === "pause") {
       return `<div class="ligne pause"><span class="hh">${plage}</span>
@@ -2250,7 +2537,7 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
       // La ligne porte deux gestes qu'il ne faut pas confondre : cocher ce qui est
       // fait, et ouvrir le minuteur. Un <label> englobant volait le second.
       const mesure = mesureDe(e.id);
-      return `<div class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}${coche ? " coche" : ""}${futur ? " avenir" : ""}" style="--c:${esc(e.g.c)}">
+      return `<div class="ligne trav${x.bloc.retard ? " retard" : ""}${x.bloc.tard ? " tardif" : ""}${x.bloc.urgence ? " urgence" : ""}${coche ? " coche" : ""}${futur ? " avenir" : ""}" style="--c:${esc(e.g.c)}">
         <span class="hh">${plage}</span>
         ${futur ? "" : `<label class="zcoche" title="J'ai fait cette tranche">
           <input type="checkbox" class="cb" data-cb="${esc(e.id)}"
@@ -2260,7 +2547,9 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
           ${compact ? "" : `<span class="part">${unH(bh)} sur ${unH(e.h)}${part < 100 ? ` · ${part} %` : ""}${
             fait > 0.01 && fait < e.h - 0.01 ? ` · déjà ${unH(fait)}` : ""}${
             mesure ? ` · <b class="fr">×${mesure.facteur.toFixed(2).replace(".", ",")}</b> pour toi` : ""}</span>`}
-          ${x.bloc.tard ? `<span class="lt">hors horaires</span>` : x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
+          ${x.bloc.urgence ? `<span class="lt">urgent et important</span>`
+            : x.bloc.tard ? `<span class="lt">hors horaires</span>`
+            : x.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
           ${e.row.url ? `<a href="${esc(e.row.url)}" target="_blank" rel="noopener">cours ↗</a>` : ""}
         </span>
         ${futur || !canEdit ? "" : `<button class="chrono" data-chrono="${esc(e.id)}"
@@ -2273,7 +2562,7 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
     // On ne montre le titre d'un événement que s'il est explicitement partagé.
     if (!canEdit && !e.visible) {
       return `<div class="ligne occupe"><span class="hh">${plage}</span>
-        <span class="quoi">Occupé · ${dur} h</span></div>`;
+        <span class="quoi">Occupé · ${dur}</span></div>`;
     }
     return `<div class="ligne ${x.type}"><span class="hh">${plage}</span>
       <span class="quoi"><b>${esc(e.titre || e.title || "")}</b>
@@ -2289,7 +2578,8 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
        <div class="frise">${liste.map(ligne).join("")}</div></details>` : "";
   return repli(passes, `${plural(passes.length, "moment")} déjà ${passes.length > 1 ? "passés" : "passé"}`)
     + (vus.length ? `<div class="frise">${vus.map(ligne).join("")}</div>`
-                  : `<div class="empty">Plus rien de prévu aujourd'hui.</div>`)
+                  : `<div class="empty">${b.repos ? "Jour de repos."
+                                                  : "Plus rien de prévu aujourd'hui."}</div>`)
     + repli(apres, `La suite de la journée (${apres.length})`);
 }
 
@@ -2303,9 +2593,13 @@ function renderZone() {
   if (b) {
     const libres = creneauxTexte(b);
     h += `<div class="jlegende">
-      <span><b class="mono">${b.travail} h</b> de travail</span>
-      ${b.occupe > 0 ? `<span class="occ-t"><b class="mono">${b.occupe} h</b> d'événements</span>` : ""}
-      ${b.tardif > 0 ? `<span class="tard-t"><b class="mono">${b.tardif} h</b> hors horaires</span>` : ""}
+      ${b.repos && b.travail <= 0.01
+        ? `<span class="repos-t"><b>Repos</b> — rien n'est posé ce jour-là</span>`
+        : `<span><b class="mono">${unH(b.travail)}</b> de travail</span>`}
+      ${b.occupe > 0 ? `<span class="occ-t"><b class="mono">${unH(b.occupe)}</b> d'événements</span>` : ""}
+      ${b.tardif > 0 ? `<span class="tard-t"><b class="mono">${unH(b.tardif)}</b> hors horaires</span>` : ""}
+      ${b.urgent > 0 ? `<span class="tard-t"><b class="mono">${unH(b.urgent)}</b> sur ton repos —
+        urgent et important</span>` : ""}
       <span class="lib-t">Libre : ${libres.length ? libres.join(" · ") : "rien"}</span>
     </div>`;
   }
@@ -2345,10 +2639,65 @@ function nouvelEvenement() {
     visible: $("evV").checked,
   };
 }
+
+/* ═════════ CE QUI SE RÉPÈTE ═════════
+   Un stage de huit semaines, c'est quarante journées identiques. Les saisir une
+   par une n'est pas une option, et les garder sous forme de règle obligerait
+   chaque lecteur d'événements — le planificateur, la frise, le calendrier,
+   l'export, les créneaux publiés — à connaître la règle. On écrit donc les
+   journées en clair, reliées par une même `serie` : un seul geste les crée, un
+   seul geste les efface, et rien d'autre dans l'application n'a à changer. */
+
+/** Au-delà, ce n'est plus un engagement, c'est un remplissage. */
+const SERIE_MAX = 250;
+
+/** Les dates d'une répétition, bornes comprises. Rend null si le formulaire
+ *  n'en demande pas, et une liste vide si elle n'a aucun jour. */
+function datesSerie() {
+  if (!$("evR") || !$("evR").checked) return null;
+  const debut = $("evD").value, fin = ($("evRJ").value || "").trim();
+  if (!debut || !fin || fin < debut) return [];
+  const semaine = $("evRQ").value !== "tous";
+  const out = [];
+  const d = new Date(debut + "T00:00"), stop = new Date(fin + "T00:00").getTime();
+  while (d.getTime() <= stop && out.length <= SERIE_MAX) {
+    if (!semaine || (d.getDay() >= 1 && d.getDay() <= 5)) out.push(isoJour(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+/** Le ou les événements que le formulaire décrit, prêts à être posés. */
+function nouveauxEvenements() {
+  const modele = nouvelEvenement();
+  const dates = datesSerie();
+  if (!dates) return [modele];
+  const serie = "s" + Date.now().toString(36);
+  return dates.map((date, i) => ({ ...modele, id: `${modele.id}-${i}`, date, serie }));
+}
+
+/** Combien de jours porte une série, et lesquels. */
+const serieDe = (id) => events.filter((e) => e.serie && e.serie === id);
+
+/** Le compteur sous la case « se répète », pour qu'on sache ce qu'on va poser. */
+function majRepetition() {
+  const on = $("evR") && $("evR").checked;
+  const z = $("evRz"), q = $("evRQ"), n = $("evRn");
+  if (!z) return;
+  z.hidden = q.hidden = !on;
+  if (!on) { n.textContent = ""; return; }
+  const dates = datesSerie() || [];
+  n.textContent = !dates.length
+    ? "choisis une date de fin après la date de début"
+    : dates.length > SERIE_MAX
+      ? `plus de ${SERIE_MAX} jours : c'est trop long pour une seule série`
+      : `${plural(dates.length, "journée")}, du ${fmtD(new Date(dates[0] + "T00:00"))}` +
+        ` au ${fmtD(new Date(dates[dates.length - 1] + "T00:00"))}`;
+}
 function baseplan() {
   const cle = isoJour(new Date(NOW));
   return {
-    etapes: ALL, done, evenements: events, capacites, reports,
+    etapes: ALL, done, evenements: events, capacites, repos, reports,
     plafonds: partJour && partJour.date === cle
       ? { [cle]: Math.max(0, partJour.h - heuresFaitesLe(cle)) } : {},
     maintenant: NOW, fin: FIN_ANNEE,
@@ -2359,25 +2708,30 @@ const leJour = (d) => new Date(d + "T00:00").toLocaleDateString("fr-FR",
 
 /** Aperçu discret sous le calendrier, pendant qu'il remplit le formulaire. */
 function verifier() {
-  const ev = nouvelEvenement();
+  majRepetition();
   const zone = $("alerte");
   if (!zone) return null;
+  const ev = nouvelEvenement();
   if (!ev.date || !ev.debut || !ev.fin) { zone.innerHTML = ""; return null; }
   if (duree(ev) <= 0) {
     zone.innerHTML = `<div class="impossible">L'heure de fin doit suivre l'heure de début.</div>`;
     return null;
   }
-  const t = testerAjout(baseplan(), ev);
+  const liste = nouveauxEvenements();
+  if (!liste.length || liste.length > SERIE_MAX) { zone.innerHTML = ""; return null; }
+  const t = testerAjout(baseplan(), liste);
+  // Une série se juge sur son total, pas sur sa première journée.
+  const quoi = t.jours > 1 ? `<b>${t.jours} journées</b>, ${unH(t.duree)} en tout : ` : "";
   zone.innerHTML = !t.possible
-    ? `<div class="impossible"><b>Journée pleine.</b> ${t.supplement} h de cours n'auraient
-        plus de place nulle part.</div>`
+    ? `<div class="impossible"><b>${t.jours > 1 ? "Ça ne rentre pas" : "Journée pleine"}.</b>
+        ${quoi}${t.supplement} h de cours n'auraient plus de place nulle part.</div>`
     : t.tardif >= 0.1
-      ? `<div class="attention">Ça rentre, mais <b>${t.tardif} h</b> de travail passeraient
+      ? `<div class="attention">Ça rentre, mais ${quoi}<b>${t.tardif} h</b> de travail passeraient
           en dehors de tes heures normales, le soir.</div>`
       : t.deplace > 0
-        ? `<div class="ok-zone">Ça rentre. <b>${t.deplace} h</b> de travail se reportent sur les
+        ? `<div class="ok-zone">Ça rentre. ${quoi}<b>${t.deplace} h</b> de travail se reportent sur les
             jours suivants, sans faire sauter d'échéance.</div>`
-        : `<div class="ok-zone">Ça rentre. Ce créneau ne croise aucun travail prévu.</div>`;
+        : `<div class="ok-zone">Ça rentre. ${quoi || "Ce créneau "}ne croise aucun travail prévu.</div>`;
   return t;
 }
 
@@ -2398,7 +2752,23 @@ function ajouter(force) {
       corps: `<p>L'heure de fin doit venir après l'heure de début.</p>` });
     return;
   }
-  const t = testerAjout(baseplan(), ev);
+  const liste = nouveauxEvenements();
+  if (!liste.length) {
+    dialogue({ titre: "Cette répétition n'a aucun jour",
+      corps: `<p>La date de fin doit venir après la date de début, et la semaine doit
+        contenir au moins un jour choisi.</p>` });
+    return;
+  }
+  if (liste.length > SERIE_MAX) {
+    dialogue({ titre: "C'est trop long pour une seule série",
+      corps: `<p>Une série s'arrête à <b>${SERIE_MAX} journées</b>. Au-delà, ce n'est plus un
+        engagement qu'on pose : c'est un emploi du temps qu'on remplit, et il vaut mieux le
+        découper en plusieurs morceaux qu'on pourra retirer séparément.</p>` });
+    return;
+  }
+  const t = testerAjout(baseplan(), liste);
+  const combien = liste.length > 1 ? `« ${esc(ev.titre)} » sur ${plural(liste.length, "journée")}`
+                                   : `« ${esc(ev.titre)} »`;
 
   // Le seul refus possible : plus une heure de libre, nulle part.
   if (!t.possible && !force) {
@@ -2410,7 +2780,7 @@ function ajouter(force) {
           toute la journée, et les jours suivants aussi.</p>
         <p><b>${t.supplement} h</b> de cours ne retrouveraient de place nulle part —
         ni dans tes heures de travail, ni le soir.</p>
-        <p class="petit">Pour caler « ${esc(ev.titre)} » quand même, il faut d'abord valider des
+        <p class="petit">Pour caler ${combien} quand même, il faut d'abord valider des
         étapes, élargir tes heures dans Réglages, ou repousser une échéance depuis le
         calendrier.</p>`,
       actions: [
@@ -2421,12 +2791,16 @@ function ajouter(force) {
     return;
   }
 
-  events.push(ev);
+  events.push(...liste);
   events.sort((a, b) => (a.date + (a.debut || "")).localeCompare(b.date + (b.debut || "")));
-  log(`a ajouté « ${ev.titre} » le ${leJour(ev.date)} de ${ev.debut} à ${ev.fin}`);
+  log(liste.length > 1
+    ? `a ajouté « ${ev.titre} » sur ${plural(liste.length, "journée")}, du ${leJour(liste[0].date)}`
+      + ` au ${leJour(liste[liste.length - 1].date)}, de ${ev.debut} à ${ev.fin}`
+    : `a ajouté « ${ev.titre} » le ${leJour(ev.date)} de ${ev.debut} à ${ev.fin}`);
   saveEvents();
   $("evT").value = ""; $("evL").value = "";
   $("evU").checked = false; $("evP").checked = false; $("evV").checked = false;
+  $("evR").checked = false; $("evRJ").value = ""; majRepetition();
   const z = $("alerte"); if (z) z.innerHTML = "";
   calSel = new Date(ev.date + "T00:00");
   renderAll();
@@ -2450,15 +2824,24 @@ function ajouter(force) {
 /* ═════════ CAPACITÉS ═════════ */
 function renderCapacites() {
   const box = $("caps"); if (!box) return;
-  const noms = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-  const total = [0,1,2,3,4,5,6].reduce((a, j) =>
-    a + (capacites[j] || []).reduce((x, s2) => x + (enMin(s2[1]) - enMin(s2[0])) / 60, 0), 0);
+  const heuresDe = (j) => (capacites[j] || []).reduce((x, s2) => x + (enMin(s2[1]) - enMin(s2[0])) / 60, 0);
+  // Les jours de repos ne comptent pas dans le total : c'est le nombre d'heures
+  // sur lesquelles le planning peut vraiment compter qu'on veut lire ici.
+  const total = [0,1,2,3,4,5,6].reduce((a, j) => a + (auRepos(j) ? 0 : heuresDe(j)), 0);
+  const noms = NOMS_JOURS;
   box.innerHTML = [1,2,3,4,5,6,0].map((j) => {
     const txt = (capacites[j] || []).map((s2) => `${s2[0]}-${s2[1]}`).join(", ");
-    const h = (capacites[j] || []).reduce((x, s2) => x + (enMin(s2[1]) - enMin(s2[0])) / 60, 0);
-    return `<label class="cap"><span>${noms[j]}</span>
+    const off = auRepos(j);
+    const h = heuresDe(j);
+    return `<div class="cap${off ? " off" : ""}">
+      <span class="jr">${noms[j]}</span>
+      <label class="rep" title="Aucune heure de travail n'est posée ce jour-là">
+        <input type="checkbox" data-repos="${j}"${off ? " checked" : ""}${canEdit ? "" : " disabled"}>
+        <span>repos</span></label>
       <input type="text" data-cap="${j}" value="${txt}" placeholder="09:00-12:00, 14:00-18:00"
-        ${canEdit ? "" : "disabled"}> <em>${h ? h.toFixed(1).replace(".0","") + " h" : "—"}</em></label>`;
+        ${canEdit && !off ? "" : "disabled"}>
+      <em>${off ? "repos" : h ? h.toFixed(1).replace(".0","") + " h" : "—"}</em>
+    </div>`;
   }).join("") +
     `<div class="captot">Soit <b class="mono">${total.toFixed(1).replace(".0","")} h</b> déclarées
       par semaine — un peu moins une fois les pauses déduites : ${REGLES.pause} min après chaque
@@ -2466,18 +2849,26 @@ function renderCapacites() {
       <div class="petit">Ce qui n'y tient pas glisse sur des heures inhabituelles
       (jusqu'à ${JOURNEE[1]}), et seulement en rattrapage. Le reste de la journée
       ${JOURNEE[0]}–${JOURNEE[1]} apparaît comme temps libre pour ton entourage.</div>
-      ${canEdit ? `<button class="btn" id="capType">Revenir à la journée type 9 h – 16 h</button>` : ""}
+      <div class="petit">Un jour coché <b>repos</b> ne reçoit rien : ni travail, ni soirée de
+      rattrapage. Une seule chose peut l'ouvrir, et jamais plus de ${URGENCE.max} h : une étape
+      <b>à la fois urgente et importante</b> — un devoir noté dont l'échéance est passée ou
+      tombe dans les ${URGENCE.jours} jours. Important mais pas urgent attend lundi.</div>
+      <div class="petit">Pour éviter d'avoir un mois vide à côté d'un mois plein, une étape peut
+      démarrer jusqu'à ${AVANCE_MAX / 7} semaines avant sa date prévue. Son échéance, elle, ne
+      bouge pas.</div>
+      ${canEdit ? `<button class="btn" id="capType">Revenir à la semaine type</button>` : ""}
     </div>`;
   const bt = $("capType");
   if (bt) bt.onclick = () => dialogue({
-    ton: "warn", titre: "Revenir à la journée type ?",
-    corps: `<p>Lundi au vendredi 9 h – 12 h 15 et 13 h 15 – 16 h, samedi matin,
-      dimanche au repos. Tes plages actuelles seront remplacées.</p>`,
+    ton: "warn", titre: "Revenir à la semaine type ?",
+    corps: `<p>Lundi au vendredi 9 h – 12 h 15 et 13 h 15 – 16 h. Samedi et dimanche au repos.
+      Tes plages et tes jours de repos actuels seront remplacés.</p>`,
     actions: [
       { texte: "Annuler", pri: true },
       { texte: "Remplacer", faire: () => {
           capacites = journeeType();
-          log("a repris la journée type 9 h – 16 h");
+          repos = [...REPOS];
+          log("a repris la semaine type 9 h – 16 h, week-end au repos");
           saveState(); renderAll();
         } },
     ],
@@ -2892,24 +3283,28 @@ function renderProgramme() {
     return;
   }
   const perso = programme.modele === "perso";
+  const siennes = programme.matieres.length;
   box.innerHTML = `
     <p class="aide">${perso
-      ? `Ton programme, à ta main : <b>${programme.matieres.length}</b> matière(s),
+      ? `Ton programme, à ta main : <b>${siennes}</b> matière(s),
          <b>${Math.round(TOTAL_H)} h</b> au total.`
       : `Tu utilises le modèle <b>${esc(MODELES[programme.modele]?.nom || programme.modele)}</b> —
-         ${Math.round(TOTAL_H)} h.</p>
+         ${Math.round(TOTAL_H)} h${siennes ? `, tes matières comprises` : ""}.</p>
        <p class="aide">Découpage et volumes sont relevés sur le CNED : chaque situation
          professionnelle et chaque séquence y porte une <b>durée indicative</b>, reprise ici
          telle quelle. Elle reste une moyenne — rends le programme modifiable pour l'ajuster
-         à ton rythme, ou pour ajouter tes propres matières.`}</p>
-    ${perso ? `<div class="matieres" id="matieres"></div>
-      <button class="btn pri" id="ajMatiere">Ajouter une matière</button>` : ""}
+         à ton rythme.`}</p>
+    ${perso ? "" : `<p class="aide"><b>Tes matières à toi s'ajoutent au modèle.</b> Un
+       référentiel ne connaît ni les démarches, ni les dossiers à déposer, ni les rendez-vous
+       à prendre — et ces heures-là sont pourtant à trouver dans les mêmes journées.</p>`}
+    <div class="matieres" id="matieres"></div>
+    <button class="btn pri" id="ajMatiere">Ajouter une matière</button>
     <div class="zbascule">
       ${perso ? "" : `<button class="btn" id="versPerso">Rendre ce programme modifiable</button>`}
       <button class="btn" id="autreModele">Repartir d'un autre modèle</button>
     </div>`;
 
-  if (perso) renderMatieres();
+  renderMatieres();
 
   const cu = $("copierUid");
   if (cu) cu.onclick = async () => {
@@ -2935,6 +3330,8 @@ function renderProgramme() {
     ton: "warn", titre: "Repartir d'un autre modèle ?",
     corps: `<p>Ton programme actuel sera remplacé. Les étapes déjà validées qui
         n'existent pas dans le nouveau modèle disparaîtront du suivi.</p>
+      ${!perso && siennes ? `<p class="petit">Tes ${plural(siennes, "matière")} à toi
+        ${siennes > 1 ? "sont gardées" : "est gardée"} : elles ne viennent pas du modèle.</p>` : ""}
       <div class="mchoix">${Object.values(MODELES).map((m) =>
         `<label class="modele"><input type="radio" name="mnew" value="${m.id}">
           <span><b>${esc(m.nom)}</b><em>${esc(m.resume)}</em></span></label>`).join("")}</div>`,
@@ -2943,7 +3340,11 @@ function renderProgramme() {
       { texte: "Remplacer", faire: () => {
           const c = document.querySelector('input[name="mnew"]:checked');
           if (!c) return;
-          programme = depuisModele(c.value);
+          const suivant = depuisModele(c.value);
+          // Une matière à soi ne vient pas du modèle : changer de référentiel
+          // n'a aucune raison de l'emporter avec lui.
+          if (!perso && suivant.modele !== "perso") suivant.matieres = programme.matieres;
+          programme = suivant;
           appliquerProgramme(`a repris le modèle « ${MODELES[c.value].nom} »`);
         } },
     ],
@@ -2979,7 +3380,8 @@ function renderMatieres() {
             `<option value="${c.id}"${c.id === m.couleur ? " selected" : ""}>${c.nom}</option>`).join("")}</select>
           <button class="btn danger mini" data-msuppr="${im}">Supprimer</button>
         </div>
-        <table class="etapes"><tr><th>Étape</th><th>Heures</th><th>De</th><th>À</th><th></th></tr>
+        <table class="etapes"><tr><th>Étape</th><th>Heures</th><th>De</th><th>À</th>
+          <th title="Important au sens d'Eisenhower : ce qui compte vraiment. Urgent et important, ça peut ouvrir un jour de repos.">Import.</th><th></th></tr>
         ${m.etapes.map((e, ie) => `<tr>
           <td><input type="text" data-en="${im}.${ie}" value="${esc(e.n)}" maxlength="70"></td>
           <td><input type="number" data-eh="${im}.${ie}" value="${e.h}" min="1" max="400" step="1"></td>
@@ -2987,9 +3389,14 @@ function renderMatieres() {
             `<option value="${q.q}"${q.q === e.s ? " selected" : ""}>${q.texte}</option>`).join("")}</select></td>
           <td><select data-ee="${im}.${ie}">${QUINZAINES.map((q) =>
             `<option value="${q.q + 1}"${q.q + 1 === e.e ? " selected" : ""}>${q.texte}</option>`).join("")}</select></td>
+          <td class="cimp"><input type="checkbox" data-eimp="${im}.${ie}"${e.important ? " checked" : ""}
+            title="Important : avec une échéance proche, cette étape peut prendre sur un jour de repos"></td>
           <td><button class="btn mini" data-esuppr="${im}.${ie}" title="Supprimer l'étape">✕</button></td>
         </tr>`).join("")}
         </table>
+        <div class="petit">La case <b>Import.</b> est la moitié « importante » de la matrice
+        d'Eisenhower. Cochée, et l'échéance passée ou à moins de ${URGENCE.jours} jours, l'étape
+        devient la seule chose qui peut prendre sur un jour de repos — ${URGENCE.max} h au plus.</div>
         <button class="btn" data-eaj="${im}">Ajouter une étape</button>
       </div>
     </details>`;
@@ -3003,9 +3410,9 @@ function renderMatieres() {
 /** Un seul point d'entrée pour toutes les modifications du programme. */
 function brancherProgramme() {
   document.addEventListener("input", (ev) => {
-    if (!canEdit || !programme || programme.modele !== "perso") return;
+    if (!canEdit || !programme) return;
     const t = ev.target;
-    const maj = (fn) => { clearTimeout(tmr.prog); tmr.prog = setTimeout(() => { fn(); appliquerProgramme(); }, 600); };
+    const maj = (fn) => differer("programme", 600, () => { fn(); appliquerProgramme(); });
     if (t.dataset.mnom !== undefined) {
       const i = +t.dataset.mnom, v = t.value.trim();
       if (v) maj(() => { programme.matieres[i].nom = v; });
@@ -3019,9 +3426,15 @@ function brancherProgramme() {
   });
 
   document.addEventListener("change", (ev) => {
-    if (!canEdit || !programme || programme.modele !== "perso") return;
+    if (!canEdit || !programme) return;
     const t = ev.target;
-    if (t.dataset.mcoul !== undefined) {
+    if (t.dataset.eimp !== undefined) {
+      const [i, j] = t.dataset.eimp.split(".").map(Number);
+      programme.matieres[i].etapes[j].important = t.checked;
+      appliquerProgramme(t.checked
+        ? `a marqué « ${programme.matieres[i].etapes[j].n} » comme importante`
+        : `a retiré l'importance de « ${programme.matieres[i].etapes[j].n} »`);
+    } else if (t.dataset.mcoul !== undefined) {
       programme.matieres[+t.dataset.mcoul].couleur = t.value;
       appliquerProgramme();
     } else if (t.dataset.es !== undefined || t.dataset.ee !== undefined) {
@@ -3038,7 +3451,7 @@ function brancherProgramme() {
     if (!canEdit) return;
     const aj = ev.target.closest("#ajMatiere");
     if (aj) {
-      if (programme.modele !== "perso") return;
+      if (!programme) return;
       const n = programme.matieres.length;
       const id = "m" + Date.now().toString(36);
       programme.matieres.push({
@@ -3087,22 +3500,46 @@ function renderCompte() {
   const box = $("compteBox");
   if (!box) return;
   if (!canEdit || !session) { box.innerHTML = ""; return; }
+  const nue = sansAdresse();
   box.innerHTML = `
-    <p class="aide">Compte <b>${esc(session.user.email)}</b>.
-      Tout ce qui est enregistré est visible dans cet onglet et modifiable.
+    <p class="aide">${nue
+      ? `Compte <b>sans adresse électronique</b>. Tout ce qui est enregistré est
+         visible dans cet onglet et modifiable.`
+      : `Compte <b>${esc(session.user.email)}</b>.
+         Tout ce qui est enregistré est visible dans cet onglet et modifiable.`}
       Le détail est dans la
       <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</p>
+    ${nue ? `<div class="zaction pose">
+      <div><b>Ajouter une adresse électronique</b>
+        <em>Ton compte ne tient aujourd'hui qu'à ce navigateur : effacer les données
+          du site l'efface, et il n'y a aucun moyen de le retrouver. Une adresse le
+          rend récupérable, ouvre le fil, les messages et les contacts, et te permet
+          de l'ouvrir sur un autre appareil. Ton planning, tes fiches et tes heures
+          restent exactement là où ils sont.</em></div>
+      <form class="carte mince" id="formLier">
+        <div class="champ"><label class="fl" for="lierEmail">Adresse électronique</label>
+          <input id="lierEmail" type="email" autocomplete="email" required></div>
+        <div class="champ"><label class="fl" for="lierMdp">Mot de passe</label>
+          <input id="lierMdp" type="password" autocomplete="new-password" minlength="8" required>
+          <div class="fl2">8 caractères au minimum.</div></div>
+        <div class="fl2" id="lierEtat"></div>
+        <button class="btn pri" type="submit">Poser mon adresse</button>
+      </form>
+    </div>` : ""}
     <div class="zaction">
       <div><b>Se déconnecter</b>
-        <em>Ferme la session sur cet appareil. Ton planning n'est pas touché.</em></div>
-      <button class="btn" id="deco">Se déconnecter</button>
+        <em>${nue
+          ? `Attention : sans adresse, se déconnecter ferme la seule porte. Ce compte
+             et son planning deviennent inaccessibles, pour de bon.`
+          : `Ferme la session sur cet appareil. Ton planning n'est pas touché.`}</em></div>
+      <button class="btn${nue ? " danger" : ""}" id="deco">Se déconnecter</button>
     </div>
-    <div class="zaction">
+    ${nue ? "" : `<div class="zaction">
       <div><b>Changer mon mot de passe</b>
         <em>Un lien part vers ${esc(session.user.email)}. Il n'y a pas d'autre chemin :
           personne, pas même l'éditeur, ne peut lire ni fixer ton mot de passe.</em></div>
       <button class="btn" id="mdpLien">Recevoir le lien</button>
-    </div>
+    </div>`}
     <div class="zdanger">
       <div><b>Supprimer mon compte</b>
         <em>Efface immédiatement le compte, le planning, le journal, les partages,
@@ -3112,6 +3549,7 @@ function renderCompte() {
     </div>
     <div id="blocages"></div>`;
   renderBlocages();
+  if (nue) brancherLiaison();
   $("deco").onclick = async () => {
     await sb.auth.signOut();
     session = null; moi = null; vue = null; canEdit = false;
@@ -3119,7 +3557,7 @@ function renderCompte() {
     history.replaceState(null, "", location.pathname);
     await lancer();
   };
-  $("mdpLien").onclick = async () => {
+  if (!nue) $("mdpLien").onclick = async () => {
     const b = $("mdpLien");
     b.disabled = true; b.textContent = "Envoi…";
     const { error } = await sb.auth.resetPasswordForEmail(session.user.email,
@@ -3590,9 +4028,26 @@ async function ouvrir(profil) {
   vue = profil;
   canEdit = estMoi();
   const { data: st, error: errEtat } = await sb.from("ciel_state")
-    .select("data").eq("user_id", profil.id).maybeSingle();
-  const secours = errEtat ? loadLocal(profil.id) : null;
-  appliquerEtat(st ? st.data : secours || {});
+    .select("data,updated_at").eq("user_id", profil.id).maybeSingle();
+  const local = lireLocal(profil.id);
+  let d = st ? st.data : null;
+  let secours = false, aRenvoyer = false, ecarte = null;
+  if (errEtat) {
+    // Le serveur ne répond pas : on ouvre sur la copie locale plutôt que sur rien.
+    if (local && local.data) { d = local.data; secours = true; }
+  } else if (local && local.sale && local.data && estMoi()) {
+    /* Cette copie porte des modifications qui ne sont jamais parties — une coche
+       posée juste avant de verrouiller l'écran, par exemple. On ne les reprend
+       que si personne n'a écrit ailleurs depuis : sinon on effacerait le travail
+       fait sur l'autre appareil, et mieux vaut perdre une coche qu'une journée. */
+    const serveurPlusRecent = st && st.updated_at && local.pris
+      && Date.parse(st.updated_at) > Date.parse(local.pris);
+    if (serveurPlusRecent) ecarte = local.pris;
+    else { d = local.data; aRenvoyer = true; }
+  }
+  appliquerEtat(d || {});
+  // Reprises : on les renvoie au serveur tout de suite, une fois pour toutes.
+  if (aRenvoyer) saveState();
   // Premier passage après inscription : on pose le modèle retenu.
   if (!modeleEnAttente) { try { modeleEnAttente = localStorage.getItem("ciel.modele"); } catch {} }
   if (modeleEnAttente && estMoi() && !(programme.matieres || []).length && programme.modele === "cned") {
@@ -3627,6 +4082,7 @@ async function ouvrir(profil) {
   // L'en-tête ne montre plus l'adresse électronique : c'était en donner un
   // morceau à quiconque regarde l'écran par-dessus l'épaule.
   majBoutonCompte();
+  majAccesSansAdresse();
   chargerNouveautes().catch(() => {});
   montrer("appli");
   buildGantt(); buildAcc();
@@ -3636,6 +4092,17 @@ async function ouvrir(profil) {
   // Le repli sur la copie locale doit se voir : c'est le dernier mot de l'ouverture.
   if (secours) setSync("warn", "hors ligne — copie locale");
   else setSync("ok", canEdit ? "mode édition" : "lecture publique");
+  /* Perdre du travail en silence est pire que le perdre. Un bandeau d'état
+     serait recouvert par le premier enregistrement venu : il faut le dire une
+     fois, franchement, à l'écran. */
+  if (ecarte) dialogue({ ton: "warn", titre: "Des changements n'ont pas pu être repris",
+    corps: `<p>Cet appareil gardait des modifications faites le
+      <b>${esc(fmtDY(Date.parse(ecarte)))}</b> qui ne sont jamais parties — l'application
+      a dû se fermer avant.</p>
+      <p>Depuis, ton planning a été modifié ailleurs, et ce qui a été enregistré
+      là-bas est plus récent. Reprendre l'ancienne copie aurait effacé ce
+      travail-là, donc elle a été écartée. Revérifie ce que tu avais coché sur
+      cet appareil.</p>` });
   // Le modèle CNED n'a légitimement aucune matière déclarée : ses matières
   // viennent du référentiel. Se fier à cette liste faisait reposer la question
   // à chaque ouverture. C'est le drapeau qui décide, plus la forme du programme.
@@ -3789,12 +4256,27 @@ function direAttente(titre, aide) {
 }
 
 /** Le bras décroche. Rien n'est perdu : on repart au toucher, ou tout seul. */
+/** L'erreur qui a interrompu le démarrage, si ce n'était pas le réseau. */
+let pannePropre = null;
+
 function attenteCassee() {
   chargeEnCours = false;
   clearTimeout(tPatience);
   montrer("chargement");
   $("chargement").classList.add("casse");
   const horsLigne = navigator.onLine === false;
+  // Un défaut de l'application ne se répare pas en réessayant : le dire, plutôt
+  // que de faire croire à une coupure et boucler.
+  if (pannePropre && !horsLigne && sb.reseau.ok) {
+    direAttente("Repère s'est arrêté en chemin",
+      "Ce n'est pas ta connexion : quelque chose a échoué dans l'application. "
+      + "Touche l'écran pour réessayer. Si ça recommence, dis-le — le détail est "
+      + "dans la console du navigateur.");
+    essais++;
+    clearTimeout(tReprise);
+    tReprise = setTimeout(lancer, RECULS[Math.min(essais - 1, RECULS.length - 1)]);
+    return;
+  }
   direAttente(horsLigne ? "Pas de réseau ici" : "Repère ne répond pas",
     horsLigne
       ? "Ton appareil n'est connecté à rien. Touche l'écran pour réessayer — ça repart aussi tout seul dès que la connexion revient."
@@ -3816,8 +4298,17 @@ async function lancer() {
   chargerRuban().catch(() => {});
   const debut = Date.now();
   let abouti = false;
+  pannePropre = null;
   try { abouti = (await demarrer()) !== false; }
-  catch (e) { abouti = false; }
+  catch (e) {
+    abouti = false;
+    /* Ce catch existe pour que l'application ne meure pas sur un écran blanc.
+       Mais avaler l'erreur la déguisait en coupure réseau : on réessayait sans
+       fin une requête qui n'avait jamais été le problème, et le défaut restait
+       introuvable. On la garde, on la dit, et on l'écrit dans la console. */
+    pannePropre = e;
+    console.error("Repère — le démarrage s'est interrompu :", e);
+  }
   clearTimeout(tPatience);
   chargeEnCours = false;
   // C'est demarrer() qui sait si elle a abouti : une requête échouée en chemin
@@ -3910,6 +4401,18 @@ document.addEventListener("click", (e) => {
   setTimeout(() => $(p === "connexion" ? "conEmail" : "insNom")?.focus(), 260);
 });
 
+/* Basculer d'application ne ferme pas la page : une requête normale part très
+   bien, et c'est le cas courant sur un téléphone. La fermer, si — d'où
+   keepalive, qui laisse la requête vivre plus longtemps que la page.
+   beforeunload ne se déclenche pas de façon fiable sur mobile ; ces deux-là si. */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") viderDifferes();
+});
+addEventListener("pagehide", () => { enFermeture = true; viderDifferes(); });
+// Le navigateur peut rendre la page telle quelle après un retour en arrière :
+// elle n'est plus en train de mourir, et keepalive bride la taille du corps.
+addEventListener("pageshow", () => { enFermeture = false; });
+
 document.addEventListener("input", (e) => {
   if (e.target.id === "chercheP") { clearTimeout(tmr.ann); tmr.ann = setTimeout(renderAnnuaire, 200); }
 });
@@ -3933,6 +4436,107 @@ async function verifierNom() {
   zone.textContent = data ? "Ce nom est libre." : "Ce nom est déjà pris. Choisis-en un autre.";
   return Boolean(data);
 }
+
+/* ═════════ COMPTE SANS ADRESSE ═════════
+   On peut se servir de Repère sans donner d'adresse électronique. Ce que ça
+   coûte est net, et l'application le dit avant, pendant et après : le compte ne
+   tient qu'à ce navigateur. Pas d'adresse, donc rien pour le retrouver si le
+   stockage est effacé, et rien pour l'ouvrir sur un autre appareil.
+
+   Ce qui marche : le planning, le minuteur, les fiches, la montagne, les
+   blocages, l'import de son propre agenda, les notifications sur cet appareil.
+   Ce qui ne marche pas : tout ce qui sort du compte — le fil, les messages, les
+   contacts, le classement, publier son planning, envoyer sa demande à quelqu'un.
+
+   Ces refus ne sont pas une affaire d'écran caché : ils sont tenus en base par
+   un déclencheur sur chaque table concernée, qui lit « is_anonymous » dans le
+   jeton. L'interface ne fait que ne pas proposer de portes qui ne s'ouvrent pas. */
+
+const sansAdresse = () => Boolean(session && session.user && session.user.is_anonymous);
+const VUES_ADRESSE = ["fil", "messages", "contacts"];
+
+/** Les sections qui supposent une adresse disparaissent de la barre du bas. */
+function majAccesSansAdresse() {
+  const nue = sansAdresse();
+  const bar = $("sansAdrBar");
+  if (bar) bar.hidden = !nue || !canEdit;
+  document.querySelectorAll("#socle button[data-vue]").forEach((b) => {
+    if (VUES_ADRESSE.includes(b.dataset.vue)) b.hidden = nue;
+  });
+}
+
+async function creerSansAdresse(nom) {
+  messageAuth("Création du compte…", true);
+  const { error } = await sb.auth.signInAnonymously({
+    data: { nom: nom || "Membre", public: false, conditions: "1", modele: modeleChoisi },
+  });
+  if (error) {
+    // Le fournisseur se règle côté Supabase : tant qu'il est fermé, mieux vaut
+    // le dire que de laisser un bouton qui ne fait rien.
+    const ferme = /anonymous|disabled|422/i.test(String(error.message || ""));
+    return messageAuth(ferme
+      ? "Les comptes sans adresse ne sont pas encore ouverts sur ce serveur."
+      : String(error.message || "Création impossible."));
+  }
+  messageAuth("");
+  await lancer();
+}
+
+/** Poser une adresse sur un compte qui n'en avait pas. Rien n'est perdu. */
+function brancherLiaison() {
+  const f = $("formLier");
+  if (!f) return;
+  f.onsubmit = async (ev) => {
+    ev.preventDefault();
+    const etat = $("lierEtat");
+    const email = $("lierEmail").value.trim().toLowerCase();
+    const mdp = $("lierMdp").value;
+    if (mdp.length < 8) { etat.textContent = "Le mot de passe doit faire au moins 8 caractères."; return; }
+    etat.textContent = "Envoi…";
+    const { error } = await sb.auth.updateUser({ email, password: mdp });
+    if (error) {
+      etat.textContent = /already|exists|registered/i.test(String(error.message))
+        ? "Cette adresse est déjà prise par un autre compte."
+        : String(error.message);
+      return;
+    }
+    etat.textContent = "";
+    const { data } = await sb.auth.getSession();
+    session = data.session;
+    // Si le serveur demande une confirmation, le drapeau ne tombe qu'au clic sur
+    // le lien : on ne prétend pas que c'est fait tant que le jeton dit le contraire.
+    const encoreNue = sansAdresse();
+    dialogue({ ton: "info", titre: encoreNue ? "Presque" : "Adresse posée",
+      corps: encoreNue
+        ? `<p>Ouvre le courriel envoyé à <b>${esc(email)}</b> et suis le lien : ton compte
+             sera confirmé et tout s'ouvrira.</p>
+           <p class="petit">Tant que ce n'est pas fait, le compte reste lié à ce
+             navigateur — ne vide pas les données du site.</p>`
+        : `<p>Ton compte a maintenant une adresse. Le fil, les messages et les contacts
+             sont ouverts, et tu peux l'ouvrir sur un autre appareil.</p>
+           <p class="petit">Ton planning, tes fiches et tes heures n'ont pas bougé.</p>` });
+    majAccesSansAdresse();
+    renderCompte(); renderProfil();
+  };
+}
+
+$("insSansAdresse").addEventListener("click", () => {
+  const nom = $("insNom").value.trim();
+  dialogue({
+    ton: "warn",
+    titre: "Un compte sans adresse, c'est un compte sans filet",
+    corps: `<p>Il ne tient qu'à <b>ce navigateur</b>. Si tu effaces les données du site,
+        changes d'appareil ou te déconnectes, le compte et son planning sont perdus —
+        il n'existe aucun moyen de les retrouver, pas même pour nous.</p>
+      <p>Le planning, le minuteur, les fiches et les blocages fonctionnent normalement.
+        Le fil, les messages et les contacts demandent une adresse.</p>
+      <p class="petit">Tu pourras en poser une plus tard, dans « Moi », sans rien perdre.</p>`,
+    actions: [
+      { texte: "Créer sans adresse", pri: true, faire: () => creerSansAdresse(nom) },
+      { texte: "Revenir" },
+    ],
+  });
+});
 
 $("formInscription").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -4944,6 +5548,9 @@ async function chargerCommuns() {
 
 async function publierDispos() {
   if (!session || !canEdit || !plan) return;
+  // Un compte sans adresse ne publie ni créneaux ni heures : la base le refuse,
+  // et tenter quand même ferait une requête perdue à chaque enregistrement.
+  if (sansAdresse()) return;
   const lignes = [];
   const debut = minuitLocal(NOW);
   for (let i = 0; i < 15; i++) {
@@ -4991,7 +5598,11 @@ function entrerEnVisite() {
 
 function routeDepart() {
   modeVisite = false;
+  // On sort peut-être du mode visite, qui ne laissait que « Fil » : on rouvre
+  // tout, puis on laisse majAccesSansAdresse retirer ce qui doit l'être. L'ordre
+  // compte — l'inverse rouvrirait les sections qu'on vient de fermer.
   document.querySelectorAll("#socle button").forEach((b) => (b.hidden = false));
+  majAccesSansAdresse();
   let dernier = null;
   try { dernier = sessionStorage.getItem("ciel.vue"); } catch {}
   if (location.hash.startsWith("#/")) return appliquerRoute();
@@ -5004,23 +5615,60 @@ function routeDepart() {
 
 /* ═════════ ÉVÉNEMENTS D'INTERFACE ═════════ */
 $("evf").addEventListener("submit", (e) => { e.preventDefault(); ajouter(false); });
-["evD", "evH", "evF"].forEach((k) => $(k).addEventListener("change", verifier));
+["evD", "evH", "evF", "evR", "evRJ", "evRQ"].forEach((k) => {
+  const el = $(k); if (el) el.addEventListener("change", verifier);
+});
 
 document.addEventListener("input", (e) => {
   const c = e.target.closest("input[data-cap]");
   if (c && canEdit) {
-    clearTimeout(tmr.cap);
-    tmr.cap = setTimeout(() => {
+    differer("capacites:" + c.dataset.cap, 700, () => {
       capacites[c.dataset.cap] = lirePlages(c.value);
-      log(`a modifié ses heures de travail du ${["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"][c.dataset.cap]}`);
+      log(`a modifié ses heures de travail du ${NOMS_JOURS[c.dataset.cap].toLowerCase()}`);
       saveState(); renderAll();
-    }, 700);
+    });
+  }
+  const r = e.target.closest("input[data-repos]");
+  if (r && canEdit) {
+    const j = Number(r.dataset.repos);
+    repos = r.checked ? [...new Set([...repos, j])].sort() : repos.filter((x) => x !== j);
+    // La part du jour a été arrêtée sous l'ancien réglage ; elle ne veut plus
+    // rien dire. Sans ça, rouvrir aujourd'hui le laissait vide jusqu'à minuit.
+    partJour = null;
+    log(r.checked ? `a mis son ${NOMS_JOURS[j].toLowerCase()} au repos`
+                  : `a rouvert son ${NOMS_JOURS[j].toLowerCase()}`);
+    saveState(); renderAll();
   }
 });
 document.addEventListener("click", (e) => {
   const d = e.target.closest("[data-del]");
   if (d && canEdit) {
     const ev = events.find((x) => x.id === d.dataset.del);
+    const fratrie = ev && ev.serie ? serieDe(ev.serie) : [];
+    // Retirer une journée d'un stage de huit semaines n'est pas retirer le
+    // stage : on ne devine pas lequel des deux est voulu, on le demande.
+    if (fratrie.length > 1) {
+      const retirer = (liste, texte) => {
+        const ids = new Set(liste.map((x) => x.id));
+        events = events.filter((x) => !ids.has(x.id));
+        log(texte); saveEvents(); renderAll();
+      };
+      dialogue({
+        ton: "warn", titre: `Supprimer « ${esc(ev.titre || ev.title || "")} » ?`,
+        corps: `<p>Cet événement fait partie d'une série de
+          <b>${plural(fratrie.length, "journée")}</b>, du ${leJour(fratrie[0].date)} au
+          ${leJour(fratrie[fratrie.length - 1].date)}.</p>`,
+        actions: [
+          { texte: "Annuler", pri: true },
+          { texte: "Ce jour seulement",
+            faire: () => retirer([ev], `a retiré « ${ev.titre || ev.title} » du ${leJour(ev.date)}`) },
+          { texte: `Toute la série (${fratrie.length})`,
+            faire: () => retirer(fratrie, `a supprimé la série « ${ev.titre || ev.title} »,`
+              + ` ${plural(fratrie.length, "journée")}`) },
+        ],
+      });
+      return;
+    }
     events = events.filter((x) => x.id !== d.dataset.del);
     if (ev) log(`a supprimé « ${ev.titre || ev.title} »`);
     saveEvents(); renderAll(); return;
@@ -5131,6 +5779,11 @@ function mesurerEnTete() {
 addEventListener("resize", mesurerEnTete);
 
 function montrerVue(v, arg) {
+  // Un compte sans adresse n'a pas ces sections : on le ramène à sa journée
+  // plutôt que de lui montrer un panneau qui ne se remplira jamais.
+  if (sansAdresse() && canEdit && (VUES_ADRESSE.includes(v) || v === "conv" || v === "personne")) {
+    return aller("jour", null, { remplacer: true });
+  }
   const def = VUES[v] || VUES.jour;
   vueCourante = v; argCourant = arg;
   if (v === "planning") sousPlanning = VUES.planning.volets.includes(arg) ? arg : sousPlanning;
@@ -5241,7 +5894,8 @@ document.addEventListener("click", (e) => {
   const dm = e.target.closest("[data-dem]");
   if (dm) {
     const [q, id] = dm.dataset.dem.split(":");
-    repondreDemande(id, q === "oui");
+    if (q === "ics") exporterDemande(id);
+    else repondreDemande(id, q === "oui");
     return;
   }
   const a = e.target.closest("[data-aller]");
@@ -5250,10 +5904,7 @@ document.addEventListener("click", (e) => {
 
 document.addEventListener("input", (e) => {
   const n = e.target.closest("[data-note]");
-  if (n) {
-    clearTimeout(n._m);
-    n._m = setTimeout(() => noterBlocage(n.dataset.note, n.value), 2500);
-  }
+  if (n) differer("note:" + n.dataset.note, 2500, () => noterBlocage(n.dataset.note, n.value));
 });
 
 document.addEventListener("change", (e) => {

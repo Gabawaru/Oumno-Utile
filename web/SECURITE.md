@@ -17,7 +17,7 @@ seule la base décide.
 
 | Donnée | Qui peut la lire |
 |---|---|
-| Profil et planning **public** | tout le monde, avec ou sans compte |
+| Profil et planning **public** | tout le monde, avec ou sans compte — sur décision, jamais par défaut |
 | Profil et planning **privé** | son propriétaire, et les comptes explicitement autorisés |
 | **Vrai nom** | son propriétaire, et les seuls partages portant `voit_nom_reel` |
 | Jetons d'invitation | personne — pas même leur créateur ; seule une fonction les consomme |
@@ -85,10 +85,16 @@ Trois barrières, chacune suffisante seule :
    qu'il veut dans son propre planning — et que ce planning est **rendu chez les
    gens qui le consultent**.
 2. **Échappement au point d'insertion** — `esc()` sur toute interpolation, y
-   compris dans les attributs. Deux failles avaient été trouvées ici et
+   compris dans les attributs. **Trois** failles ont été trouvées ici et
    reproduites avant correction : un `onload=` attaquant sortait de l'attribut
-   `style` via la couleur d'une matière, et un `javascript:` passait dans le lien
-   d'un événement.
+   `style` via la couleur d'une matière ; un `javascript:` passait dans le lien
+   d'un événement ; et le **nom** d'une matière arrivait brut dans quatre
+   gabarits — le diagramme de l'année, sa légende, l'accordéon des étapes et le
+   tableau des notes. Cette troisième-là est instructive : tout ce qui entourait
+   ces quatre points était échappé (`grp.id`, `grp.c`, `r.n`, `r.url`), seul le
+   nom ne l'était pas. Un oubli, pas une décision — et c'est la raison pour
+   laquelle la barrière 3 existe. `xss_gantt.py` sert la CSP de production et
+   vérifie qu'aucun nœud n'est injecté dans ces quatre vues.
 3. **`Content-Security-Policy: script-src 'self'`** — aucun script inline ne
    s'exécute, aucune URL `javascript:` ne fonctionne, même si 1 et 2 échouent.
    Vérifié : une injection de `<script>` est bloquée par le navigateur.
@@ -96,6 +102,11 @@ Trois barrières, chacune suffisante seule :
 Les liens saisis passent par `lienSur()`, qui n'accepte que `http:` et `https:`
 après analyse par `URL` — pas par comparaison de chaîne, sinon `JaVaScRiPt:` et
 `java\tscript:` passeraient.
+
+Les **jours de repos** suivent la même règle : `normaliserRepos()` ne garde que
+des entiers de 0 à 6, et rien de ce qui en sort n'atteint un gabarit — seulement
+un booléen par jour. Un `repos` empoisonné en base ne peut donc que fermer ou
+ouvrir des journées du planning de son propre propriétaire.
 
 ### En-têtes HTTP
 
@@ -113,6 +124,77 @@ Posés dans `vercel.json`, sur toutes les routes :
 
 `connect-src` n'autorise que ce domaine et le projet Supabase : même en cas
 d'injection réussie, les données n'ont nulle part où partir.
+
+### Un planning ne se publie pas par omission
+
+La colonne `public` de `ciel_profiles` valait `true` par défaut. Le chemin
+d'inscription de l'application passe `public: false` depuis un moment, mais toute
+insertion qui ne nommait pas la colonne — et le compte de l'auteur, créé avant —
+repartait avec un planning **lisible par n'importe qui, sans compte** : heures,
+fiches, blocages et leurs notes. Les trois autres réglages du même genre
+(`au_classement`, `region_visible`, `reservations_auto`) étaient à `false` ;
+celui-là était le seul à l'envers.
+
+Le défaut est désormais `false`, et le compte concerné a été repassé en privé.
+Publier reste possible, mais devient une décision.
+
+### Rien ne se calque d'un planning sur l'autre
+
+Une demande envoyée avec `envoyer_demande()` est une **boîte de réception**, pas
+une greffe. Accepter recopiait auparavant les événements de l'expéditeur dans le
+planning du destinataire : ils occupaient ses journées, décalaient son travail et
+changeaient son retard. Pire, la fusion se faisait par identifiant d'événement,
+tous fournis par l'expéditeur — un envoi bien choisi remplaçait donc les
+événements du destinataire, sans que l'aperçu ne le montre.
+
+Accepter ne fait plus qu'accuser réception. Le planning reçu se lit en entier,
+en lecture seule, et s'exporte en `.ics` si l'on veut s'en servir ailleurs.
+
+**Vérifié en navigateur** : regarder le planning public d'un autre n'écrit rien
+dans sa propre copie locale ni en base, et l'on retrouve le sien intact en
+revenant.
+
+### Comptes sans adresse électronique
+
+On peut créer un compte sans donner d'adresse. Supabase marque ces sessions
+`is_anonymous` dans le jeton ; `prive.sans_adresse()` relit ce drapeau.
+
+Ce qui reste ouvert : le planning, le minuteur, les fiches, la montagne, les
+blocages, l'import de son propre agenda, les notifications sur l'appareil.
+
+Ce qui est fermé : tout ce qui sort du compte — le fil, les commentaires, les
+mentions, les conversations, les partages, les invitations, les réservations, les
+créneaux publiés, le classement, les abonnements par courriel, le vrai nom, les
+signalements, et l'envoi d'une demande à quelqu'un. Un compte sans adresse ne
+peut pas non plus se rendre public ni entrer au classement : le déclencheur
+`profil_sans_adresse` rabat ces trois drapeaux à `false` à chaque écriture.
+
+Le refus est tenu **en base**, par un déclencheur `adresse_requise` posé sur
+chacune de ces tables — pas par des écrans cachés. Ce choix est délibéré : les
+fonctions `SECURITY DEFINER` contournent RLS, un contrôle logé dans les politiques
+ne les arrêterait donc pas ; et un déclencheur s'applique quel que soit le chemin
+emprunté pour écrire. Il évite aussi de recréer huit fonctions, donc huit
+occasions de perdre un `REVOKE` — `CREATE OR REPLACE` remet `EXECUTE` à `PUBLIC`,
+et c'est déjà arrivé ici.
+
+**Vérifié par bascule de rôle réelle**, dans les deux sens : avec
+`is_anonymous: true`, publier un créneau, écrire dans le fil, partager son
+planning, s'abonner aux courriels et déposer un score lèvent tous
+`adresse_requise`, tandis qu'enregistrer son planning et son journal passent ;
+sans le drapeau, les cinq gestes repassent. Le contrôle miroir compte autant que
+l'autre : vérifier qu'une porte se ferme sans vérifier que les autres s'ouvrent
+encore avait déjà causé une panne de deux jours en production.
+
+Ce que cela coûte, et que l'application dit avant, pendant et après : **le compte
+ne tient qu'à ce navigateur**. Aucune adresse, donc aucun moyen de le retrouver si
+le stockage est effacé, et aucun moyen de l'ouvrir ailleurs. Se déconnecter ferme
+la seule porte. Une adresse peut être posée à tout moment depuis « Moi », sans
+rien perdre.
+
+**Reste à faire côté serveur** : le fournisseur « Anonymous sign-ins » est
+désactivé dans Supabase — l'application le détecte et le dit au lieu d'offrir un
+bouton mort. L'ouvrir sans activer CAPTCHA exposerait à la création de comptes en
+masse.
 
 ### Comptes et sessions
 

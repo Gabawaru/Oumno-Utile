@@ -85,6 +85,25 @@ export function creerClient(url, cle) {
       if (data.access_token) { retenir(data); prevenir("SIGNED_IN"); }
       return { data: { session: data.access_token ? data : null, user: data.user || data }, error: null };
     },
+    /* Un compte sans adresse électronique. Supabase le crée sans identifiant à
+       fournir et marque « is_anonymous » dans le jeton — c'est ce drapeau que la
+       base relit pour refuser ce qui suppose une adresse.
+       À savoir, et l'application le dit à l'utilisateur : ce compte ne tient
+       qu'à ce navigateur. Pas d'adresse, donc aucun moyen de le retrouver si le
+       stockage est effacé. */
+    async signInAnonymously({ data } = {}) {
+      const { data: d, error } = await appelAuth("signup", { data });
+      if (error) return { data: null, error };
+      if (!d || !d.access_token) {
+        return { data: null, error: { message: "Compte sans adresse indisponible" } };
+      }
+      retenir(d); prevenir("SIGNED_IN");
+      return { data: { session: d, user: d.user || null }, error: null };
+    },
+    /** Le compte a-t-il une adresse ? Faux tant qu'il n'en a pas de confirmée. */
+    sansAdresse() {
+      return Boolean(session && session.user && session.user.is_anonymous);
+    },
     async signInWithPassword({ email, password }) {
       const { data, error } = await appelAuth("token?grant_type=password", { email, password });
       if (error) return { data: null, error };
@@ -108,6 +127,9 @@ export function creerClient(url, cle) {
     },
     async updateUser(champs) {
       const { data, error } = await appelAuth("user", champs, "PUT");
+      // Le drapeau « anonyme » vit dans le jeton, pas dans la réponse : tant
+      // qu'on ne le renouvelle pas, le compte se croit encore sans adresse.
+      if (!error && session) { await rafraichir(); prevenir("USER_UPDATED"); }
       return { data, error };
     },
     onAuthStateChange(fn) {
@@ -155,28 +177,38 @@ export function creerClient(url, cle) {
       async upsert(corps) { return ecrire("POST", corps, "resolution=merge-duplicates"); },
       // Volontairement synchrones : il faut pouvoir enchaîner .eq() derrière,
       // l'écriture ne part qu'au moment où la requête est attendue.
-      update(corps) { q._maj = corps; return q; },
+      update(corps, opt = {}) { q._maj = corps; q._opt = opt; return q; },
       delete() { q._suppr = true; return q; },
     };
     async function executer() {
       const parts = [`select=${colonnes}`, ...f, tri, limite].filter(Boolean);
-      if (q._maj) return ecrire("PATCH", q._maj);
+      if (q._maj) return ecrire("PATCH", q._maj, null, false, q._opt);
       if (q._suppr) return ecrire("DELETE", undefined);
       const r = await requete(`${url}/rest/v1/${table}?${parts.join("&")}`, { headers: entetes() });
       if (r.error) return r;
       return { data: unique ? (r.data?.[0] ?? null) : r.data, error: null };
     }
-    async function ecrire(methode, corps, prefer, retour) {
+    async function ecrire(methode, corps, prefer, retour, opt = {}) {
       const parts = f.filter(Boolean);
       const sel = retour ? `select=${colonnes}` : "";
       const tous = [sel, ...parts].filter(Boolean);
+      const body = corps === undefined ? undefined : JSON.stringify(corps);
+      /* keepalive laisse la requête vivre plus longtemps que la page : c'est
+         ce qui permet d'enregistrer au moment où l'onglet se ferme. Le corps
+         est alors plafonné à 64 Kio par la norme, et au-delà fetch refuse tout
+         net — on préfère une requête ordinaire, qui a encore ses chances, à
+         une requête qui ne part pas du tout. */
+      // 45 000 caractères : la limite est de 64 Kio d'octets, et un texte
+      // français accentué pèse plus d'un octet par caractère. On garde la marge.
+      const garder = Boolean(opt.garderEnVie) && body !== undefined && body.length < 45000;
       const r = await requete(`${url}/rest/v1/${table}${tous.length ? "?" + tous.join("&") : ""}`, {
         method: methode,
+        ...(garder ? { keepalive: true } : {}),
         headers: {
           ...entetes(),
           Prefer: [retour ? "return=representation" : "return=minimal", prefer].filter(Boolean).join(","),
         },
-        body: corps === undefined ? undefined : JSON.stringify(corps),
+        body,
       });
       return { data: retour ? (unique ? r.data?.[0] ?? null : r.data) : null, error: r.error };
     }

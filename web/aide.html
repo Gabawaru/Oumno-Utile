@@ -51,14 +51,59 @@
   <h2>Comment le planning décide</h2>
   <div class="qa">
     <details><summary>Pourquoi mes journées s'arrêtent à 16 h ?</summary><div class="rep">
-      <p>La journée type va de 9 h à 12 h 15 puis de 13 h 15 à 16 h, pauses comprises.
-      C'est modifiable jour par jour dans <b>Réglages → Mes heures de travail</b>.</p>
+      <p>La journée type va de 9 h à 12 h 15 puis de 13 h 15 à 16 h, pauses comprises,
+      du lundi au vendredi. C'est modifiable jour par jour dans
+      <b>Réglages → Mes heures de travail</b>.</p>
+    </div></details>
+    <details><summary>Et le week-end ?</summary><div class="rep">
+      <p>Samedi et dimanche sont au <b>repos</b> par défaut. Un jour de repos ne reçoit
+      rien : ni travail, ni soirée de rattrapage. Ses plages horaires sont ignorées même
+      si elles restent écrites — c'est le repos qui décide.</p>
+      <p>Une seule chose peut l'ouvrir, et jamais plus de 3 h : une étape <b>à la fois
+      urgente et importante</b>. Importante veut dire notée — un devoir, une évaluation.
+      Urgente veut dire que l'échéance est passée ou qu'elle tombe dans les sept jours.
+      Les deux, ou rien : un devoir noté sans urgence attend lundi, un cours en retard qui
+      ne compte pas dans la note remonte en <b>ne rentre pas avant l'échéance</b> plutôt
+      que de manger un dimanche. C'est la matrice d'Eisenhower, appliquée au calendrier.</p>
+      <p>N'importe quel jour peut être mis au repos, pas seulement le week-end : cochez
+      <b>repos</b> à côté du jour dans <b>Réglages → Mes heures de travail</b>.</p>
+    </div></details>
+    <details><summary>Comment ajouter ce qui n'est pas dans mon programme ?</summary><div class="rep">
+      <p>Dans <b>Moi → Mon travail → Mon programme</b>, <b>Ajouter une matière</b>. Vos matières
+      à vous s'ajoutent au modèle : un référentiel ne connaît ni les démarches administratives,
+      ni les dossiers à déposer, ni les rendez-vous à prendre, et ces heures-là sont pourtant à
+      trouver dans les mêmes journées.</p>
+      <p>Chaque étape porte une case <b>Import.</b> — la moitié « importante » de la matrice
+      d'Eisenhower. Cochée, et l'échéance passée ou à moins de sept jours, l'étape devient la
+      seule chose qui puisse prendre sur un jour de repos.</p>
+    </div></details>
+    <details><summary>Un stage, des vacances : comment poser plusieurs semaines d'un coup ?</summary><div class="rep">
+      <p>Dans le formulaire du calendrier, cochez <b>Se répète</b>, choisissez la date de fin et
+      <b>du lundi au vendredi</b> ou <b>tous les jours</b>. Le compteur annonce le nombre de
+      journées avant que vous ne posiez quoi que ce soit, et l'aperçu juge la série entière —
+      pas seulement sa première journée.</p>
+      <p>Les journées sont écrites en clair : vous pouvez en retirer une seule, un jour férié par
+      exemple, sans toucher au reste. Le ✕ sur une journée d'une série demande toujours laquelle
+      des deux vous voulez : <b>ce jour seulement</b>, ou <b>toute la série</b>.</p>
+      <p>Une période de plusieurs jours apparaît dans la <b>vue d'ensemble de l'année</b>, sous
+      <b>Mes périodes</b>. Comme partout ailleurs, son titre n'est montré aux autres que s'il est
+      explicitement partagé — sinon ils lisent « Occupé ».</p>
+    </div></details>
+    <details><summary>Pourquoi un mois est-il plein et le suivant presque vide ?</summary><div class="rep">
+      <p>Ça ne devrait plus arriver. Le planning ne se contente plus de poser chaque
+      étape sur sa période : il égalise la charge, en servant d'abord les journées les
+      moins chargées. Et une étape peut <b>démarrer jusqu'à quatre semaines avant sa date
+      prévue</b>, ce qui permet de vider un mois creux dans le mois plein qui le suit.</p>
+      <p>Son échéance, elle, ne bouge pas d'un jour : prendre de l'avance est permis,
+      prendre du retard se voit.</p>
     </div></details>
     <details><summary>Pourquoi du travail apparaît le soir ?</summary><div class="rep">
       <p>Parce qu'il ne rentre plus dans vos heures normales. Ce qui déborde glisse sur
       des créneaux inhabituels, marqués <b>hors horaires</b>, et jamais plus de 2 h 30
       par jour : au-delà, l'application préfère vous prévenir que d'aligner des journées
       de quatorze heures. Chaque étape validée en retire d'autant.</p>
+      <p>Les jours de repos ne sont jamais concernés : sur un samedi au repos, il n'y a
+      pas de soirée de rattrapage non plus.</p>
     </div></details>
     <details><summary>D'où sortent les pauses ?</summary><div class="rep">
       <p>Elles ne sont pas négociables : 15 minutes après chaque 1 h 30 de travail
@@ -118,6 +163,18 @@
       <p>Techniquement, il n'est même pas rangé au même endroit que le reste du
       profil : la base refuse de le servir aux autres, ce n'est pas l'affichage qui
       le cache.</p>
+    </div></details>
+    <details><summary>Puis-je créer un compte sans donner mon adresse ?</summary><div class="rep">
+      <p>Oui. Sur l'écran de création, <b>« Continuer sans adresse »</b>. Le planning,
+      le minuteur, les fiches, la montagne et les blocages fonctionnent normalement.</p>
+      <p>Ce qui reste fermé : le fil, les messages, les contacts, le classement,
+      publier son planning et envoyer sa demande à quelqu'un. Ces refus sont tenus
+      par la base, pas par l'affichage.</p>
+      <p><b>Ce compte ne tient qu'à ce navigateur.</b> Sans adresse, il n'existe
+      aucun moyen de le retrouver : effacer les données du site, changer d'appareil
+      ou se déconnecter le perd définitivement, y compris pour nous. Vous pouvez
+      poser une adresse à tout moment dans <b>Moi → Compte</b>, sans rien perdre —
+      le compte devient alors ordinaire et tout s'ouvre.</p>
     </div></details>
     <details><summary>Comment changer mon mot de passe ?</summary><div class="rep">
       <p><b>Réglages → Mon compte → Recevoir le lien.</b> Un courriel part vers votre
