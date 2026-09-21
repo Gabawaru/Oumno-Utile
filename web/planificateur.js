@@ -498,9 +498,13 @@ export function plusLongCreneau(j) {
  * part, heures inhabituelles comprises : c'est le seul cas où l'on bloque.
  */
 export function testerAjout(base, evenement) {
+  // Un événement, ou toute une série : un stage de huit semaines ne se juge pas
+  // sur sa première journée.
+  const ajouts = Array.isArray(evenement) ? evenement : [evenement];
+  const premier = ajouts[0];
   const avant = planifier(base);
-  const apres = planifier({ ...base, evenements: [...base.evenements, evenement] });
-  const ja = avant.jours.get(evenement.date), jp = apres.jours.get(evenement.date);
+  const apres = planifier({ ...base, evenements: [...base.evenements, ...ajouts] });
+  const ja = avant.jours.get(premier.date), jp = apres.jours.get(premier.date);
   const coutAvant = totalManque(avant.manques), coutApres = totalManque(apres.manques);
   const supplement = arrondi(coutApres - coutAvant);
 
@@ -508,13 +512,14 @@ export function testerAjout(base, evenement) {
   let bloquant = null;
   if (supplement > 0.001) {
     for (const j of apres.jours.values()) {
-      if (j.cle < evenement.date) continue;
+      if (j.cle < premier.date) continue;
       if (j.sature) { bloquant = j; break; }
     }
   }
   return {
     possible: supplement <= 0.001,
-    duree: duree(evenement),
+    duree: arrondi(ajouts.reduce((a, e) => a + duree(e), 0)),
+    jours: ajouts.length,
     libreAvant: arrondi(ja?.libre ?? 0),
     capacite: arrondi(ja?.cap ?? 0),
     // Travail chassé de ce jour-là, qui se reporte sur les suivants.

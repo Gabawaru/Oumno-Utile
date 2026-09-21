@@ -65,11 +65,14 @@ export function matiere(id, nom, couleur, etapes) {
   const e = Math.max(...etapes.map((x) => x.e));
   return {
     id, name: nom, code: "", c: `var(--${couleur || "b1"})`, couleur: couleur || "b1",
-    rows: [{ id: id + ".r", n: nom, s, e, steps: etapes.map((x) => ({ id: x.id, n: x.n, h: x.h })) }],
+    // `important` suit l'étape jusqu'au moteur : c'est la moitié « importante »
+    // de la matrice d'Eisenhower, celle qui peut ouvrir un jour de repos.
+    rows: [{ id: id + ".r", n: nom, s, e,
+             steps: etapes.map((x) => ({ id: x.id, n: x.n, h: x.h, important: Boolean(x.important) })) }],
     etapes,
   };
 }
-export const etape = (id, n, h, s, e) => ({ id, n, h, s, e });
+export const etape = (id, n, h, s, e, important) => ({ id, n, h, s, e, important: Boolean(important) });
 
 /* ── frontière de confiance ────────────────────────────
    Un programme vient de la base, donc de son propriétaire — qui peut y écrire
@@ -93,7 +96,10 @@ const entierSur = (v, min, max, defaut) => {
 export function assainirProgramme(prog) {
   const brut = prog && typeof prog === "object" ? prog : {};
   const modele = MODELES[brut.modele] ? brut.modele : brut.modele === "perso" ? "perso" : "cned";
-  if (modele !== "perso") return { modele, matieres: [] };
+  // Les matières à soi ne sont plus réservées au programme vierge : elles
+  // s'ajoutent au modèle. Un référentiel ne dit rien des démarches, des
+  // dossiers à déposer ni des rendez-vous à prendre, et ces heures-là sont
+  // pourtant à trouver dans les mêmes journées.
   const matieres = (Array.isArray(brut.matieres) ? brut.matieres : []).slice(0, 40).map((m) => {
     const mm = m && typeof m === "object" ? m : {};
     return {
@@ -109,6 +115,7 @@ export function assainirProgramme(prog) {
           h: entierSur(ee.h, 1, 400, 1),
           s,
           e: entierSur(ee.e, s + 1, 20, Math.min(20, s + 2)),
+          important: Boolean(ee.important),
         };
       }),
     };
@@ -123,10 +130,12 @@ export function assainirProgramme(prog) {
  */
 export function versGroupes(programme) {
   const prog = assainirProgramme(programme);
-  if (prog.modele !== "perso") return MODELES[prog.modele].groupes();
-  return prog.matieres
-    .filter((m) => m.etapes.length)
+  const modele = prog.modele === "perso" ? [] : MODELES[prog.modele].groupes();
+  const pris = new Set(modele.map((g) => g.id));
+  const siens = prog.matieres
+    .filter((m) => m.etapes.length && !pris.has(m.id))
     .map((m) => matiere(m.id, m.nom, m.couleur, m.etapes));
+  return [...modele, ...siens];
 }
 
 /** Un modèle tout fait, converti en programme modifiable. */

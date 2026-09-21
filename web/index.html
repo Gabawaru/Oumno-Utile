@@ -176,6 +176,12 @@ label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.
   border:1px solid color-mix(in srgb,var(--c) 45%,transparent)}
 .bar.grp{height:5px}
 .bar.lt{border-color:var(--late)}
+/* Une période n'a rien à remplir : elle est prise, entièrement, du premier au
+   dernier jour. Les hachures la distinguent d'un lot qu'on avance. */
+.bar.periode{--c:var(--ink3);background:repeating-linear-gradient(135deg,
+  color-mix(in srgb,var(--ink3) 16%,transparent) 0 5px,
+  color-mix(in srgb,var(--ink3) 30%,transparent) 5px 10px)}
+.bar.periode .blab{justify-content:center;padding-right:0;color:var(--ink2)}
 .fill{position:absolute;inset:0 auto 0 0;background:var(--c);width:0;transition:width .5s cubic-bezier(.4,0,.2,1)}
 .blab{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;
   padding-right:.28rem;font-family:"IBM Plex Mono",monospace;font-size:.56rem;font-weight:600;color:var(--ink2)}
@@ -872,8 +878,16 @@ table.etapes th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:
 table.etapes td{padding:.16rem .3rem .16rem 0;vertical-align:middle}
 table.etapes input,table.etapes select{width:100%;font-size:.75rem;padding:.25rem .35rem}
 table.etapes td:nth-child(2){width:5.5rem}
-table.etapes td:nth-child(3),table.etapes td:nth-child(4){width:11.5rem}
+table.etapes td:nth-child(3),table.etapes td:nth-child(4){width:10rem}
+/* Le nom de l'étape passe avant les quinzaines : c'est lui qu'on relit. */
+table.etapes td:first-child{min-width:9rem}
 table.etapes td:last-child{width:2rem}
+table.etapes td.cimp{width:3.2rem;text-align:center}
+table.etapes td.cimp input{width:15px;height:15px;accent-color:var(--late)}
+.evf .repet{align-items:center}
+.evf .jq{display:flex;align-items:center;gap:.35rem;font-size:.76rem;color:var(--ink2)}
+.evf .jq input{width:auto}
+.evf .repet .dep{margin-top:0}
 .btn.mini.danger{padding:.18rem .45rem}
 
 /* ── téléphone ────────────────────────────────────────
@@ -1741,6 +1755,15 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
           <label class="urgcase"><input type="checkbox" id="evU"><span>Urgent</span></label>
           <label class="urgcase"><input type="checkbox" id="evP"><span>C'est une pause</span></label>
           <label class="urgcase"><input type="checkbox" id="evV"><span>Titre visible par les autres</span></label>
+        </div>
+        <div class="ligne2 repet">
+          <label class="urgcase"><input type="checkbox" id="evR"><span>Se répète</span></label>
+          <label class="jq" id="evRz" hidden>jusqu'au <input id="evRJ" type="date"></label>
+          <select id="evRQ" hidden aria-label="Quels jours">
+            <option value="sem">du lundi au vendredi</option>
+            <option value="tous">tous les jours</option>
+          </select>
+          <span class="dep" id="evRn"></span>
         </div>
       </form>
 

@@ -1,6 +1,7 @@
 import { creerClient } from "./supa.js";
 import { MONTHS, MFULL, DOW, DAY, TZ, CNED, EXAM } from "./planning.js";
-import { versGroupes, MODELES, QUINZAINES, COULEURS, depuisModele } from "./modeles.js";
+import { versGroupes, MODELES, QUINZAINES, COULEURS, depuisModele,
+         assainirProgramme } from "./modeles.js";
 import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree,
          trouverCreneaux, creneauxTexte, plusLongCreneau, normaliserCapacites,
          journeeType, normaliserRepos, REGLES, JOURNEE, REPOS, URGENCE, AVANCE_MAX,
@@ -55,14 +56,16 @@ function chargerProgramme(prog){
     const a=qStart(r.s).getTime(),b=qEnd(r.e-1).getTime(),span=b-a;
     let cum=0;
     r.steps.forEach(s=>{
+      // Deux étapes de même identifiant se voleraient leurs heures faites : le
+      // modèle a la priorité, la matière ajoutée à la main passe son tour.
+      if(byId[s.id]) return;
       s.row=r;s.g=g;s.t0=a+span*(cum/Math.max(r.h,1));cum+=s.h;s.t1=a+span*(cum/Math.max(r.h,1));
-      ALL.push(s); if(s.dev) DEVS.push(s);
+      ALL.push(s); byId[s.id]=s; if(s.dev) DEVS.push(s);
     });
   }));
   GROUPES.forEach(g=>{g.h=g.rows.reduce((a,r)=>a+r.h,0);
     g.s=Math.min(...g.rows.map(r=>r.s));g.e=Math.max(...g.rows.map(r=>r.e));});
   TOTAL_H=GROUPES.reduce((a,g)=>a+g.h,0);
-  ALL.forEach(s=>byId[s.id]=s);
 }
 
 function planned(t){let v=0;for(const s of ALL){
@@ -196,7 +199,10 @@ function appliquerEtat(d){
   reports   = d.reports   || {};
   partJour  = d.partJour  || null;
   demarrageFait = Boolean(d.demarrage);
-  programme = d.programme || { modele: "cned", matieres: [] };
+  // Le programme vécu est le programme assaini, pas celui qu'on a lu. `versGroupes`
+  // le nettoyait déjà à chaque rendu, mais l'objet gardé en mémoire, lui, restait
+  // brut : une matière sans liste d'étapes suffisait à faire tomber les réglages.
+  programme = assainirProgramme(d.programme);
   chargerProgramme(programme);
   Object.keys(done).forEach(k=>{if(done[k]===true)done[k]="";});
   migrerAvance();
@@ -415,6 +421,41 @@ let calCur=null,calSel=null;
 
 /* ═════════ GANTT ═════════ */
 const col=v=>v+2;
+
+/** Une date → sa quinzaine, l'inverse de `qStart`. */
+function quinzaineDe(iso){
+  const d=new Date(iso+"T00:00");
+  const mois=(d.getFullYear()-Y0)*12+d.getMonth()-M0;
+  return Math.max(0,Math.min(19,mois*2+(d.getDate()>=16?1:0)));
+}
+
+/**
+ * Les périodes qui tiennent des semaines entières : les séries d'événements.
+ * Une vue d'ensemble bâtie sur le seul programme ne les montrait nulle part —
+ * un stage de huit semaines y était invisible, alors que c'est lui qui décide
+ * de ce qu'on peut faire d'autre pendant ce temps.
+ *
+ * Le titre suit la même règle qu'ailleurs : on ne le montre que s'il est
+ * explicitement partagé. Chez un visiteur, une période reste « Occupé ».
+ */
+function seriesEvenements(){
+  const par=new Map();
+  for(const e of events){
+    if(!e.serie||!e.date) continue;
+    const nom=(canEdit||e.visible)?(e.titre||e.title||"Période"):"Occupé";
+    const v=par.get(e.serie)||{serie:e.serie,titre:nom,jours:0,debut:e.date,fin:e.date};
+    v.jours++;
+    if(e.date<v.debut)v.debut=e.date;
+    if(e.date>v.fin)v.fin=e.date;
+    par.set(e.serie,v);
+  }
+  return [...par.values()].filter(v=>v.jours>1)
+    .map(v=>({...v,q0:quinzaineDe(v.debut),q1:quinzaineDe(v.fin)}))
+    .sort((a,b)=>a.debut.localeCompare(b.debut));
+}
+const signePeriodes=()=>seriesEvenements().map(v=>`${v.serie}:${v.q0}-${v.q1}:${v.jours}:${v.titre}`).join("|");
+let periodesDessinees=null;
+
 function buildGantt(){
   const g=document.getElementById("gantt"),NQ=nowQ();
   let h='<div class="corner"></div>';
@@ -430,6 +471,19 @@ function buildGantt(){
           <span class="retard" data-rt="${esc(r.id)}" hidden></span></div></div>`;
     });
   });
+  const periodes=seriesEvenements();
+  if(periodes.length){
+    h+='<div class="spacer"></div>';
+    h+=`<div class="glabel grp">Mes périodes<span class="code">${plural(periodes.length,"série")}</span></div>
+      <div class="lane grp"></div>`;
+    periodes.forEach(v=>{
+      h+=`<div class="glabel sub" title="${esc(v.titre)}">${esc(v.titre)}<span class="code">${plural(v.jours,"jour")}</span></div>
+        <div class="lane"><div class="bar periode" style="grid-column:${col(v.q0)}/${col(v.q1+1)}">
+          <span class="blab">${esc(fmtD(new Date(v.debut+"T00:00")))} → ${esc(fmtD(new Date(v.fin+"T00:00")))}</span>
+        </div></div>`;
+    });
+  }
+  periodesDessinees=signePeriodes();
   g.innerHTML=h;
   // Le renvoi vers le CNED n'a de sens que si les lots portent un lien de cours.
   const liens=GROUPES.some(gp=>gp.rows.some(r=>r.url));
@@ -440,6 +494,9 @@ function buildGantt(){
     (liens?`<span class="li muted" style="margin-left:auto">Clique le nom d'un lot pour ouvrir le cours</span>`:"");
 }
 function paintGantt(){
+  // Les périodes sont une structure, pas un remplissage : si elles ont changé,
+  // la grille est à rebâtir avant d'être repeinte.
+  if(signePeriodes()!==periodesDessinees) buildGantt();
   GROUPES.forEach(g=>{
     let gd=0;
     g.rows.forEach(r=>{
@@ -2580,6 +2637,61 @@ function nouvelEvenement() {
     visible: $("evV").checked,
   };
 }
+
+/* ═════════ CE QUI SE RÉPÈTE ═════════
+   Un stage de huit semaines, c'est quarante journées identiques. Les saisir une
+   par une n'est pas une option, et les garder sous forme de règle obligerait
+   chaque lecteur d'événements — le planificateur, la frise, le calendrier,
+   l'export, les créneaux publiés — à connaître la règle. On écrit donc les
+   journées en clair, reliées par une même `serie` : un seul geste les crée, un
+   seul geste les efface, et rien d'autre dans l'application n'a à changer. */
+
+/** Au-delà, ce n'est plus un engagement, c'est un remplissage. */
+const SERIE_MAX = 250;
+
+/** Les dates d'une répétition, bornes comprises. Rend null si le formulaire
+ *  n'en demande pas, et une liste vide si elle n'a aucun jour. */
+function datesSerie() {
+  if (!$("evR") || !$("evR").checked) return null;
+  const debut = $("evD").value, fin = ($("evRJ").value || "").trim();
+  if (!debut || !fin || fin < debut) return [];
+  const semaine = $("evRQ").value !== "tous";
+  const out = [];
+  const d = new Date(debut + "T00:00"), stop = new Date(fin + "T00:00").getTime();
+  while (d.getTime() <= stop && out.length <= SERIE_MAX) {
+    if (!semaine || (d.getDay() >= 1 && d.getDay() <= 5)) out.push(isoJour(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+/** Le ou les événements que le formulaire décrit, prêts à être posés. */
+function nouveauxEvenements() {
+  const modele = nouvelEvenement();
+  const dates = datesSerie();
+  if (!dates) return [modele];
+  const serie = "s" + Date.now().toString(36);
+  return dates.map((date, i) => ({ ...modele, id: `${modele.id}-${i}`, date, serie }));
+}
+
+/** Combien de jours porte une série, et lesquels. */
+const serieDe = (id) => events.filter((e) => e.serie && e.serie === id);
+
+/** Le compteur sous la case « se répète », pour qu'on sache ce qu'on va poser. */
+function majRepetition() {
+  const on = $("evR") && $("evR").checked;
+  const z = $("evRz"), q = $("evRQ"), n = $("evRn");
+  if (!z) return;
+  z.hidden = q.hidden = !on;
+  if (!on) { n.textContent = ""; return; }
+  const dates = datesSerie() || [];
+  n.textContent = !dates.length
+    ? "choisis une date de fin après la date de début"
+    : dates.length > SERIE_MAX
+      ? `plus de ${SERIE_MAX} jours : c'est trop long pour une seule série`
+      : `${plural(dates.length, "journée")}, du ${fmtD(new Date(dates[0] + "T00:00"))}` +
+        ` au ${fmtD(new Date(dates[dates.length - 1] + "T00:00"))}`;
+}
 function baseplan() {
   const cle = isoJour(new Date(NOW));
   return {
@@ -2594,25 +2706,30 @@ const leJour = (d) => new Date(d + "T00:00").toLocaleDateString("fr-FR",
 
 /** Aperçu discret sous le calendrier, pendant qu'il remplit le formulaire. */
 function verifier() {
-  const ev = nouvelEvenement();
+  majRepetition();
   const zone = $("alerte");
   if (!zone) return null;
+  const ev = nouvelEvenement();
   if (!ev.date || !ev.debut || !ev.fin) { zone.innerHTML = ""; return null; }
   if (duree(ev) <= 0) {
     zone.innerHTML = `<div class="impossible">L'heure de fin doit suivre l'heure de début.</div>`;
     return null;
   }
-  const t = testerAjout(baseplan(), ev);
+  const liste = nouveauxEvenements();
+  if (!liste.length || liste.length > SERIE_MAX) { zone.innerHTML = ""; return null; }
+  const t = testerAjout(baseplan(), liste);
+  // Une série se juge sur son total, pas sur sa première journée.
+  const quoi = t.jours > 1 ? `<b>${t.jours} journées</b>, ${unH(t.duree)} en tout : ` : "";
   zone.innerHTML = !t.possible
-    ? `<div class="impossible"><b>Journée pleine.</b> ${t.supplement} h de cours n'auraient
-        plus de place nulle part.</div>`
+    ? `<div class="impossible"><b>${t.jours > 1 ? "Ça ne rentre pas" : "Journée pleine"}.</b>
+        ${quoi}${t.supplement} h de cours n'auraient plus de place nulle part.</div>`
     : t.tardif >= 0.1
-      ? `<div class="attention">Ça rentre, mais <b>${t.tardif} h</b> de travail passeraient
+      ? `<div class="attention">Ça rentre, mais ${quoi}<b>${t.tardif} h</b> de travail passeraient
           en dehors de tes heures normales, le soir.</div>`
       : t.deplace > 0
-        ? `<div class="ok-zone">Ça rentre. <b>${t.deplace} h</b> de travail se reportent sur les
+        ? `<div class="ok-zone">Ça rentre. ${quoi}<b>${t.deplace} h</b> de travail se reportent sur les
             jours suivants, sans faire sauter d'échéance.</div>`
-        : `<div class="ok-zone">Ça rentre. Ce créneau ne croise aucun travail prévu.</div>`;
+        : `<div class="ok-zone">Ça rentre. ${quoi || "Ce créneau "}ne croise aucun travail prévu.</div>`;
   return t;
 }
 
@@ -2633,7 +2750,23 @@ function ajouter(force) {
       corps: `<p>L'heure de fin doit venir après l'heure de début.</p>` });
     return;
   }
-  const t = testerAjout(baseplan(), ev);
+  const liste = nouveauxEvenements();
+  if (!liste.length) {
+    dialogue({ titre: "Cette répétition n'a aucun jour",
+      corps: `<p>La date de fin doit venir après la date de début, et la semaine doit
+        contenir au moins un jour choisi.</p>` });
+    return;
+  }
+  if (liste.length > SERIE_MAX) {
+    dialogue({ titre: "C'est trop long pour une seule série",
+      corps: `<p>Une série s'arrête à <b>${SERIE_MAX} journées</b>. Au-delà, ce n'est plus un
+        engagement qu'on pose : c'est un emploi du temps qu'on remplit, et il vaut mieux le
+        découper en plusieurs morceaux qu'on pourra retirer séparément.</p>` });
+    return;
+  }
+  const t = testerAjout(baseplan(), liste);
+  const combien = liste.length > 1 ? `« ${esc(ev.titre)} » sur ${plural(liste.length, "journée")}`
+                                   : `« ${esc(ev.titre)} »`;
 
   // Le seul refus possible : plus une heure de libre, nulle part.
   if (!t.possible && !force) {
@@ -2645,7 +2778,7 @@ function ajouter(force) {
           toute la journée, et les jours suivants aussi.</p>
         <p><b>${t.supplement} h</b> de cours ne retrouveraient de place nulle part —
         ni dans tes heures de travail, ni le soir.</p>
-        <p class="petit">Pour caler « ${esc(ev.titre)} » quand même, il faut d'abord valider des
+        <p class="petit">Pour caler ${combien} quand même, il faut d'abord valider des
         étapes, élargir tes heures dans Réglages, ou repousser une échéance depuis le
         calendrier.</p>`,
       actions: [
@@ -2656,12 +2789,16 @@ function ajouter(force) {
     return;
   }
 
-  events.push(ev);
+  events.push(...liste);
   events.sort((a, b) => (a.date + (a.debut || "")).localeCompare(b.date + (b.debut || "")));
-  log(`a ajouté « ${ev.titre} » le ${leJour(ev.date)} de ${ev.debut} à ${ev.fin}`);
+  log(liste.length > 1
+    ? `a ajouté « ${ev.titre} » sur ${plural(liste.length, "journée")}, du ${leJour(liste[0].date)}`
+      + ` au ${leJour(liste[liste.length - 1].date)}, de ${ev.debut} à ${ev.fin}`
+    : `a ajouté « ${ev.titre} » le ${leJour(ev.date)} de ${ev.debut} à ${ev.fin}`);
   saveEvents();
   $("evT").value = ""; $("evL").value = "";
   $("evU").checked = false; $("evP").checked = false; $("evV").checked = false;
+  $("evR").checked = false; $("evRJ").value = ""; majRepetition();
   const z = $("alerte"); if (z) z.innerHTML = "";
   calSel = new Date(ev.date + "T00:00");
   renderAll();
@@ -3144,24 +3281,28 @@ function renderProgramme() {
     return;
   }
   const perso = programme.modele === "perso";
+  const siennes = programme.matieres.length;
   box.innerHTML = `
     <p class="aide">${perso
-      ? `Ton programme, à ta main : <b>${programme.matieres.length}</b> matière(s),
+      ? `Ton programme, à ta main : <b>${siennes}</b> matière(s),
          <b>${Math.round(TOTAL_H)} h</b> au total.`
       : `Tu utilises le modèle <b>${esc(MODELES[programme.modele]?.nom || programme.modele)}</b> —
-         ${Math.round(TOTAL_H)} h.</p>
+         ${Math.round(TOTAL_H)} h${siennes ? `, tes matières comprises` : ""}.</p>
        <p class="aide">Découpage et volumes sont relevés sur le CNED : chaque situation
          professionnelle et chaque séquence y porte une <b>durée indicative</b>, reprise ici
          telle quelle. Elle reste une moyenne — rends le programme modifiable pour l'ajuster
-         à ton rythme, ou pour ajouter tes propres matières.`}</p>
-    ${perso ? `<div class="matieres" id="matieres"></div>
-      <button class="btn pri" id="ajMatiere">Ajouter une matière</button>` : ""}
+         à ton rythme.`}</p>
+    ${perso ? "" : `<p class="aide"><b>Tes matières à toi s'ajoutent au modèle.</b> Un
+       référentiel ne connaît ni les démarches, ni les dossiers à déposer, ni les rendez-vous
+       à prendre — et ces heures-là sont pourtant à trouver dans les mêmes journées.</p>`}
+    <div class="matieres" id="matieres"></div>
+    <button class="btn pri" id="ajMatiere">Ajouter une matière</button>
     <div class="zbascule">
       ${perso ? "" : `<button class="btn" id="versPerso">Rendre ce programme modifiable</button>`}
       <button class="btn" id="autreModele">Repartir d'un autre modèle</button>
     </div>`;
 
-  if (perso) renderMatieres();
+  renderMatieres();
 
   const cu = $("copierUid");
   if (cu) cu.onclick = async () => {
@@ -3187,6 +3328,8 @@ function renderProgramme() {
     ton: "warn", titre: "Repartir d'un autre modèle ?",
     corps: `<p>Ton programme actuel sera remplacé. Les étapes déjà validées qui
         n'existent pas dans le nouveau modèle disparaîtront du suivi.</p>
+      ${!perso && siennes ? `<p class="petit">Tes ${plural(siennes, "matière")} à toi
+        ${siennes > 1 ? "sont gardées" : "est gardée"} : elles ne viennent pas du modèle.</p>` : ""}
       <div class="mchoix">${Object.values(MODELES).map((m) =>
         `<label class="modele"><input type="radio" name="mnew" value="${m.id}">
           <span><b>${esc(m.nom)}</b><em>${esc(m.resume)}</em></span></label>`).join("")}</div>`,
@@ -3195,7 +3338,11 @@ function renderProgramme() {
       { texte: "Remplacer", faire: () => {
           const c = document.querySelector('input[name="mnew"]:checked');
           if (!c) return;
-          programme = depuisModele(c.value);
+          const suivant = depuisModele(c.value);
+          // Une matière à soi ne vient pas du modèle : changer de référentiel
+          // n'a aucune raison de l'emporter avec lui.
+          if (!perso && suivant.modele !== "perso") suivant.matieres = programme.matieres;
+          programme = suivant;
           appliquerProgramme(`a repris le modèle « ${MODELES[c.value].nom} »`);
         } },
     ],
@@ -3231,7 +3378,8 @@ function renderMatieres() {
             `<option value="${c.id}"${c.id === m.couleur ? " selected" : ""}>${c.nom}</option>`).join("")}</select>
           <button class="btn danger mini" data-msuppr="${im}">Supprimer</button>
         </div>
-        <table class="etapes"><tr><th>Étape</th><th>Heures</th><th>De</th><th>À</th><th></th></tr>
+        <table class="etapes"><tr><th>Étape</th><th>Heures</th><th>De</th><th>À</th>
+          <th title="Important au sens d'Eisenhower : ce qui compte vraiment. Urgent et important, ça peut ouvrir un jour de repos.">Import.</th><th></th></tr>
         ${m.etapes.map((e, ie) => `<tr>
           <td><input type="text" data-en="${im}.${ie}" value="${esc(e.n)}" maxlength="70"></td>
           <td><input type="number" data-eh="${im}.${ie}" value="${e.h}" min="1" max="400" step="1"></td>
@@ -3239,9 +3387,14 @@ function renderMatieres() {
             `<option value="${q.q}"${q.q === e.s ? " selected" : ""}>${q.texte}</option>`).join("")}</select></td>
           <td><select data-ee="${im}.${ie}">${QUINZAINES.map((q) =>
             `<option value="${q.q + 1}"${q.q + 1 === e.e ? " selected" : ""}>${q.texte}</option>`).join("")}</select></td>
+          <td class="cimp"><input type="checkbox" data-eimp="${im}.${ie}"${e.important ? " checked" : ""}
+            title="Important : avec une échéance proche, cette étape peut prendre sur un jour de repos"></td>
           <td><button class="btn mini" data-esuppr="${im}.${ie}" title="Supprimer l'étape">✕</button></td>
         </tr>`).join("")}
         </table>
+        <div class="petit">La case <b>Import.</b> est la moitié « importante » de la matrice
+        d'Eisenhower. Cochée, et l'échéance passée ou à moins de ${URGENCE.jours} jours, l'étape
+        devient la seule chose qui peut prendre sur un jour de repos — ${URGENCE.max} h au plus.</div>
         <button class="btn" data-eaj="${im}">Ajouter une étape</button>
       </div>
     </details>`;
@@ -3255,7 +3408,7 @@ function renderMatieres() {
 /** Un seul point d'entrée pour toutes les modifications du programme. */
 function brancherProgramme() {
   document.addEventListener("input", (ev) => {
-    if (!canEdit || !programme || programme.modele !== "perso") return;
+    if (!canEdit || !programme) return;
     const t = ev.target;
     const maj = (fn) => differer("programme", 600, () => { fn(); appliquerProgramme(); });
     if (t.dataset.mnom !== undefined) {
@@ -3271,9 +3424,15 @@ function brancherProgramme() {
   });
 
   document.addEventListener("change", (ev) => {
-    if (!canEdit || !programme || programme.modele !== "perso") return;
+    if (!canEdit || !programme) return;
     const t = ev.target;
-    if (t.dataset.mcoul !== undefined) {
+    if (t.dataset.eimp !== undefined) {
+      const [i, j] = t.dataset.eimp.split(".").map(Number);
+      programme.matieres[i].etapes[j].important = t.checked;
+      appliquerProgramme(t.checked
+        ? `a marqué « ${programme.matieres[i].etapes[j].n} » comme importante`
+        : `a retiré l'importance de « ${programme.matieres[i].etapes[j].n} »`);
+    } else if (t.dataset.mcoul !== undefined) {
       programme.matieres[+t.dataset.mcoul].couleur = t.value;
       appliquerProgramme();
     } else if (t.dataset.es !== undefined || t.dataset.ee !== undefined) {
@@ -3290,7 +3449,7 @@ function brancherProgramme() {
     if (!canEdit) return;
     const aj = ev.target.closest("#ajMatiere");
     if (aj) {
-      if (programme.modele !== "perso") return;
+      if (!programme) return;
       const n = programme.matieres.length;
       const id = "m" + Date.now().toString(36);
       programme.matieres.push({
@@ -5454,7 +5613,9 @@ function routeDepart() {
 
 /* ═════════ ÉVÉNEMENTS D'INTERFACE ═════════ */
 $("evf").addEventListener("submit", (e) => { e.preventDefault(); ajouter(false); });
-["evD", "evH", "evF"].forEach((k) => $(k).addEventListener("change", verifier));
+["evD", "evH", "evF", "evR", "evRJ", "evRQ"].forEach((k) => {
+  const el = $(k); if (el) el.addEventListener("change", verifier);
+});
 
 document.addEventListener("input", (e) => {
   const c = e.target.closest("input[data-cap]");
@@ -5481,6 +5642,31 @@ document.addEventListener("click", (e) => {
   const d = e.target.closest("[data-del]");
   if (d && canEdit) {
     const ev = events.find((x) => x.id === d.dataset.del);
+    const fratrie = ev && ev.serie ? serieDe(ev.serie) : [];
+    // Retirer une journée d'un stage de huit semaines n'est pas retirer le
+    // stage : on ne devine pas lequel des deux est voulu, on le demande.
+    if (fratrie.length > 1) {
+      const retirer = (liste, texte) => {
+        const ids = new Set(liste.map((x) => x.id));
+        events = events.filter((x) => !ids.has(x.id));
+        log(texte); saveEvents(); renderAll();
+      };
+      dialogue({
+        ton: "warn", titre: `Supprimer « ${esc(ev.titre || ev.title || "")} » ?`,
+        corps: `<p>Cet événement fait partie d'une série de
+          <b>${plural(fratrie.length, "journée")}</b>, du ${leJour(fratrie[0].date)} au
+          ${leJour(fratrie[fratrie.length - 1].date)}.</p>`,
+        actions: [
+          { texte: "Annuler", pri: true },
+          { texte: "Ce jour seulement",
+            faire: () => retirer([ev], `a retiré « ${ev.titre || ev.title} » du ${leJour(ev.date)}`) },
+          { texte: `Toute la série (${fratrie.length})`,
+            faire: () => retirer(fratrie, `a supprimé la série « ${ev.titre || ev.title} »,`
+              + ` ${plural(fratrie.length, "journée")}`) },
+        ],
+      });
+      return;
+    }
     events = events.filter((x) => x.id !== d.dataset.del);
     if (ev) log(`a supprimé « ${ev.titre || ev.title} »`);
     saveEvents(); renderAll(); return;
