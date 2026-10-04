@@ -20,7 +20,14 @@ let vue = null;          // profil consulté
 let capacites = { 0: 2, 1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 3 };
 let repos = [...REPOS];  // jours où l'on ne pose rien : le week-end par défaut
 const NOMS_JOURS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-const auRepos = (j) => repos.includes(Number(j));
+/* Un repos qui se mérite : coché, il ne s'applique que lorsqu'aucune étape
+   n'est en retard. Tant qu'il y en a une, le jour de repos redevient un jour
+   ordinaire, avec ses plages — et c'est là que le rattrapage trouve sa marge. */
+let reposCond = false;
+const reposSuspendu = () => reposCond && repos.length > 0 &&
+  ALL.some((s) => !estFait(s) && NOW > s.t1 && !estBloque(s.id));
+const reposEffectifs = () => (reposSuspendu() ? [] : repos);
+const auRepos = (j) => reposEffectifs().includes(Number(j));
 let reports = {};        // échéances repoussées à la main
 let programme = null;    // modèle choisi, ou matières déclarées à la main
 let modeleEnAttente = null;  // modèle retenu à l'inscription, posé à la 1re ouverture
@@ -196,6 +203,7 @@ function appliquerEtat(d){
   grades    = d.notes     || d.grades || {};
   capacites = normaliserCapacites(d.capacites);
   repos     = [...normaliserRepos(d.repos)].sort();
+  reposCond = Boolean(d.reposCond);
   reports   = d.reports   || {};
   partJour  = d.partJour  || null;
   demarrageFait = Boolean(d.demarrage);
@@ -212,7 +220,7 @@ function appliquerEtat(d){
   if (minuteur) battre();
 }
 const etat=()=>({done,avance,seances,fiches,bloques,evenements:events,notes:grades,capacites,
-                 repos,reports,partJour,programme,demarrage:demarrageFait});
+                 repos,reposCond,reports,partJour,programme,demarrage:demarrageFait});
 
 /* ═════════ HEURES POSÉES ═════════
    `done` disait oui ou non. Cocher une tranche d'une heure sur une étape de six
@@ -248,7 +256,7 @@ const EPS=0.01;
 function restePlanifiable(s2){ return estBloque(s2.id) ? 0 : resteReel(s2); }
 
 /** Ce qu'il reste à faire, bloqué compris. Le travail ne disparaît pas parce
- *  qu'on attend quelqu'un : la montagne et le retard le comptent toujours. */
+ *  qu'on attend quelqu'un : le retard le compte toujours. */
 function resteReel(s2){
   const r=resteDe(s2); if(r<=EPS) return 0;
   const m=mesureDe(s2.id); if(!m||m.seances<2) return r;
@@ -273,9 +281,9 @@ function poserHeures(s2,jour,h){
   if(!Object.keys(m).length) delete avance[s2.id];
   if(estFait(s2)){
     // Le jour de fin est le dernier jour travaillé, pas celui du dernier clic.
-    const jours=Object.keys(avance[s2.id]||{}).sort();
+    const jours=Object.keys(avance[s2.id]||{}).filter(j=>/^\d{4}-\d{2}-\d{2}$/.test(j)).sort();
     const dernier=jours[jours.length-1]||jour;
-    done[s2.id]=new Date(dernier+"T18:00:00").toISOString();
+    done[s2.id]=jours.length?new Date(dernier+"T18:00:00").toISOString():new Date(T0).toISOString();
   } else delete done[s2.id];
 }
 
@@ -334,7 +342,67 @@ const short=g=>g.name.split("—")[0].trim()
   .replace("Sciences physiques","Physique").replace("Préparation aux épreuves","Épreuves");
 
 /* ═════════ AUJOURD'HUI ═════════ */
+/* La première chose à l'écran répond à la seule question qu'on se pose en
+   l'ouvrant : sur quoi je travaille, là, maintenant ? Avant, il fallait la
+   déduire d'un bandeau, d'un pourcentage et d'une frise. */
+function prochaineSeance() {
+  const auj = isoJour(new Date(NOW));
+  const mnt = new Date(NOW).getHours() * 60 + new Date(NOW).getMinutes();
+  for (const j of plan.jours.values()) {
+    if (j.cle < auj) continue;
+    const blocs = j.blocs.filter((b) => j.cle > auj || b.fin > mnt);
+    if (!blocs.length) continue;
+    const id = blocs[0].etape.id;
+    // Une séance, c'est la même étape d'un bout à l'autre ; une pause ne la coupe pas.
+    let i = 1, fin = blocs[0].fin, duree = blocs[0].fin - blocs[0].debut;
+    while (i < blocs.length && blocs[i].etape.id === id && blocs[i].debut - fin <= REGLES.pause + 1) {
+      duree += blocs[i].fin - blocs[i].debut; fin = blocs[i].fin; i++;
+    }
+    return { jour: j, debut: blocs[0].debut, fin, duree: duree / 60, bloc: blocs[0],
+             ensuite: blocs[i] || null, auj: j.cle === auj, mnt };
+  }
+  return null;
+}
+
+function renderMaintenant() {
+  const box = $("maintenant"); if (!box) return;
+  const p = prochaineSeance();
+  if (!p) {
+    box.style.removeProperty("--c");
+    box.innerHTML = `<div class="mlab plus-tard">Rien de prévu</div>
+      <div class="mquoi"><b>Aucune séance dans les semaines qui viennent.</b>
+      <span>Tout est fait, ou tes heures de travail sont vides : regarde Moi → Mon travail.</span></div>`;
+    return;
+  }
+  const e = p.bloc.etape;
+  box.style.setProperty("--c", e.g.c);
+  const enCours = p.auj && p.debut <= p.mnt;
+  const plage = `${enHeure(p.debut)} – ${enHeure(p.fin)}`;
+  const lab = enCours ? `Maintenant · jusqu'à ${enHeure(p.fin)}`
+    : p.auj ? `Aujourd'hui · ${plage}`
+    : `Prochaine séance · ${fmtDL(p.jour.t)}, ${plage}`;
+  const restera = Math.max(0, resteDe(e) - p.duree);
+  box.innerHTML = `
+    <div class="mlab${enCours ? "" : " plus-tard"}">${esc(lab)}</div>
+    <div class="mquoi"><b>${esc(e.n)}</b><span>${esc(e.row.n)} · ${esc(short(e.g))}</span></div>
+    <div class="mmeta">
+      <span><b>${unH(p.duree)}</b> de séance</span>
+      <span>${restera > EPS ? `il restera <b>${unH(restera)}</b> sur ${unH(e.h)}` : `<b>finit l'étape</b>`}</span>
+      ${p.bloc.urgence ? `<span class="lt">urgent et important</span>`
+        : p.bloc.tard ? `<span class="lt">hors horaires</span>`
+        : p.bloc.retard ? `<span class="lt">rattrapage</span>` : ""}
+    </div>
+    <div class="mact">
+      ${e.row.url ? `<a class="btn" href="${esc(e.row.url)}" target="_blank" rel="noopener">Ouvrir le cours ↗</a>` : ""}
+      ${canEdit && p.auj ? `<button class="btn pri" data-chrono="${esc(e.id)}">Lancer le minuteur</button>` : ""}
+      <button class="btn" data-fiche="${esc(e.id)}">Ma fiche</button>
+    </div>
+    ${p.ensuite ? `<div class="mens">Ensuite, ${enHeure(p.ensuite.debut)} :
+      <b>${esc(p.ensuite.etape.n)}</b> · ${esc(p.ensuite.etape.row.n)}</div>` : ""}`;
+}
+
 function renderToday(){
+  renderMaintenant();
   const st = status();
   const hero = $("hero");
   hero.style.setProperty("--hc", COL[st.kind]);
@@ -383,8 +451,14 @@ function renderToday(){
   const cible = $("dateJour");
   const avant = cible.dataset.reste;
   // Un jour de repos n'a pas « fait sa part » : il n'en avait pas.
-  cible.innerHTML = `${fmtDL(NOW)} — ` + (reste >= 0.05
-    ? `<b>${unH(reste)}</b> à faire`
+  // Ce qui est encore devant soi, pas ce qui était prévu ce matin : à 19 h, « 5 h
+  // à faire » sur des plages toutes passées disait l'inverse de la frise en dessous.
+  const mntJ = new Date(NOW).getHours() * 60 + new Date(NOW).getMinutes();
+  const aVenir = jAuj ? jAuj.blocs.reduce((a, b2) => a + Math.max(0, b2.fin - Math.max(b2.debut, mntJ)), 0) / 60 : 0;
+  cible.innerHTML = `${fmtDL(NOW)} — ` + (aVenir >= 0.05
+    ? `<b>${unH(aVenir)}</b> à faire`
+    : reste >= 0.05
+    ? `plages du jour passées — <b>${unH(reste)}</b> non validées`
     : jAuj && jAuj.repos
       ? `<b class="fini">jour de repos</b>`
       : `<b class="fini">part du jour faite</b>`);
@@ -546,6 +620,7 @@ function buildAcc(){
            <label class="zcoche"><input type="checkbox" class="cb" data-cb="${esc(s.id)}"></label>
            <span class="lbl">${esc(s.n)}${s.date?` <b class="mono" style="color:var(--sig)">${s.date}</b>`:""}</span>
            <span class="hh">${unH(s.h)}</span>
+           <button class="ici" data-ici="${esc(s.id)}" title="J'en suis là : tout ce qui précède est acquis">j'en suis là</button>
            <button class="fic" data-fiche="${esc(s.id)}" title="Ma fiche sur cette étape"
              aria-label="Ma fiche"><svg viewBox="0 0 24 24" aria-hidden="true">
              <path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h5"/></svg></button>
@@ -561,6 +636,63 @@ function buildAcc(){
   });
   document.getElementById("expandAll").onclick=()=>document.querySelectorAll(".grpblk").forEach(b=>b.classList.add("open"));
   document.getElementById("collapseAll").onclick=()=>document.querySelectorAll(".grpblk").forEach(b=>b.classList.remove("open"));
+}
+
+/* ═════════ J'EN SUIS LÀ ═════════
+   Le planning ne savait pas où l'on en était : il partait de zéro, déclarait
+   « 34 jours de retard » et reposait, chaque soir, des étapes faites depuis
+   longtemps. Cocher les cent étapes une à une, personne ne le fait.
+
+   Ce qui a été acquis avant l'application n'a pas de date. On ne l'invente
+   pas : ces heures sont rangées sous « avant », comptées comme faites, mais
+   absentes du rythme — sinon le jour du clic aurait l'air d'une journée de
+   cent heures, et toutes les prévisions en seraient faussées. */
+function etapesAvant(id, portee) {
+  const s2 = byId[id]; if (!s2) return [];
+  const g = GROUPES.find((x) => x.rows.includes(s2.row)); if (!g) return [];
+  const out = [];
+  for (const r of g.rows) {
+    if (portee === "ligne" && r !== s2.row) continue;
+    for (const x of r.steps) { if (x === s2) return out; out.push(x); }
+  }
+  return out;
+}
+function acquerirAvant(id, portee) {
+  const liste = etapesAvant(id, portee).filter((x) => !estFait(x));
+  for (const x of liste) {
+    const m = avance[x.id] || (avance[x.id] = {});
+    m.avant = Math.round(((Number(m.avant) || 0) + resteDe(x)) * 100) / 100;
+    done[x.id] = new Date(T0).toISOString();
+  }
+  return liste;
+}
+function demanderIci(id) {
+  const s2 = byId[id]; if (!s2 || !canEdit) return;
+  const ligne = etapesAvant(id, "ligne").filter((x) => !estFait(x));
+  const bloc = etapesAvant(id, "bloc").filter((x) => !estFait(x));
+  const somme = (l) => unH(l.reduce((a, x) => a + resteDe(x), 0));
+  const faire = (portee) => {
+    const fait = acquerirAvant(id, portee);
+    log(`en est à ${s2.row.n} · ${s2.n} : ${plural(fait.length, "étape")} marquée(s) acquise(s)`);
+    saveProgress(); renderAll();
+  };
+  if (!bloc.length) {
+    dialogue({ ton: "warn", titre: "Rien à marquer",
+      corps: `<p>Tout ce qui précède <b>${esc(s2.n)}</b> est déjà validé.</p>`,
+      actions: [{ texte: "D'accord", pri: true }] });
+    return;
+  }
+  const actions = [{ texte: "Annuler" }];
+  if (ligne.length && ligne.length < bloc.length)
+    actions.push({ texte: `Dans ${s2.row.n} seulement (${ligne.length})`, faire: () => faire("ligne") });
+  actions.push({ texte: `Tout ce qui précède (${bloc.length})`, pri: true, faire: () => faire("bloc") });
+  dialogue({ ton: "warn", titre: "J'en suis là",
+    corps: `<p>Tu travailles sur <b>${esc(s2.row.n)} · ${esc(s2.n)}</b>. Les étapes avant elle
+      seront comptées comme acquises — ${plural(bloc.length, "étape")}, ${somme(bloc)},
+      ${ligne.length && ligne.length < bloc.length ? `dont ${plural(ligne.length, "étape")} dans cette ligne,` : ""}
+      sans date : elles ne gonfleront pas ton rythme du jour.</p>
+      <p class="petit">Une étape se rouvre en la décochant.</p>`,
+    actions });
 }
 
 /* ═════════ COURBE DE PROGRESSION ═════════
@@ -848,7 +980,7 @@ function exporterDemande(id) {
    chaque matin et les comptait en retard — ce qui n'aide en rien et décourage.
 
    Une étape bloquée sort du planning du jour. Elle ne sort pas du retard :
-   le travail reste à faire, la montagne le compte toujours. Seule l'alarme
+   le travail reste à faire, le retard le compte toujours. Seule l'alarme
    quotidienne se tait, parce qu'elle réclamait l'impossible. */
 
 const estBloque = (id) => Boolean(bloques[id]);
@@ -917,334 +1049,6 @@ function renderEtapesBloquees() {
         </div>
       </details>`;
     }).join("")}`;
-}
-
-/* ═════════ LA MONTAGNE ═════════
-   Une montagne qu'on construit en ne travaillant pas sera toujours plus dure à
-   franchir qu'une plaine encore plate. Ce n'est pas une image : c'est
-   `reste ÷ jours restants`. Chaque jour sans rien poser augmente la pente qu'il
-   faudra gravir le lendemain, et la montagne se construit toute seule pendant
-   qu'on la regarde.
-
-   Le terrain est donc calculé, jamais dessiné à l'avance : sa hauteur en un
-   point est le rythme qu'il faudrait tenir si l'on s'y mettait ce jour-là. */
-
-/** Le rythme requis à une date donnée, en heures par jour, à reste constant. */
-function penteAu(t, reste, fin) {
-  const jours = Math.max(0.5, (fin - t) / DAY);
-  return reste / jours;
-}
-
-/* La part du programme franchie. Un cours terminé vaut un pas entier, celui
-   qu'on a entamé vaut sa fraction : le bonhomme avance déjà pendant qu'on
-   travaille, et il a bougé d'un cran net quand le cours tombe. */
-function partFranchie() {
-  if (!ALL.length) return 0;
-  let p = 0;
-  for (const s2 of ALL) p += s2.h > 0 ? Math.min(1, faitDe(s2.id) / s2.h) : 1;
-  return Math.min(1, p / ALL.length);
-}
-
-/** L'étape vers laquelle il marche : la première à faire, blocages écartés. */
-function prochaineEtape() {
-  return ALL.find((s2) => !estFait(s2) && !estBloque(s2.id))
-      || ALL.find((s2) => !estFait(s2)) || null;
-}
-
-function terrain() {
-  const reste = ALL.reduce((a, s2) => a + resteReel(s2), 0);
-  const fin = +EXAM;
-  const ry = rythmeTravail();
-  const capacite = ry && ry.hParJour > 0 ? ry.hParJour : null;
-  const requis = penteAu(NOW, reste, fin);
-  // Le rapport entre ce qu'il faut tenir et ce qu'on tient vraiment. Sans
-  // historique, on se compare à la journée type déclarée.
-  const declaree = capaciteDeclaree();
-  const base = capacite || declaree || 4;
-  const raideur = base > 0 ? requis / base : 0;
-
-  const aujourdhui = heuresFaitesLe(isoJour(new Date(NOW)));
-  const depuis = joursSansRien();
-  const bloquees = heuresBloquees();
-  const jourDeRepos = auRepos(new Date(NOW).getDay());
-
-  let allure;
-  if (reste <= EPS) allure = "sommet";
-  // Tout ce qui reste attend quelqu'un d'autre : ce n'est pas de l'arrêt, et on
-  // ne lui met pas sur le dos une pente qu'il n'a pas le droit de gravir.
-  else if (bloquees >= reste - EPS) allure = "attente";
-  // Un jour de repos non plus n'est pas un arrêt. Sans ce cas, l'application
-  // reprochait tout le week-end une pause qu'on lui a demandé de réserver.
-  else if (jourDeRepos && aujourdhui <= EPS) allure = "repos";
-  else if (depuis >= 1 && aujourdhui <= EPS) allure = "arret";
-  else if (raideur >= 2.2) allure = "alpinisme";
-  else if (raideur >= 1.25) allure = "montee";
-  else allure = "randonnee";
-
-  return { reste, fin, requis, capacite, declaree, raideur, allure, bloquees,
-           repos: jourDeRepos,
-           aujourdhui, depuis, jours: Math.max(0, (fin - NOW) / DAY),
-           part: partFranchie(), suivante: prochaineEtape(),
-           faits: ALL.reduce((a, s2) => a + (estFait(s2) ? 1 : 0), 0), total: ALL.length };
-}
-
-/** Ce que la journée type déclare, en heures : le repère quand rien n'est mesuré. */
-function capaciteDeclaree() {
-  try {
-    let tot = 0;
-    for (let j = 0; j < 7; j++) {
-      if (auRepos(j)) continue;          // un jour de repos ne déclare rien
-      const plages = capacites && capacites[j];
-      if (!Array.isArray(plages)) continue;
-      for (const [d, f] of plages) tot += Math.max(0, (enMin(f) - enMin(d)) / 60);
-    }
-    return tot > 0 ? tot / 7 : null;
-  } catch { return null; }
-}
-
-/** Jours ouverts écoulés depuis la dernière heure posée. Les jours de repos
- *  n'en font pas partie : un week-end réservé n'est pas du temps perdu, et le
- *  compter ferait dire « trois jours sans rien poser » tous les lundis. */
-function joursSansRien() {
-  let dernier = null;
-  for (const id in avance) {
-    if (!byId[id]) continue;
-    for (const j in avance[id]) if (!dernier || j > dernier) dernier = j;
-  }
-  if (!dernier) return null;
-  const t = Date.parse(dernier + "T23:59:59");
-  const bruts = Math.max(0, Math.floor((NOW - t) / DAY) + 1);
-  let n = 0;
-  for (let i = 0; i < bruts; i++) {
-    const d = new Date(t + i * DAY);
-    if (!auRepos(d.getDay())) n++;
-  }
-  return n;
-}
-
-const MOTS = {
-  sommet: ["Au sommet", "Tout est posé. Il n'y a plus de pente devant toi."],
-  attente: ["En attente",
-    "Tout ce qui reste attend quelqu'un d'autre. Il s'assoit : relance ton tuteur."],
-  repos: ["Au repos",
-    "C'est ton jour. La pente ne bouge pas d'ici demain, et elle t'attendra."],
-  arret: ["Arrêté devant la pente",
-    "Tu regardes la montagne en cherchant par où passer. Elle grandit pendant ce temps."],
-  alpinisme: ["En alpinisme",
-    "La pente est devenue raide. Chaque jour sans rien poser la redresse encore."],
-  montee: ["En montée", "Ça grimpe, mais ça se marche."],
-  randonnee: ["En randonnée", "Le terrain est plat devant toi. C'est le bon moment."],
-};
-
-/* D'un rendu à l'autre on retient où il était, pour le faire marcher jusqu'à sa
-   nouvelle place au lieu de l'y téléporter. */
-let dernierePart = null;
-
-const court = (s, n) => (s && s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s || "");
-
-function renderMontagne() {
-  const box = $("montagne");
-  if (!box) return;
-  const t = terrain();
-  const [titre, phrase] = MOTS[t.allure];
-
-  const L = 760, H = 260, sol = H - 34, cime = 18;
-  const utile = sol - cime;
-
-  // La rampe monte d'autant plus vite qu'il faut en faire plus par jour que ce
-  // qu'on tient. Pente 1 : on arrive tout juste au sommet le jour de l'examen.
-  // Pente 2 : la montagne sort du cadre — et c'est exactement ce qu'on veut voir.
-  const X = (u) => 10 + u * (L - 20);
-  // La raideur n'est pas bornée : devoir tenir 4 h par jour quand on en tient dix
-  // minutes donne ×26, et un mur vertical au départ, qui ne montre plus rien.
-  // La racine comprime sans inverser l'ordre : ×1 fait une pente à mi-hauteur,
-  // ×4 un mur qui remplit le cadre, au-delà c'est le même message.
-  const dessine = (r) => Math.min(1, Math.sqrt(Math.max(0, r) / 4));
-  const Y = (r, u) => sol - Math.min(1, Math.max(0, dessine(r) * u)) * utile;
-  const rampe = (r, de = 0, a = 1) => {
-    const pts = [];
-    for (let i = 0; i <= 40; i++) {
-      const u = de + (a - de) * (i / 40);
-      pts.push([X(u), Y(r, u)]);
-    }
-    return pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
-  };
-
-  const ligne = rampe(t.raideur);
-  const aire = `${ligne} L${X(1).toFixed(1)} ${sol} L${X(0).toFixed(1)} ${sol} Z`;
-
-  // Ce que la pente était il y a une semaine, à travail égal : plus douce. C'est
-  // la montagne qu'on a construite en ne faisant rien, rendue visible.
-  const avant = t.jours > 0 ? t.raideur * (t.jours / (t.jours + 7)) : 0;
-  // On ne montre le tracé d'avant que si l'écart se voit à l'écran.
-  const montree = t.reste > EPS && dessine(t.raideur) - dessine(avant) > 0.05;
-
-  /* Il ne se tient plus au pied de la pente : il est là où en est le programme,
-     et chaque cours fini le pousse d'un cran vers l'examen. Tant qu'il reste un
-     jalon à planter devant lui on lui garde un bout de pente : un panneau collé
-     au bord du cadre ne se lit pas. */
-  const jalonne = t.suivante && t.reste > EPS;
-  const borne = (u) => Math.min(jalonne ? 0.9 : 0.985, Math.max(0.012, u));
-  const u0 = borne(t.part);
-  const bx = X(u0), by = Y(t.raideur, u0);
-  // L'angle du terrain sous ses pieds, et ce qu'il en prend : un marcheur reste
-  // plus droit que la pente, un alpiniste s'y couche. 0 pour qui ne grimpe pas.
-  const angle = Math.atan2(dessine(t.raideur) * utile, L - 20) * 180 / Math.PI;
-  const penche = { alpinisme: 1, montee: .6, randonnee: .35 }[t.allure] || 0;
-  const incl = angle * penche;
-
-  // S'il a gagné du terrain depuis le dernier rendu, il y marche au lieu d'y
-  // apparaître : c'est tout l'intérêt de finir un cours.
-  const avantU = dernierePart != null && t.part > dernierePart + 1e-6
-    ? borne(dernierePart) : null;
-  dernierePart = t.part;
-  const glisse = avantU == null ? "" : ` style="--dx:${(X(avantU) - bx).toFixed(1)}px;` +
-    `--dy:${(Y(t.raideur, avantU) - by).toFixed(1)}px"`;
-
-  /* Le panneau devant lui nomme la prochaine tâche. Il dit où il va, pas
-     combien il en reste : un cours sur cent vingt ne fait que six pixels, et
-     planté à la distance exacte le panneau tomberait DANS le bonhomme. On le
-     pose donc à la distance vraie OU assez loin pour se lire, la plus grande
-     des deux. Le compte exact est écrit en toutes lettres juste dessous. */
-  const uSuiv = Math.min(0.985, Math.max(
-    t.total ? (Math.floor(t.part * t.total + 1e-9) + 1) / t.total : 1, u0 + 0.075));
-  const jx = X(uSuiv), jy = Y(t.raideur, uSuiv);
-  const aGauche = uSuiv > 0.62;
-  const jalon = jalonne ? `
-      <g class="jalon">
-        <path class="hampe" d="M${jx.toFixed(1)} ${jy.toFixed(1)}v-52"/>
-        <path class="fanion" d="M${jx.toFixed(1)} ${(jy - 52).toFixed(1)}l15 5.5-15 5.5z"/>
-        <text class="jal" x="${(jx + (aGauche ? -5 : 5)).toFixed(1)}"
-          y="${(jy - 57).toFixed(1)}" text-anchor="${aGauche ? "end" : "start"}"
-          >${esc(court(t.suivante.n, 30))}</text>
-      </g>` : "";
-
-  /* Le panneau porte l'allure : c'est elle qui donne sa couleur au massif. On la
-     préfixe, sinon un nom d'allure part en classe globale et attrape la règle du
-     même nom — « attente » tombait sur l'écran de chargement et rabotait le
-     panneau à 22 rem. Toute allure ajoutée ici doit garder le préfixe. */
-  const bloc = $("montbloc");
-  if (bloc) bloc.className = "panel montbloc all-" + t.allure;
-
-  box.innerHTML = `
-    <svg class="mont all-${esc(t.allure)}" viewBox="0 0 ${L} ${H}" role="img"
-        aria-label="${esc(titre)} — ${esc(phrase)} ${t.faits} ${t.faits > 1 ? "étapes franchies" : "étape franchie"} sur ${t.total}.${
-          t.suivante ? ` Prochaine étape : ${esc(t.suivante.n)}.` : ""}">
-      <defs><linearGradient id="gcimes" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="var(--c1)"/><stop offset="1" stop-color="var(--c2)"/>
-      </linearGradient></defs>
-      <line class="sol" x1="0" x2="${L}" y1="${sol}" y2="${sol}"/>
-      <path class="massif" d="${aire}"/>
-      ${montree ? `<path class="jadis" d="${rampe(avant)}"/>
-        <text class="jal jadis-t" x="${X(0.99)}" y="${Y(avant, 0.99) - 6}" text-anchor="end">
-          la pente d'il y a une semaine</text>` : ""}
-      <path class="crete" d="${ligne}"/>
-      <path class="franchi" d="${rampe(t.raideur, 0, u0)}"/>
-      ${jalon}
-      <g class="pas${avantU == null ? "" : " avance"}"${glisse}>
-        <g transform="translate(${bx.toFixed(1)},${by.toFixed(1)}) rotate(${incl.toFixed(1)}) scale(1.75)">
-          ${bonhomme(t.allure)}
-        </g>
-      </g>
-      <text class="jal" x="${X(1)}" y="${sol + 20}" text-anchor="end">examen</text>
-      <text class="jal" x="${X(0)}" y="${sol + 20}">départ</text>
-    </svg>
-    <div class="montdit">
-      <div class="mtitre">${esc(titre)}</div>
-      <div class="mphrase">${esc(phrase)}</div>
-      <div class="mchif">
-        <span><b>${t.faits}</b> ${t.faits > 1 ? "étapes franchies" : "étape franchie"} sur ${t.total}</span>
-        <span><b>${unH(t.requis)}</b> par jour à tenir</span>
-        ${t.capacite && t.reste > EPS
-          ? `<span><b>${unH(t.capacite)}</b> par jour mesuré chez toi</span>` : ""}
-        ${t.bloquees > EPS ? `<span><b>${unH(t.bloquees)}</b> en attente de quelqu'un</span>` : ""}
-        ${t.depuis != null && t.depuis >= 1
-          ? `<span class="late"><b>${plural(t.depuis, "jour")}</b> sans rien poser</span>`
-          : t.aujourdhui > EPS ? `<span class="ok"><b>${unH(t.aujourdhui)}</b> aujourd'hui</span>` : ""}
-      </div>
-    </div>`;
-}
-
-/* ── Le bonhomme ────────────────────────────────────────────────────────
-   Le groupe parent le place ; ici on ne dessine que le corps, à l'origine,
-   les pieds sur le zéro.
-
-   Le défaut qu'on corrige venait d'un seul groupe qui portait à la fois le
-   translate/scale de placement et l'animation CSS : une animation `transform`
-   REMPLACE l'attribut `transform`, elle ne s'y ajoute pas. Le bonhomme partait
-   donc à l'angle du cadre, à l'échelle 1, hors champ — invisible dans trois
-   allures sur cinq. D'où la règle : un groupe place, un autre anime, jamais
-   le même. Elle vaut aussi pour chaque membre.
-
-   Chaque membre est donc un groupe dont l'origine EST son pivot (hanche ou
-   épaule), posé par un translate, et dont l'enfant animé porte l'une des trois
-   classes d'origine selon le sens du tracé — bas / haut / hautg. Un tracé qui
-   part ailleurs ferait tourner le membre autour du mauvais point. */
-const TETE = `<circle class="tete" cx="0" cy="-27.5" r="4"/>`;
-const TRONC = `<path class="corps" d="M0 -23.3v13.3"/>`;
-const os = (d, c = "corps") => `<path class="${c}" d="${d}"/>`;
-/** Un membre : le groupe pose le pivot, l'enfant tourne autour. */
-const membre = (cls, x, y, inner, style = "") =>
-  `<g transform="translate(${x},${y})"><g class="${cls}"${style}>${inner}</g></g>`;
-// Presque droits au repos : c'est le balancement qui les écarte, et il les
-// écarte des deux côtés parce que le pivot reste sur l'axe du corps.
-const JAMBE = os("M0 0l.8 10");
-// Le bâton est tenu dans la main : il vit dans le groupe du bras et se plante
-// avec lui. Le dessiner à part lui donnerait une vie propre, et ça se voit.
-const BRAS = os("M0 0l.8 9") + os("M.8 9l1.5 14", "baton");
-
-/** Un bonhomme, dessiné selon ce que le terrain lui demande. */
-function bonhomme(allure) {
-  const g = (contenu) => `<g class="rando all-${esc(allure)}">${contenu}</g>`;
-
-  if (allure === "arret") {
-    // Immobile, la main au menton, cherchant par où passer. Rien ne marche :
-    // seuls le souffle et les bulles bougent.
-    return g(`${TETE}${TRONC}
-      ${os("M0 -10l-4.5 10M0 -10l4.5 10")}
-      ${os("M0 -22l6.5 4-3.5 -6.5")}
-      <g class="pense">
-        <circle cx="8" cy="-34" r="1.8"/><circle cx="12.5" cy="-39" r="2.6"/>
-        <circle cx="18.5" cy="-45" r="3.5"/>
-      </g>`);
-  }
-
-  if (allure === "attente" || allure === "repos") {
-    // Assis sur un bloc, une jambe qui balance. Deux situations, la même image :
-    // il attend une réponse, ou c'est son jour de repos.
-    return g(`${os("M-12 0h21l-4.5 -8.5h-12z", "rocher")}
-      <circle class="tete" cx="-5" cy="-26" r="4"/>
-      ${os("M-5 -22l1.5 12.5")}
-      ${os("M-3.5 -9.5l9 -.6")}
-      ${os("M-5 -20l6.5 6")}
-      ${membre("balance lent bas", 5.5, -10.1, os("M0 0l.8 10"))}`);
-  }
-
-  if (allure === "alpinisme") {
-    // Plié dans la pente, le piolet planté plus haut, les jambes qui poussent.
-    return g(`${TETE}${TRONC}
-      ${membre("balance bas", 0, -10, JAMBE)}
-      ${membre("balance bas", 0, -10, JAMBE, ' style="animation-delay:-1.2s"')}
-      ${membre("ancre haut", 0, -22.3, os("M0 0l8.5 -8.5") + os("M8.5 -8.5l7 -6M12.5 -12.5l5 1", "piolet"))}
-      ${membre("bras bas", 0, -22.3, os("M0 0l.8 8.5"), ' style="animation-delay:-.8s"')}`);
-  }
-
-  if (allure === "sommet") {
-    // Les deux bras en l'air, et il les agite.
-    return g(`${TETE}${TRONC}
-      ${os("M0 -10l-5 10M0 -10l5 10")}
-      ${membre("salut haut", 0, -22.3, os("M0 0l5.5 -1l4 -8"))}
-      ${membre("salut hautg", 0, -22.3, os("M0 0l-5.5 -1l-4 -8"), ' style="animation-delay:-.6s"')}`);
-  }
-
-  // Randonnée et montée : il marche. Les jambes alternent, les bras suivent à
-  // contretemps, et le bâton se plante à chaque pas.
-  const lent = allure === "montee" ? " lent" : "";
-  return g(`${TETE}${TRONC}
-    ${membre("balance bas" + lent, 0, -10, JAMBE)}
-    ${membre("balance bas" + lent, 0, -10, JAMBE, ' style="animation-delay:-.8s"')}
-    ${membre("bras bas" + lent, 0, -22.3, os("M0 0l.8 9"), ' style="animation-delay:-.8s"')}
-    ${membre("bras bas" + lent, 0, -22.3, BRAS)}`);
 }
 
 /* ═════════ FICHES ═════════
@@ -2344,7 +2148,7 @@ let painting=false;
 function renderAll(){
   painting=true;
   replanifier();
-  renderToday();renderEtapesBloquees();renderMontagne();renderCourbe();renderProjection();renderRendement();renderPrevision();
+  renderToday();renderEtapesBloquees();renderCourbe();renderProjection();renderRendement();renderPrevision();
   paintGantt();renderGrades();renderJournal();
   // Reconstruire les champs de réglage sous les doigts de quelqu'un qui écrit
   // efface ce qu'il tape : on ne les redessine que s'ils sont à l'écran.
@@ -2402,7 +2206,7 @@ function replanifier() {
   // Le planificateur raisonnait en heures du référentiel. Il raisonne maintenant
   // en heures réelles : une étape qui coûte 1,4× prend 1,4× de place. Sans ça,
   // la projection annonçait une date que le rythme mesuré contredisait déjà.
-  const base = { etapes: ALL, done, evenements: events, capacites, repos, reports,
+  const base = { etapes: ALL, done, evenements: events, capacites, repos, rattrapageRepos: reposSuspendu(), reports,
                  maintenant: NOW, fin: FIN_ANNEE, reste: restePlanifiable };
   if (!partJour || partJour.date !== cle) {
     const brut = planifier(base);
@@ -2697,7 +2501,7 @@ function majRepetition() {
 function baseplan() {
   const cle = isoJour(new Date(NOW));
   return {
-    etapes: ALL, done, evenements: events, capacites, repos, reports,
+    etapes: ALL, done, evenements: events, capacites, repos, rattrapageRepos: reposSuspendu(), reports,
     plafonds: partJour && partJour.date === cle
       ? { [cle]: Math.max(0, partJour.h - heuresFaitesLe(cle)) } : {},
     maintenant: NOW, fin: FIN_ANNEE,
@@ -2831,25 +2635,38 @@ function renderCapacites() {
   const noms = NOMS_JOURS;
   box.innerHTML = [1,2,3,4,5,6,0].map((j) => {
     const txt = (capacites[j] || []).map((s2) => `${s2[0]}-${s2[1]}`).join(", ");
+    const coche = repos.includes(j);
     const off = auRepos(j);
+    const suspendu = coche && !off;
     const h = heuresDe(j);
-    return `<div class="cap${off ? " off" : ""}">
+    return `<div class="cap${off ? " off" : ""}${suspendu ? " suspendu" : ""}">
       <span class="jr">${noms[j]}</span>
       <label class="rep" title="Aucune heure de travail n'est posée ce jour-là">
-        <input type="checkbox" data-repos="${j}"${off ? " checked" : ""}${canEdit ? "" : " disabled"}>
+        <input type="checkbox" data-repos="${j}"${coche ? " checked" : ""}${canEdit ? "" : " disabled"}>
         <span>repos</span></label>
       <input type="text" data-cap="${j}" value="${txt}" placeholder="09:00-12:00, 14:00-18:00"
-        ${canEdit && !off ? "" : "disabled"}>
-      <em>${off ? "repos" : h ? h.toFixed(1).replace(".0","") + " h" : "—"}</em>
+        ${canEdit && !(off && !reposCond) ? "" : "disabled"}>
+      <em>${off ? "repos" : suspendu ? (h ? `suspendu · ${h.toFixed(1).replace(".0","")} h` : "suspendu · 0 h")
+        : h ? h.toFixed(1).replace(".0","") + " h" : "—"}</em>
     </div>`;
   }).join("") +
-    `<div class="captot">Soit <b class="mono">${total.toFixed(1).replace(".0","")} h</b> déclarées
+    `<label class="urgcase condrepos">
+      <input type="checkbox" id="reposCond"${reposCond ? " checked" : ""}${canEdit ? "" : " disabled"}>
+      <span>Pas de repos tant que je suis en retard</span></label>
+    ${reposCond ? `<div class="petit">${reposSuspendu()
+      ? `<b>Suspendu en ce moment</b> : ${plural(ALL.filter((s) => !estFait(s) && NOW > s.t1 && !estBloque(s.id)).length, "étape")}
+         en retard. Tes jours de repos ne servent plus qu'à les rattraper, sur les plages
+         écrites à côté${repos.some((j) => !(capacites[j] || []).length)
+           ? " — <b>mets-y des heures</b>, sinon ils ne rattrapent rien" : ""}.
+         Ils redeviennent des jours de repos dès que tu es à jour.`
+      : `Tu es à jour : tes jours de repos s'appliquent.`}</div>` : ""}
+    <div class="captot">Soit <b class="mono">${total.toFixed(1).replace(".0","")} h</b> déclarées
       par semaine — un peu moins une fois les pauses déduites : ${REGLES.pause} min après chaque
       ${REGLES.session / 60} h de travail, jamais négociables.
       <div class="petit">Ce qui n'y tient pas glisse sur des heures inhabituelles
       (jusqu'à ${JOURNEE[1]}), et seulement en rattrapage. Le reste de la journée
       ${JOURNEE[0]}–${JOURNEE[1]} apparaît comme temps libre pour ton entourage.</div>
-      <div class="petit">Un jour coché <b>repos</b> ne reçoit rien : ni travail, ni soirée de
+      <div class="petit">Un jour coché <b>repos</b> — hors la règle ci-dessus — ne reçoit rien : ni travail, ni soirée de
       rattrapage. Une seule chose peut l'ouvrir, et jamais plus de ${URGENCE.max} h : une étape
       <b>à la fois urgente et importante</b> — un devoir noté dont l'échéance est passée ou
       tombe dans les ${URGENCE.jours} jours. Important mais pas urgent attend lundi.</div>
@@ -4443,7 +4260,7 @@ async function verifierNom() {
    tient qu'à ce navigateur. Pas d'adresse, donc rien pour le retrouver si le
    stockage est effacé, et rien pour l'ouvrir sur un autre appareil.
 
-   Ce qui marche : le planning, le minuteur, les fiches, la montagne, les
+   Ce qui marche : le planning, le minuteur, les fiches, les
    blocages, l'import de son propre agenda, les notifications sur cet appareil.
    Ce qui ne marche pas : tout ce qui sort du compte — le fil, les messages, les
    contacts, le classement, publier son planning, envoyer sa demande à quelqu'un.
@@ -5639,8 +5456,17 @@ document.addEventListener("input", (e) => {
                   : `a rouvert son ${NOMS_JOURS[j].toLowerCase()}`);
     saveState(); renderAll();
   }
+  if (e.target.id === "reposCond" && canEdit) {
+    reposCond = e.target.checked;
+    partJour = null;
+    log(reposCond ? "ne prend plus de repos tant qu'il est en retard"
+                  : "reprend ses jours de repos sans condition");
+    saveState(); renderAll();
+  }
 });
 document.addEventListener("click", (e) => {
+  const ici = e.target.closest("[data-ici]");
+  if (ici) { demanderIci(ici.dataset.ici); return; }
   const d = e.target.closest("[data-del]");
   if (d && canEdit) {
     const ev = events.find((x) => x.id === d.dataset.del);

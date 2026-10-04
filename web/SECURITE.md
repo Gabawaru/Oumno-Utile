@@ -159,7 +159,7 @@ revenant.
 On peut créer un compte sans donner d'adresse. Supabase marque ces sessions
 `is_anonymous` dans le jeton ; `prive.sans_adresse()` relit ce drapeau.
 
-Ce qui reste ouvert : le planning, le minuteur, les fiches, la montagne, les
+Ce qui reste ouvert : le planning, le minuteur, les fiches, les
 blocages, l'import de son propre agenda, les notifications sur l'appareil.
 
 Ce qui est fermé : tout ce qui sort du compte — le fil, les commentaires, les

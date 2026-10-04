@@ -177,8 +177,8 @@ function materialiser(restant, file) {
     const s = restant[i];
     if (s[1] - s[0] < REGLES.minBloc) { i++; session = 0; continue; }
     const t = Math.min(p.reste, REGLES.session - session, s[1] - s[0]);
-    blocs.push({ etape: p.etape, debut: s[0], fin: s[0] + t,
-                 retard: p.retard, tard: p.tard, urgence: p.urgence });
+    blocs.push({ etape: p.etape, debut: s[0], fin: s[0] + t, retard: p.retard,
+                 tard: p.tard, urgence: p.urgence, rattrapage: p.rattrapage });
     s[0] += t; p.reste -= t; session += t;
     if (p.reste <= 0.5) k++;
     if (session >= REGLES.session - 0.5) {
@@ -198,7 +198,7 @@ export function capaciteTravail(segs) {
 }
 
 /* ── grille des jours ──────────────────────────────────── */
-export function grille(debut, fin, capacites, evenements, repos) {
+export function grille(debut, fin, capacites, evenements, repos, rattrapageRepos = false) {
   const cap = normaliserCapacites(capacites);
   const auRepos = normaliserRepos(repos);
   const vie = [[min(JOURNEE[0]), min(JOURNEE[1])]];
@@ -215,23 +215,31 @@ export function grille(debut, fin, capacites, evenements, repos) {
     const cle = iso(d);
     const evs = (parJour.get(cle) || []).sort((a, b) => a.plage[0] - b.plage[0]);
     const occupees = evs.map((e) => e.plage);
-    const repose = auRepos.has(d.getDay());
+    const reposDeclare = auRepos.has(d.getDay());
+    // Repos suspendu tant qu'il reste du retard : le jour garde ses plages
+    // déclarées, mais elles ne servent QU'AU rattrapage. Sans ce cloisonnement,
+    // le nivellement diluait le dimanche dans toute l'année et le retard
+    // traînait jusqu'en mars.
+    const rattrape = reposDeclare && rattrapageRepos
+      ? soustraire(segmentsJour(cap, d.getDay()), occupees) : [];
+    const ouvert = capaciteTravail(rattrape) > 0;
+    const repose = reposDeclare && !ouvert;
     // Un jour de repos n'a ni heures de travail ni soirée de rattrapage. Ses
     // plages déclarées sont ignorées : c'est le repos qui décide, pas l'oubli
     // d'avoir vidé la case samedi.
-    const travail = repose ? [] : segmentsJour(cap, d.getDay());
+    const travail = reposDeclare ? [] : segmentsJour(cap, d.getDay());
     const dispo = soustraire(travail, occupees);
     // Heures inhabituelles : tout le reste de la journée vécue, repas exclu.
     // On n'y pose du travail qu'en dernier recours, et le plus tard possible :
     // le rattrapage se fait le soir, jamais au petit matin s'il y a le choix.
-    const rallonge = repose ? []
+    const rallonge = reposDeclare ? []
       : ordreRattrapage(soustraire(vie, [...occupees, ...travail, ...repas]), travail);
     // La réserve du jour de repos, elle, se prend dans l'ordre du matin : si un
     // devoir en retard doit manger un samedi, autant que le reste du jour soit
     // rendu entier.
     const secours = repose ? soustraire(reserve, [...occupees, ...repas]) : [];
     jours.set(cle, {
-      cle, t, jourSemaine: d.getDay(), repos: repose,
+      cle, t, jourSemaine: d.getDay(), repos: repose, rattrapage: ouvert,
       evenements: evs,
       plagesTravail: travail,   // plages déclarées pour travailler
       dispo,                    // ce qu'il en reste après les événements
@@ -240,10 +248,12 @@ export function grille(debut, fin, capacites, evenements, repos) {
       restant: copie(dispo),
       restantRallonge: copie(rallonge),
       restantSecours: copie(secours),
+      restantRattrapage: copie(rattrape),
       blocs: [], pauses: [],
       cap: capaciteTravail(dispo),
       capRallonge: Math.min(capaciteTravail(rallonge), MAX_RATTRAPAGE),
       capUrgence: Math.min(capaciteTravail(secours), URGENCE.max),
+      capRattrapage: capaciteTravail(rattrape),
       occupe: arrondi(heures(occupees)),
       perdu: arrondi(heures(travail) - heures(dispo)),
     });
@@ -274,9 +284,10 @@ export function grille(debut, fin, capacites, evenements, repos) {
  * faites. Par défaut, une étape cochée dans `done` ne reste pas à faire.
  */
 export function planifier({ etapes, done, evenements, capacites, reports = {},
-                            plafonds = {}, maintenant, fin, reste, repos }) {
+                            plafonds = {}, maintenant, fin, reste, repos,
+                            rattrapageRepos = false }) {
   const restant = reste || ((s) => (done[s.id] ? 0 : s.h));
-  const jours = grille(maintenant, fin, capacites, evenements, repos);
+  const jours = grille(maintenant, fin, capacites, evenements, repos, rattrapageRepos);
   const cles = [...jours.keys()];
   const libre = new Map(cles.map((c) => [c, jours.get(c).cap]));
   const extra = new Map(cles.map((c) => [c, jours.get(c).capRallonge]));
@@ -295,6 +306,7 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
     j.cap = n;
     j.capRallonge = r;
     j.capUrgence = reserve.get(cle);
+    j.capRattrapage = Math.max(0, Math.min(j.capRattrapage, h - n - r - j.capUrgence));
     j.plafonne = true;
   }
 
@@ -308,8 +320,19 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
     .sort((a, b) => (a.ech - b.ech) || (b.h - a.h));
 
   const parts = new Map();
+  // Passage zéro : les jours de repos suspendus ne servent qu'au retard, et au
+  // plus tôt. Ce qui n'y tient pas suit le chemin ordinaire.
+  if (rattrapageRepos) {
+    const rattr = new Map(cles.map((c) => [c, jours.get(c).capRattrapage]));
+    const fenetre = cles.filter((c) => jours.get(c).rattrapage);
+    for (const t of restantes) {
+      if (t.ech >= maintenant) continue;
+      t.h = auPlusTot(rattr, parts, fenetre, t.etape, t.h, true, "rattrapage");
+    }
+  }
   const debordent = [];
   for (const t of restantes) {
+    if (t.h <= 0.01) continue;
     const enRetard = t.ech < maintenant;
     const prevu = minuit(t.etape.t0 ?? maintenant);
     // La date prévue n'est plus un mur : on peut la devancer de quatre semaines
@@ -349,16 +372,19 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
     if (reste > 0.01) manques.push({ etape: d.etape, h: arrondi(reste), ech: d.ech, enRetard: d.enRetard });
   }
 
+  sequencer(parts, cles, jours, restantes, maintenant);
+
   // Les heures deviennent des plages concrètes, dans l'ordre de la journée.
   for (const [cle, liste] of parts) {
     const j = jours.get(cle);
     const file = (garder) => liste.filter(garder).map((p) => ({ ...p, reste: p.h * 60 }));
-    const a = materialiser(j.restant, file((p) => !p.tard && !p.urgence));
+    const a = materialiser(j.restant, file((p) => !p.tard && !p.urgence && !p.rattrapage));
     const b = materialiser(j.restantRallonge, file((p) => p.tard));
     const c = materialiser(j.restantSecours, file((p) => p.urgence));
-    j.blocs = [...a.blocs, ...b.blocs, ...c.blocs]
+    const r = materialiser(j.restantRattrapage, file((p) => p.rattrapage));
+    j.blocs = [...a.blocs, ...b.blocs, ...c.blocs, ...r.blocs]
       .filter((x) => x.fin - x.debut >= 5).sort((x, y) => x.debut - y.debut);
-    j.pauses = [...a.pauses, ...b.pauses, ...c.pauses].sort((x, y) => x[0] - y[0]);
+    j.pauses = [...a.pauses, ...b.pauses, ...c.pauses, ...r.pauses].sort((x, y) => x[0] - y[0]);
   }
   // Les heures déjà écoulées ne sont pas du temps libre : à 21 h, personne n'est
   // disponible « de 12 h 15 à 13 h 15 ». On les retire de la journée en cours.
@@ -375,7 +401,7 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
     // Un jour de repos n'est pas saturé : il est fermé. Les confondre ferait
     // dire à l'application « tes journées suivantes sont pleines » un vendredi
     // soir, alors qu'il ne s'agit que du week-end.
-    j.sature = !j.repos && j.libre <= 0.01 && j.libreRallonge <= 0.01;
+    j.sature = !j.repos && !j.rattrapage && j.libre <= 0.01 && j.libreRallonge <= 0.01;
     j.creneaux = soustraire(
       [[min(JOURNEE[0]), min(JOURNEE[1])]],
       [...j.evenements.map((e) => e.plage), ...j.blocs.map((b) => [b.debut, b.fin]), ...j.pauses,
@@ -383,6 +409,129 @@ export function planifier({ etapes, done, evenements, capacites, reports = {},
     );
   }
   return { jours, manques, tardif: arrondi(tardif), weekend: arrondi(weekend) };
+}
+
+/**
+ * Une chose à la fois. Le nivellement décide COMBIEN travailler chaque jour ;
+ * laissé seul, il décidait aussi QUOI, et il versait un peu de chaque étape sur
+ * chaque jour de sa fenêtre : quatre matières dans une soirée, en tranches de
+ * quinze minutes. Juste en heures, intravaillable pour qui n'avance pas tant
+ * qu'il n'a pas compris.
+ *
+ * On garde donc la charge de chaque jour telle que le nivellement l'a posée, et
+ * on la remplit à nouveau dans l'ordre des échéances : chaque jour prend
+ * l'étape disponible la plus pressée, jusqu'à la finir, puis la suivante. C'est
+ * l'ordonnancement « échéance la plus proche d'abord » avec dates de sortie ;
+ * sur une même suite de capacités, il tient toute échéance que la répartition
+ * d'origine tenait. Les soirées de rattrapage et les heures prises sur le
+ * repos gardent leur contenu : elles ne servent que des étapes précises.
+ */
+function sequencer(parts, cles, jours, restantes, maintenant) {
+  const rang = new Map(restantes.map((t, i) => [t.etape.id, i]));
+  const info = new Map(restantes.map((t) => [t.etape.id, t]));
+  const pool = new Map();       // id → { h, retard }
+  const budget = new Map();     // jour → heures normales posées
+  for (const [cle, liste] of parts) {
+    let b = 0;
+    const garde = [];
+    for (const p of liste) {
+      if (p.tard || p.urgence || p.rattrapage) { garde.push(p); continue; }
+      b += p.h;
+      const q = pool.get(p.etape.id) || { etape: p.etape, h: 0, retard: p.retard };
+      q.h += p.h;
+      pool.set(p.etape.id, q);
+    }
+    if (b > 0) budget.set(cle, b);
+    parts.set(cle, garde);
+  }
+  if (!pool.size) return;
+  const sortie = (id) => {
+    const t = info.get(id);
+    const prevu = minuit(t?.etape.t0 ?? maintenant);
+    return Math.max(minuit(maintenant), prevu - AVANCE_MAX * DAY);
+  };
+  const file = [...pool.values()]
+    .map((q) => ({ ...q, sortie: sortie(q.etape.id), ech: info.get(q.etape.id)?.ech ?? Infinity,
+                   rang: rang.get(q.etape.id) ?? 0 }));
+  echeancesDuRattrapage(file, cles, jours, budget, maintenant);
+  file.sort((a, b) => (a.ech - b.ech) || (a.rang - b.rang));
+  for (const cle of cles) {
+    let b = budget.get(cle) || 0;
+    if (b <= 0.002) continue;
+    const t = jours.get(cle).t;
+    const posees = [];
+    for (const q of file) {
+      if (b <= 0.002) break;
+      if (q.h <= 0.002 || q.sortie > t) continue;
+      const pris = Math.min(q.h, b);
+      posees.push({ etape: q.etape, h: pris, retard: q.retard });
+      q.h -= pris; b -= pris;
+    }
+    // Rien n'est perdu : si aucune étape n'était encore sortie (cas qui ne
+    // devrait pas arriver), on rend la journée telle que le nivellement l'avait.
+    if (b > 0.002) {
+      for (const q of file) {
+        if (b <= 0.002) break;
+        if (q.h <= 0.002) continue;
+        const pris = Math.min(q.h, b);
+        posees.push({ etape: q.etape, h: pris, retard: q.retard });
+        q.h -= pris; b -= pris;
+      }
+    }
+    parts.set(cle, [...posees, ...(parts.get(cle) || [])]);
+  }
+}
+
+/**
+ * Le retard passe d'abord — mais pas au prix d'un retard neuf. Une étape déjà
+ * en retard n'a plus de vraie échéance : la classer « la plus pressée de
+ * toutes » la faisait passer devant tout le reste, et trente-six étapes jusque-là
+ * à l'heure le devenaient. On lui en donne donc une, la plus proche possible.
+ *
+ * On pose d'abord les étapes à l'heure le plus tard qu'elles le permettent,
+ * en remontant le temps : ce qui reste libre devant elles est la vraie marge
+ * de chaque jour. Le rattrapage s'y verse dans l'ordre, et le jour où chaque
+ * étape en retard se termine devient son échéance. Tout reste alors tenable,
+ * et le séquençage qui suit rattrape aussi vite que la marge le permet.
+ */
+function echeancesDuRattrapage(file, cles, jours, budget, maintenant) {
+  const enRetard = file.filter((q) => q.ech < maintenant);
+  if (!enRetard.length) return;
+  const aLheure = file.filter((q) => q.ech >= maintenant).map((q) => ({ q, h: q.h }));
+  const marge = new Map(cles.map((c) => [c, budget.get(c) || 0]));
+  // Au plus tard : du dernier jour au premier, l'étape dont la sortie est la
+  // plus tardive d'abord — l'ordonnancement par échéances, le temps renversé.
+  for (let i = cles.length - 1; i >= 0; i--) {
+    const c = cles[i], t = jours.get(c).t;
+    let b = marge.get(c);
+    if (b <= 0.002) continue;
+    const dispo = aLheure.filter((x) => x.h > 0.002 && x.q.ech >= t && x.q.sortie <= t)
+      .sort((a, b2) => (b2.q.sortie - a.q.sortie) || (b2.q.rang - a.q.rang));
+    for (const x of dispo) {
+      if (b <= 0.002) break;
+      const pris = Math.min(x.h, b);
+      x.h -= pris; b -= pris;
+    }
+    marge.set(c, b);
+  }
+  // Ce qui n'a pas trouvé sa place au plus tard : la répartition d'origine
+  // tenait autrement. On ne promet rien de mieux qu'elle, on la garde.
+  if (aLheure.some((x) => x.h > 0.01)) return;
+  enRetard.sort((a, b) => (a.ech - b.ech) || (a.rang - b.rang));
+  let k = 0, reste = enRetard[0].h;
+  for (const c of cles) {
+    let b = marge.get(c);
+    while (b > 0.002 && k < enRetard.length) {
+      const pris = Math.min(reste, b);
+      reste -= pris; b -= pris;
+      if (reste <= 0.002) {
+        enRetard[k].ech = jours.get(c).t + DAY - 1;
+        k++;
+        reste = k < enRetard.length ? enRetard[k].h : 0;
+      }
+    }
+    if (k >= enRetard.length) return;
+  }
 }
 
 /** Plus petite tranche de travail qu'on accepte de poser dans une journée.
@@ -463,8 +612,8 @@ function auPlusTot(libre, parts, fenetre, etape, h, retard, canal) {
     const pris = Math.min(reste, dispo);
     libre.set(cle, dispo - pris);
     if (!parts.has(cle)) parts.set(cle, []);
-    parts.get(cle).push({ etape, h: pris, retard,
-                          tard: canal === "tard", urgence: canal === "urgence" });
+    parts.get(cle).push({ etape, h: pris, retard, tard: canal === "tard",
+                          urgence: canal === "urgence", rattrapage: canal === "rattrapage" });
     reste -= pris;
   }
   return arrondi(Math.max(0, reste));

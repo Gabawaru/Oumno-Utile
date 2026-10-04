@@ -223,6 +223,11 @@ label.fl{font-family:"IBM Plex Mono",monospace;font-size:.55rem;letter-spacing:.
 .step.lt .lbl{color:var(--late)}
 .step .lbl{flex:1;min-width:0}
 .step .hh{font-family:"IBM Plex Mono",monospace;font-size:.62rem;color:var(--ink3);flex:none}
+.step .ici{flex:none;background:transparent;border:none;border-radius:3px;
+  font:500 .66rem/1 "IBM Plex Sans",sans-serif;color:var(--ink3);padding:.25rem .3rem;
+  cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.step .ici:hover,.step .ici:focus-visible{color:var(--sig);border-color:var(--sig)}
+.step.on .ici{visibility:hidden}
 
 /* notes */
 .gtab{width:100%;border-collapse:collapse;font-size:.75rem}
@@ -314,6 +319,9 @@ form.carte button[type=submit]{margin-top:.3rem}
   text-transform:uppercase;letter-spacing:.05em;color:var(--ink3)}
 .cap .rep input{accent-color:var(--ok);width:14px;height:14px}
 .cap.off .rep{color:var(--ok)}
+.cap.suspendu{box-shadow:inset 3px 0 0 var(--warn)}
+.cap.suspendu .jr,.cap.suspendu em{color:var(--warn)}
+.condrepos{margin:.6rem 0 .2rem;font-weight:600}
 .durees{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem}
 .durees .btn{font-size:.72rem;text-transform:none;letter-spacing:0;padding:.35rem .7rem}
 .resume{display:flex;flex-wrap:wrap;gap:.5rem 1.6rem;background:var(--sunk);padding:.7rem .8rem;
@@ -515,117 +523,21 @@ form.carte button[type=submit]{margin-top:.3rem}
 .step.bloq{opacity:.65}
 .step.bloq .lbl::before{content:"⏸ ";color:var(--warn)}
 
-/* ── la montagne ────────────────────────────────────────── */
-.montbloc{--c1:color-mix(in srgb,var(--sig) 26%,transparent);
-  --c2:color-mix(in srgb,var(--sig) 4%,transparent)}
-.montbloc.all-alpinisme{--c1:color-mix(in srgb,var(--late) 30%,transparent);
-  --c2:color-mix(in srgb,var(--late) 4%,transparent)}
-.montbloc.all-arret{--c1:color-mix(in srgb,var(--ink3) 26%,transparent);
-  --c2:color-mix(in srgb,var(--ink3) 4%,transparent)}
-.montbloc.all-attente{--c1:color-mix(in srgb,var(--warn) 26%,transparent);
-  --c2:color-mix(in srgb,var(--warn) 4%,transparent)}
-/* Le repos porte la couleur du calme, pas celle de l'alerte : c'est un jour
-   qui se passe comme prévu. */
-.montbloc.all-repos{--c1:color-mix(in srgb,var(--ok) 20%,transparent);
-  --c2:color-mix(in srgb,var(--ok) 3%,transparent)}
-.montbloc.all-randonnee,.montbloc.all-sommet{--c1:color-mix(in srgb,var(--ok) 26%,transparent);
-  --c2:color-mix(in srgb,var(--ok) 4%,transparent)}
-.mont{width:100%;height:auto;display:block;overflow:visible}
-.mont .sol{stroke:var(--rule);stroke-width:1}
-.mont .massif{fill:url(#gcimes)}
-.mont .crete{fill:none;stroke:var(--ink3);stroke-width:1.6;stroke-linejoin:round;opacity:.75}
-.mont.all-alpinisme .crete{stroke:var(--late)}
-.mont.all-attente .crete{stroke:var(--warn)}
-.mont.all-repos .crete{stroke:var(--ok)}
-.mont.all-montee .crete{stroke:var(--sig)}
-.mont.all-randonnee .crete,.mont.all-sommet .crete{stroke:var(--ok)}
-/* Le chemin déjà sous ses pieds : ce qu'on a franchi se voit. */
-.mont .franchi{fill:none;stroke:var(--ink);stroke-width:3.2;stroke-linecap:round;opacity:.5}
-.mont .jal{fill:var(--ink3);font-family:"IBM Plex Mono",monospace;font-size:11px}
-.mont .jadis{fill:none;stroke:var(--ink3);stroke-width:1.4;stroke-dasharray:5 4;opacity:.6}
-.mont .jadis-t{font-size:10px;opacity:.75}
-.mont .jalon .hampe{fill:none;stroke:var(--ink3);stroke-width:1.4}
-.mont .jalon .fanion{fill:var(--sig);stroke:none;opacity:.85}
-.mont .jalon .jal{fill:var(--ink2)}
-.mont .corps{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;
-  stroke-linejoin:round}
-.mont .tete{fill:var(--ink);stroke:none}
-.mont .rocher{fill:var(--ink3);stroke:none;opacity:.5}
-.mont .baton,.mont .piolet{fill:none;stroke:var(--ink2);stroke-width:1.8;stroke-linecap:round}
-.mont .pense circle{fill:none;stroke:var(--ink3);stroke-width:1.4}
-
-/* Chaque membre tourne autour de son propre pivot, jamais autour du centre du
-   cadre : fill-box prend la boîte du membre lui-même, et le tracé est dessiné
-   pour que le pivot tombe sur l'un de ses coins. Trois sens, trois origines. */
-.mont .bas{transform-box:fill-box;transform-origin:left top}
-.mont .haut{transform-box:fill-box;transform-origin:left bottom}
-.mont .hautg{transform-box:fill-box;transform-origin:right bottom}
-
-@keyframes balancer{0%,100%{transform:rotate(-26deg)}50%{transform:rotate(26deg)}}
-@keyframes brasser{0%,100%{transform:rotate(22deg)}50%{transform:rotate(-22deg)}}
-@keyframes ancrer{0%,100%{transform:rotate(-14deg)}55%{transform:rotate(8deg)}}
-@keyframes saluer{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(12deg)}}
-@keyframes marche{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.3px)}}
-@keyframes hisse{0%,100%{transform:translateY(0)}55%{transform:translateY(-2.4px)}}
-@keyframes souffle{0%,100%{transform:translateY(0)}50%{transform:translateY(.7px)}}
-@keyframes songe{0%,100%{opacity:.3}50%{opacity:1}}
-/* Il ne se téléporte pas à sa nouvelle place : il part d'où il était et y va.
-   Une étape sur cent vingt ne fait que quelques pixels — sans l'enjambée du
-   milieu, le déplacement passerait inaperçu. C'est elle qu'on voit, pas la
-   distance. */
-@keyframes avancer{
-  0%{transform:translate(var(--dx),var(--dy))}
-  55%{transform:translate(calc(var(--dx)*.35),calc(var(--dy)*.35 - 6px))}
-  100%{transform:none}}
-
-.mont .balance{animation:balancer 1.6s ease-in-out infinite}
-.mont .bras{animation:brasser 1.6s ease-in-out infinite}
-.mont .ancre{animation:ancrer 2.4s ease-in-out infinite}
-.mont .salut{animation:saluer 1.2s ease-in-out infinite}
-.mont .lent{animation-duration:2.4s}
-.mont .rando.all-randonnee,.mont .rando.all-montee{animation:marche 1.6s ease-in-out infinite}
-.mont .rando.all-montee{animation-duration:2.4s}
-.mont .rando.all-alpinisme{animation:hisse 2.4s ease-in-out infinite}
-.mont .rando.all-arret,.mont .rando.all-attente,
-.mont .rando.all-repos{animation:souffle 3.8s ease-in-out infinite}
-.mont .rando.all-arret .pense{animation:songe 2.2s ease-in-out infinite}
-.mont .pas.avance{animation:avancer 1.15s cubic-bezier(.35,.1,.3,1) both}
-
-/* ── compte sans adresse ──────────────────────────────────────────────── */
-.ousinon{margin-top:.9rem;padding-top:.9rem;border-top:1px solid var(--rule);text-align:center}
-.ousinon>span{display:block;font-family:"IBM Plex Mono",monospace;font-size:.68rem;
-  letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:.5rem}
-.ousinon .fl2{margin-top:.5rem;text-align:left;line-height:1.5}
-.ro.sansadr{display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .7rem;
-  background:color-mix(in srgb,var(--warn) 10%,transparent);
-  border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
-.ro.sansadr .btn{margin-left:auto;padding:.25rem .6rem;font-size:.78rem}
-.zaction.pose{display:block}
-.zaction.pose .carte.mince{margin-top:.7rem;padding:0;border:0;background:none;max-width:22rem}
-#lierEtat{min-height:1.1em;color:var(--late)}
-/* Le planning reçu se lit en entier, mais dans sa propre boîte : il ne pousse
-   pas le reste de la page pour autant qu'il compte d'événements. */
-.frise.recue{max-height:14rem;overflow-y:auto;overscroll-behavior:contain}
-/* Sur un téléphone le cadre fait ~340 px pour 760 unités de viewBox : tout ce
-   qui est dessiné en unités rétrécit de moitié, texte compris. On compense. */
-@media(max-width:560px){
-  .mont .jal{font-size:17px}
-  .mont .jadis-t{font-size:15px}
-  .mont .corps{stroke-width:3.2}
-  .mont .baton,.mont .piolet,.mont .jalon .hampe{stroke-width:2.6}
-}
-@media(prefers-reduced-motion:reduce){
-  .mont .rando,.mont .rando *,.mont .pas{animation:none}}
-
-.montdit{margin-top:.5rem}
-.mtitre{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;
-  font-size:1.05rem;font-weight:600}
-.mphrase{font-size:.78rem;line-height:1.5;color:var(--ink2);margin-top:.15rem}
-.mchif{display:flex;flex-wrap:wrap;gap:.3rem 1rem;margin-top:.45rem;font-size:.73rem;
-  color:var(--ink2)}
-.mchif b{color:var(--ink);font-variant-numeric:tabular-nums}
-.mchif .late b{color:var(--late)}
-.mchif .ok b{color:var(--ok)}
+/* ── maintenant : la seule question du matin ─────────────── */
+.maintenant{box-shadow:inset 4px 0 0 var(--c,var(--sig));display:grid;gap:.45rem}
+.maintenant .mlab{font:600 .64rem/1.2 "IBM Plex Mono",monospace;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--sig)}
+.maintenant .mlab.plus-tard{color:var(--ink3)}
+.maintenant .mquoi{display:grid;gap:.1rem}
+.maintenant .mquoi b{font:700 1.25rem/1.15 "IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;
+  text-wrap:balance}
+.maintenant .mquoi span{font-size:.8rem;color:var(--ink2)}
+.maintenant .mmeta{display:flex;flex-wrap:wrap;gap:.2rem .9rem;font-size:.74rem;color:var(--ink3)}
+.maintenant .mmeta b{color:var(--ink);font-variant-numeric:tabular-nums}
+.maintenant .mmeta .lt{color:var(--late);font-weight:600}
+.maintenant .mact{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.1rem}
+.maintenant .mens{font-size:.74rem;color:var(--ink3);border-top:1px solid var(--rule);padding-top:.45rem}
+.maintenant .mens b{color:var(--ink2);font-weight:600}
 
 /* ── fiches par étape ───────────────────────────────────── */
 .step{display:flex;align-items:center;gap:.5rem}
@@ -1702,6 +1614,7 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
 
   <!-- ─────────── AUJOURD'HUI ─────────── -->
   <section data-panel="today" class="stack">
+    <div class="panel maintenant" id="maintenant"></div>
     <div class="bandeau" id="alerteJour" hidden></div>
     <div class="hero" id="hero">
       <div class="hbig" id="hbig">—</div>
@@ -1716,11 +1629,6 @@ body:has(#appli:not([hidden])) .ruban{bottom:calc(56px + var(--bas))}
       <div id="bloquees"></div>
     </div>
 
-    <div class="panel montbloc" id="montbloc">
-      <div class="phead"><h2>La pente devant toi</h2>
-        <div class="note">Elle se redresse toute seule quand on ne pose rien</div></div>
-      <div id="montagne"></div>
-    </div>
 
     <div class="panel">
       <div class="phead"><h2>Ma journée</h2><div class="note" id="dateJour"></div></div>

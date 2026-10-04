@@ -10,9 +10,31 @@ const DAY=864e5, TZ="Europe/Paris";
 const CNED="https://eformation.cned.fr/course/view.php?id=";
 const EXAM=new Date(2027,4,1);           // début estimé de la session 2027
 
-const m3=h=>[["m1","Mission 1",Math.round(h*.36)],["m2","Mission 2",Math.round(h*.34)],
-             ["m3","Mission 3",h-Math.round(h*.36)-Math.round(h*.34)]];
-const sp=(id,n,h,s,e,u)=>({id,n,s,e,u,steps:m3(h).map(([k,l,hh])=>({id:id+"."+k,n:l,h:hh}))});
+// Les missions de chaque situation professionnelle, relevées une à une sur
+// eformation.cned.fr (sections « Missions »). Leur nombre varie — quatre à six —
+// et le CNED donne à chacune le même temps indicatif : le volume de la SP se
+// partage donc à parts égales. Les identifiants m1, m2… restent ceux d'avant :
+// une mission déjà cochée le reste.
+const MISSIONS={
+  "b1.sp6":["VLSM", "Pare-feu", "Mise en application", "ACL", "Défense en profondeur"],
+  "b1.sp7":["Installation d’une BDD", "Modification d’une table", "Modèle conceptuel de données", "Projet de réalisation", "Requêtes"],
+  "b1.sp8":["Kickstart de l’analyse de risque", "Cadrage et socle de sécurité", "Sources de risque", "Scénarios stratégiques", "Scénarios opérationnels", "Traitement du risque"],
+  "b1.sp9":["Diagrammes UML", "Cas d’utilisation et séquence", "Diagramme d’exigences", "Diagramme d’activités", "Diagramme de classes"],
+  "b1.sp10":["HTTPS, audit et sécurisation", "Liaison avec le switch L3", "Audit de l’AD", "IPv6 — partie 1", "IPv6 — partie 2"],
+  "b2.sp6":["Réseaux locaux industriels", "Modbus RTU et TCP", "Bluetooth", "I2C et Raspberry Pi", "LPWAN et 802.15.4"],
+  "b2.sp7":["Gestion de parc et ticketing", "ITIL et procédures d’incident", "GLPI et agents clients", "Logistique et maintenance du parc", "Supervision"],
+  "b2.sp8":["Stormshield : réseau", "Stormshield : protection applicative", "Stormshield : utilisateurs et authentification", "Stormshield : VPN IPsec", "Stormshield : VPN SSL"],
+  "b2.sp9":["Serveurs web dans le Cloud", "ToIP et visioconférence", "Outils de collaboration", "Serveur MQTT", "Serveur de temps et de mails"],
+  "b2.sp10":["Gestion de projet", "Réseau local et Active Directory", "Services dans le Cloud", "Sécurisation du SI", "Réseaux cellulaires"],
+  "b3.sp6":["Formation AWS Cloud Foundations", "Infrastructure réseau dans le Cloud", "Installation de Nagios", "Supervision avec Nagios", "Sauvegarde et restauration"],
+  "b3.sp7":["Prise en main de Laravel", "Modèles et contrôleurs", "Validation du modèle de données", "Validation du cahier des charges"],
+  "b3.sp8":["Prise en main de Zephyr OS", "Programmation multitâche", "Pile TIG", "Prototype « Smart City »"],
+  "b3.sp9":["Analyse et conception", "Package supervision", "Package authentification", "Package application embarquée", "Intégration des packages"]
+};
+const missions=(id,h)=>{const t=MISSIONS[id]||["","",""], n=t.length;
+  return t.map((l,i)=>{const a=Math.round(h*i/n), b=Math.round(h*(i+1)/n);
+    return {id:id+".m"+(i+1), n:`Mission ${i+1}${l?" · "+l:""}`, h:b-a};});};
+const sp=(id,n,h,s,e,u)=>({id,n,s,e,u,steps:missions(id,h)});
 
 const GROUPS=[
  {id:"b1",name:"Bloc 1 — Étude et conception de réseaux",code:"3-0115",c:"var(--b1)",cid:21596,rows:[
