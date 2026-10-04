@@ -136,11 +136,16 @@ export function normaliserRepos(v) {
 }
 
 /** Ancien format (un nombre d'heures par jour) → plages, pour ne rien perdre. */
+const HEURE = /^(?:[01]?\d|2[0-3]):[0-5]\d$/;
 export function normaliserCapacites(cap) {
   const out = {};
   for (let j = 0; j < 7; j++) {
     const v = cap?.[j];
-    if (Array.isArray(v)) out[j] = v.map((s) => [String(s[0]), String(s[1])]);
+    // Une plage ne passe que si elle a la forme d'une heure : elle peut venir
+    // d'un fichier de sauvegarde, que n'importe qui peut fabriquer.
+    if (Array.isArray(v)) out[j] = v.filter((s) => Array.isArray(s)
+        && HEURE.test(String(s[0])) && HEURE.test(String(s[1])))
+      .map((s) => [String(s[0]), String(s[1])]);
     else if (typeof v === "number" && v > 0) {
       const matin = Math.min(v, 3.25);
       const p = [["09:00", hhmm(min("09:00") + matin * 60)]];

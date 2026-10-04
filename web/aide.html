@@ -17,7 +17,7 @@
 
 <div class="tete">
   <h1>Questions fréquentes</h1>
-  <p>Comment Repère décide, ce qu'il montre aux autres, et ce qu'il fait de vos données.</p>
+  <p>Comment Repère décide, et où vivent vos données.</p>
 </div>
 
 <div class="bloc" data-onglet="Prendre en main" data-cle="demarrer">
@@ -34,13 +34,13 @@
     <details><summary>Faut-il être en BTS CIEL ?</summary><div class="rep">
       <p>Non. Le programme du BTS CIEL n'est qu'un modèle de départ parmi d'autres.
       Vous pouvez aussi partir d'une trame de révisions, ou d'une page blanche et
-      déclarer vos propres matières et étapes dans <b>Réglages → Mon programme</b>.</p>
+      déclarer vos propres matières et étapes dans <b>Moi → Mon travail</b>.</p>
       <p>Le moteur ne connaît que des étapes avec un volume d'heures et une période.
       Ce que vous mettez dedans le regarde peu.</p>
     </div></details>
     <details><summary>Par où commencer ?</summary><div class="rep">
-      <p>Trois choses, dans cet ordre. Choisissez un modèle de programme à
-      l'inscription. Réglez vos heures de travail réelles dans <b>Réglages</b> — c'est
+      <p>Trois choses, dans cet ordre. Choisissez un modèle de programme au premier
+      lancement. Réglez vos heures de travail réelles dans <b>Moi → Mon travail</b> — c'est
       le réglage qui change tout. Puis dites où vous en êtes : dans <b>Planning →
       Étapes</b>, touchez <b>j'en suis là</b> sur l'étape que vous travaillez. Tout ce
       qui la précède est compté comme acquis, en une fois.</p>
@@ -154,205 +154,47 @@
   </div>
 </div>
 
-<div class="bloc" data-onglet="Partage et vie privée" data-cle="partage">
-  <h2>Partage et vie privée</h2>
+<div class="bloc" data-onglet="Mes données" data-cle="donnees">
+  <h2>Où vivent mes données</h2>
   <div class="qa">
-    <details><summary>Qui voit mon planning ?</summary><div class="rep">
-      <p>Personne, par défaut : tout nouveau compte est privé. Vous pouvez ensuite
-      autoriser des comptes un par un, ou rendre le planning public — auquel cas
-      n'importe qui peut le consulter, avec ou sans compte.</p>
-      <p>Dans tous les cas, la consultation est en lecture seule. Votre adresse
-      électronique n'est jamais montrée.</p>
+    <details open><summary>Où est enregistré mon planning ?</summary><div class="rep">
+      <p><b>Dans votre navigateur, et nulle part ailleurs.</b> Repère n'a ni compte, ni
+      serveur, ni base de données : rien de ce que vous saisissez ne quitte l'appareil.
+      Les photos des fiches sont rangées dans la base locale du navigateur (IndexedDB).</p>
+      <p>La contrepartie est simple : effacer les données du site, nettoyer le
+      navigateur ou changer de téléphone efface aussi le planning.</p>
     </div></details>
-    <details><summary>Comment inviter quelqu'un ?</summary><div class="rep">
-      <p>Dans <b>Contacts → Inviter par lien</b>, créez un lien d'invitation et envoyez-le.
-      La personne qui l'ouvre en étant connectée obtient l'accès en lecture. Le lien
-      vaut 30 jours et 25 utilisations, et vous pouvez le désactiver à tout moment.</p>
-      <p>Ne le transmettez qu'à des gens de confiance : quiconque l'ouvre obtient
-      l'accès.</p>
+    <details><summary>Comment ne pas le perdre ?</summary><div class="rep">
+      <p><b>Moi → Sauvegarde → Sauvegarder dans un fichier.</b> Le fichier
+      <code>repere-AAAA-MM-JJ.json</code> contient tout : étapes, heures, fiches,
+      photos, réglages. L'écran rappelle la date de la dernière sauvegarde, et la
+      signale en rouge au-delà d'une semaine.</p>
+      <p>Le fichier n'est pas chiffré : rangez-le comme un document personnel.</p>
     </div></details>
-    <details><summary>Pourquoi mon pseudonyme est-il refusé ?</summary><div class="rep">
-      <p>Parce que quelqu'un l'utilise déjà. Les pseudonymes sont uniques, à la casse
-      près, pour qu'on ne prenne pas votre planning pour celui d'un autre.</p>
+    <details><summary>Et sur un autre appareil ?</summary><div class="rep">
+      <p>Sauvegardez sur le premier, puis <b>Recharger une sauvegarde</b> sur le second.
+      Le rechargement remplace tout ce qui s'y trouvait, après confirmation. Il n'y a
+      pas de synchronisation automatique : c'est le fichier qui fait le pont.</p>
     </div></details>
-    <details><summary>Dois-je donner mon vrai nom ?</summary><div class="rep">
-      <p>Non. Le pseudonyme suffit, et c'est lui que tout le monde voit. Le vrai nom
-      est facultatif : si vous le renseignez, il n'apparaît qu'aux personnes pour
-      lesquelles vous cochez <b>vrai nom</b> dans la liste des autorisés. Décocher
-      le masque aussitôt.</p>
-      <p>Techniquement, il n'est même pas rangé au même endroit que le reste du
-      profil : la base refuse de le servir aux autres, ce n'est pas l'affichage qui
-      le cache.</p>
-    </div></details>
-    <details><summary>Puis-je créer un compte sans donner mon adresse ?</summary><div class="rep">
-      <p>Oui. Sur l'écran de création, <b>« Continuer sans adresse »</b>. Le planning,
-      le minuteur, les fiches et les blocages fonctionnent normalement.</p>
-      <p>Ce qui reste fermé : le fil, les messages, les contacts, le classement,
-      publier son planning et envoyer sa demande à quelqu'un. Ces refus sont tenus
-      par la base, pas par l'affichage.</p>
-      <p><b>Ce compte ne tient qu'à ce navigateur.</b> Sans adresse, il n'existe
-      aucun moyen de le retrouver : effacer les données du site, changer d'appareil
-      ou se déconnecter le perd définitivement, y compris pour nous. Vous pouvez
-      poser une adresse à tout moment dans <b>Moi → Compte</b>, sans rien perdre —
-      le compte devient alors ordinaire et tout s'ouvre.</p>
-    </div></details>
-    <details><summary>Comment changer mon mot de passe ?</summary><div class="rep">
-      <p><b>Réglages → Mon compte → Recevoir le lien.</b> Un courriel part vers votre
-      adresse ; vous suivez le lien, choisissez le nouveau mot de passe, et vous
-      revenez à l'écran de connexion.</p>
-      <p>Il n'y a pas d'autre chemin, et c'est voulu : personne, pas même l'éditeur,
-      ne peut lire ni fixer votre mot de passe. Seule une empreinte est conservée.</p>
-    </div></details>
-    <details><summary>Est-ce que c'est sûr ?</summary><div class="rep">
-      <p>Les autorisations sont vérifiées par la base à chaque requête, pas par
-      l'interface : masquer un bouton ne protège rien. Un planning privé est
-      inaccessible, pas seulement invisible.</p>
-      <p>Le site interdit par ailleurs l'exécution de tout script étranger, n'accepte
-      que des liens <code>http</code> et <code>https</code>, et ne peut envoyer de
-      données nulle part ailleurs que vers sa propre base. Le détail, y compris ce
-      qui <i>n'est pas</i> couvert, est publié dans le fichier
-      <code>SECURITE.md</code> du dépôt.</p>
+    <details><summary>J'utilisais l'ancienne version, avec un compte</summary><div class="rep">
+      <p>Au premier lancement, Repère reprend la copie que l'ancienne version gardait
+      dans ce navigateur, et l'annonce une fois. Ce qui n'avait été fait que sur un
+      autre appareil n'y est pas : ouvrez Repère sur cet appareil-là pour le reprendre,
+      puis passez par une sauvegarde.</p>
+      <p>Les photos de fiches déposées sur l'ancien serveur ne s'affichent plus ; la
+      fiche indique combien il en reste là-bas.</p>
     </div></details>
     <details><summary>Y a-t-il des cookies ou de la pub ?</summary><div class="rep">
-      <p>Aucun cookie, aucune publicité, aucune mesure d'audience, aucun traceur.
-      Le navigateur garde seulement votre session et une copie locale du planning,
-      pour qu'il reste lisible en cas de coupure réseau.</p>
-      <p>Même les polices de caractères sont servies depuis ce site, pour qu'aucune
-      adresse IP ne parte chez un tiers.</p>
-    </div></details>
-    <details><summary>Comment supprimer mon compte ?</summary><div class="rep">
-      <p><b>Réglages → Supprimer mon compte.</b> Tout part immédiatement : compte,
-      planning, journal, partages, abonnés. C'est définitif et il n'y a pas de
-      sauvegarde. Le détail est dans la
-      <a href="confidentialite.html">politique de confidentialité</a>.</p>
+      <p>Non. Aucun cookie, aucune mesure d'audience, aucun script tiers : la politique
+      de sécurité du site interdit de charger quoi que ce soit d'ailleurs, et de
+      contacter un autre serveur.</p>
     </div></details>
   </div>
-</div>
-
-<div class="bloc" data-onglet="Le réseau" data-cle="reseau">
-  <h2>Le fil, les messages, les moments</h2>
-  <div class="qa">
-    <details open><summary>À quoi sert le fil ?</summary><div class="rep">
-      <p>À dire ce que vous faites, à voir ce que font les autres, et surtout à
-      repérer les moments où vous êtes libres en même temps. Chaque publication
-      porte une portée : <b>vos contacts</b>, ou <b>tout le monde</b>.</p>
-      <p>Une publication ouverte à tous, depuis un profil public, se lit sans compte.
-      Depuis un profil privé, elle reste invisible : la visibilité du profil
-      l'emporte toujours.</p>
-    </div></details>
-    <details><summary>Qui peut m'écrire ?</summary><div class="rep">
-      <p>Vous choisissez dans <b>Moi → Profil</b> : tout le monde, vos contacts, ou
-      personne. Le réglage par défaut est « mes contacts ».</p>
-      <p>Quelqu'un qui n'a pas le droit de vous écrire garde une seule possibilité :
-      vous <b>proposer un moment</b>, avec un motif. Tant que vous n'avez pas répondu,
-      il ne peut rien vous envoyer d'autre. Accepter la proposition ouvre la
-      conversation.</p>
-    </div></details>
-    <details><summary>Proposer un moment, comment ça marche ?</summary><div class="rep">
-      <p>Sur le profil de quelqu'un, <b>Proposer un moment</b> : un jour, des heures,
-      pour quoi faire, et un mot. La proposition arrive dans sa conversation. S'il
-      accepte, le créneau se pose dans son planning comme un événement — le
-      planificateur en tient compte, et son entourage le voit occupé.</p>
-      <p>Certains acceptent tout automatiquement ; ils l'ont réglé eux-mêmes.</p>
-    </div></details>
-    <details><summary>Le classement, ça sert à quoi ?</summary><div class="rep">
-      <p>À s'encourager, rien de plus. Il additionne les heures validées de la
-      semaine par celles et ceux qui ont <b>demandé</b> à y figurer — personne n'y
-      apparaît sans l'avoir coché. Les heures sont déclarées par l'application de
-      chacun : c'est une émulation, pas une mesure.</p>
-    </div></details>
-    <details><summary>Pourquoi une heure différente sous certains profils ?</summary><div class="rep">
-      <p>Parce que la personne n'est pas dans le même fuseau. « Libre à 14 h » ne
-      veut pas dire la même chose à Paris et à Hanoï : le profil affiche l'heure
-      qu'il est chez elle, et l'écart avec la vôtre.</p>
-    </div></details>
-    <details><summary>Une photo peut-elle révéler où j'étais ?</summary><div class="rep">
-      <p>Pas par ses métadonnées : votre navigateur redessine l'image avant l'envoi,
-      ce qui efface la position GPS, l'appareil et l'heure exacte que les téléphones
-      y inscrivent. Le serveur ne les reçoit jamais.</p>
-      <p>Par ce qu'elle montre, en revanche, oui. C'est à vous d'en juger.</p>
-    </div></details>
-    <details><summary>Quelqu'un m'importune</summary><div class="rep">
-      <p>Deux boutons sur son profil. <b>Bloquer</b> coupe tout dans les deux sens,
-      immédiatement et sans le prévenir. <b>Signaler</b> prévient l'éditeur, avec le
-      motif que vous écrivez ; la personne visée n'en est pas informée.</p>
-    </div></details>
-  </div>
-</div>
-
-<div class="bloc" data-onglet="Mentions légales" data-cle="mentions">
-  <h2 id="mentions">Mentions légales</h2>
-
-  <p>Repère est édité <b>à titre non professionnel</b> par une personne physique.
-  Le service est gratuit : ni publicité, ni abonnement, ni revente de données, ni
-  aucune autre source de revenu.</p>
-
-  <p>L'article 6 III 2° de la loi pour la confiance dans l'économie numérique
-  permet à un éditeur non professionnel de ne pas publier son identité, à condition
-  d'avoir communiqué celle-ci à son hébergeur. C'est le cas ici. L'hébergeur est
-  tenu de conserver ces éléments et de les communiquer sur réquisition de
-  l'autorité judiciaire.</p>
-
-  <table>
-    <tr><th>Champ</th><th>Valeur</th></tr>
-    <tr><td>Éditeur</td>
-        <td>Personne physique, éditeur non professionnel. Identité conservée par
-            l'hébergeur au titre de l'article 6 III 2° de la LCEN.</td></tr>
-    <tr><td>Directeur de publication</td>
-        <td>L'éditeur, sous le même régime.</td></tr>
-    <tr><td>Contact</td>
-        <td><span class="trou">[adresse de contact]</span></td></tr>
-    <tr><td>Hébergeur du site</td>
-        <td>Vercel Inc., 440 N Barranca Ave #4133, Covina, CA 91723, États-Unis<br>
-            <span class="petit">vercel.com — support disponible depuis le site de l'éditeur</span></td></tr>
-    <tr><td>Hébergeur des données</td>
-        <td>Supabase, Inc., 970 Toa Payoh North #07-04, Singapour 318992<br>
-            <span class="petit">Base de données située dans l'Union européenne,
-            région de Paris (eu-west-3)</span></td></tr>
-  </table>
-
-  <div class="avert"><b>Une seule ligne reste à remplir :</b> une adresse de contact.
-    Elle est obligatoire — elle sert à exercer ses droits sur ses données et à
-    signaler un contenu. Une adresse électronique suffit : ni téléphone, ni adresse
-    postale, ni état civil ne sont exigés d'un éditeur non professionnel.</div>
-
-  <h3>Ce régime tient tant que le service reste non professionnel</h3>
-  <p>Il cesserait de s'appliquer si Repère devenait payant, affichait de la
-  publicité, ou générait un revenu de quelque nature que ce soit. L'identité
-  complète de l'éditeur devrait alors être publiée.</p>
-
-  <h3>Signaler un contenu</h3>
-  <p>Le plus simple est le bouton <b>Signaler</b>, présent sur chaque publication et
-  sur chaque profil : le signalement part directement à l'éditeur, avec le motif que
-  vous écrivez, et la personne visée n'en est pas informée. Il est aussi possible
-  d'écrire à l'adresse de contact ci-dessus.</p>
-  <p>Un contenu manifestement illicite est retiré promptement dès qu'il est porté à
-  la connaissance de l'éditeur, conformément à l'article 6-I-2 de la loi du 21 juin
-  2004. À défaut de réponse, l'hébergeur peut être saisi directement.</p>
-  <p>L'éditeur ne surveille pas les contenus de façon générale : la loi ne le lui
-  impose pas, et il agit sur signalement.</p>
-
-  <h3>Propriété</h3>
-  <p>Le code de l'application est publié et consultable. Le programme de BTS CIEL
-  proposé comme modèle est un relevé de l'espace de formation du CNED, fourni à
-  titre indicatif : Repère n'a aucun lien avec le CNED. Les marques et noms cités
-  appartiennent à leurs propriétaires respectifs. Le contenu que chacun saisit dans
-  son planning lui appartient.</p>
-</div>
-
-<div class="bloc" data-onglet="Nous écrire" data-cle="contact">
-  <h2>Une question qui n'est pas là ?</h2>
-  <p>Écrivez au contact indiqué dans les mentions légales ci-dessus. Pour un problème
-  technique, décrivez ce que vous faisiez, ce que vous attendiez et ce qui s'est passé :
-  c'est ce qui permet de corriger vite.</p>
 </div>
 
 <div class="pied">
   <a href="/">Repère</a> · <a href="installer.html">Installer</a> ·
-  <a href="conditions.html">Conditions générales</a> ·
-  <a href="confidentialite.html">Confidentialité</a> ·
-  <a href="aide.html">Aide et mentions légales</a> ·
-  <a href="beta.html">bêta</a>
+  <a href="confidentialite.html">Confidentialité</a> · <a href="aide.html">Aide</a>
 </div>
 </div>
 <script type="module" src="pages.js"></script>

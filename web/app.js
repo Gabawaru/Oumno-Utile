@@ -1,4 +1,3 @@
-import { creerClient } from "./supa.js";
 import { MONTHS, MFULL, DOW, DAY, TZ, CNED, EXAM } from "./planning.js";
 import { versGroupes, MODELES, QUINZAINES, COULEURS, depuisModele,
          assainirProgramme } from "./modeles.js";
@@ -6,17 +5,18 @@ import { planifier, testerAjout, proposerReport, bilanJour, totalManque, duree,
          trouverCreneaux, creneauxTexte, plusLongCreneau, normaliserCapacites,
          journeeType, normaliserRepos, REGLES, JOURNEE, REPOS, URGENCE, AVANCE_MAX,
          hhmm as enHeure, min as enMin, iso as isoJour } from "./planificateur.js";
-import { preparer as preparerImage, deposer as deposerImage,
-         recadrer as recadrerImage } from "./photos.js";
+import { preparer as preparerImage } from "./photos.js";
 
-const SUPABASE_URL = "https://hnmeefndnckqkdjjbgwe.supabase.co";
-const SUPABASE_KEY = "sb_publishable_ciLHalsy_YvWIUbEbCnN2g_TZfT4aPU";
-const sb = creerClient(SUPABASE_URL, SUPABASE_KEY);
+/* Repère vit sur cet appareil. Pas de compte, pas de serveur : le planning est
+   celui de la personne qui tient le navigateur, enregistré dans le navigateur,
+   et sauvegardé dans un fichier quand elle le décide. Tout ce qui supposait une
+   base — le fil, les messages, les contacts, les partages — est parti avec elle.
+*/
 
 /* ═════════ ÉTAT DE SESSION ═════════ */
-let session = null;      // session Supabase
-let moi = null;          // mon profil
-let vue = null;          // profil consulté
+// Il n'y a plus qu'un planning : le sien. `vue` reste, parce que tout le code de
+// rendu demande « le planning de qui ? » — la réponse est désormais toujours la même.
+const vue = { id: "local", nom: "Moi" };
 let capacites = { 0: 2, 1: 5, 2: 5, 3: 5, 4: 5, 5: 5, 6: 3 };
 let repos = [...REPOS];  // jours où l'on ne pose rien : le week-end par défaut
 const NOMS_JOURS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
@@ -30,14 +30,11 @@ const reposEffectifs = () => (reposSuspendu() ? [] : repos);
 const auRepos = (j) => reposEffectifs().includes(Number(j));
 let reports = {};        // échéances repoussées à la main
 let programme = null;    // modèle choisi, ou matières déclarées à la main
-let modeleEnAttente = null;  // modèle retenu à l'inscription, posé à la 1re ouverture
-let nomReel = null;      // vrai nom du profil consulté, si l'on y a droit
-let abonnements = [], abonnes = [], resaRecues = [], resaEnvoyees = [], annuaire = [];
 let demarrageFait = false;  // la question « par quoi on commence ? » a été posée
 let partJour = null;     // { date, h } — la part de travail fixée pour le jour
 let plan = null;         // résultat du planificateur
 
-const estMoi = () => Boolean(session && vue && vue.id === session.user.id);
+const estMoi = () => true;
 const $ = (id) => document.getElementById(id);
 
 
@@ -100,9 +97,8 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"
 
 /**
  * Un lien saisi par quelqu'un n'est rendu que s'il pointe vers le web. Sans ce
- * filtre, « javascript:… » dans le lien d'un événement s'exécute chez tous ceux
- * qui consultent un planning public : c'est une injection stockée, pas une
- * curiosité. Le protocole est vérifié après analyse, pas par comparaison de
+ * filtre, « javascript:… » dans le lien d'un événement s'exécute au clic — et
+ * un lien peut arriver d'un fichier de sauvegarde fabriqué par quelqu'un d'autre. Le protocole est vérifié après analyse, pas par comparaison de
  * chaîne — « JaVaScRiPt: » et « java\tscript: » passeraient.
  */
 function lienSur(v){
@@ -134,10 +130,13 @@ const nowQ=()=>{const d=new Date(NOW);
   return Math.max(0,Math.min(19,(d.getFullYear()-Y0)*24+(d.getMonth()-M0)*2+(d.getDate()>15?1:0)));};
 
 /* ═════════ ÉTAT ═════════ */
-let done=Object.create(null), events=[], journal=[], subs=[], grades={};
-let canEdit=false;
-let pendingLog=[], subCount=0, tmr={};
-const LS="ciel.v4";
+let done=Object.create(null), events=[], journal=[], grades={};
+const canEdit=true;
+let pendingLog=[], tmr={};
+const LS="repere.local.v1";
+// La copie que gardait la version avec serveur. On la reprend une fois, au
+// premier lancement : c'est tout ce qui reste du planning tant que la base dort.
+const LS_ANCIEN="ciel.v4";
 
 /* ── Ce qui attend d'être écrit ──────────────────────────────────────────
    Toutes les écritures de l'application sont différées : 600 ms pour l'état,
@@ -164,27 +163,27 @@ function viderDifferes(){
     }
   }
 }
-// Vrai tant que le serveur n'a pas accusé réception de la dernière modification.
-let etatSale = false;
-// La page est en train de disparaître : la requête doit survivre à sa mort.
+// La page est en train de disparaître : ce qui attend doit partir maintenant.
 let enFermeture = false;
 
-/** Copie de secours dans le navigateur, pour survivre à une coupure réseau. */
+/** Écrit tout le planning dans le navigateur. Rend faux si le navigateur refuse
+ *  — mémoire pleine, navigation privée — pour qu'on le dise au lieu de mentir. */
 function saveLocal(){
-  if(!vue||!estMoi()) return;
-  // Le profil est gardé avec le planning : sans lui, une ouverture hors réseau
-  // n'a rien à ouvrir, et la copie de secours ne sert à rien. « sale » dit que
-  // cette copie contient des modifications que le serveur n'a pas encore ;
-  // « pris » date la copie, pour savoir plus tard qui, d'elle ou du serveur,
-  // parle du travail le plus récent.
-  try{ localStorage.setItem(LS, JSON.stringify({ id: vue.id, profil: vue, data: etat(),
-        sale: etatSale, pris: new Date().toISOString() })); }catch(e){}
+  try{
+    localStorage.setItem(LS, JSON.stringify({ version: 1, data: etat(),
+      journal: journal.slice(0, 150), pris: new Date().toISOString() }));
+    return true;
+  }catch(e){ return false; }
 }
-function lireLocal(id){
+/** La copie de cet appareil ; à défaut, celle de l'ancienne version. */
+function lireLocal(){
   try{
     const r = JSON.parse(localStorage.getItem(LS) || "null");
-    return r && r.id === id ? r : null;
-  }catch(e){ return null; }
+    if (r && r.data) return r;
+    const v = JSON.parse(localStorage.getItem(LS_ANCIEN) || "null");
+    if (v && v.data) return { data: v.data, journal: [], pris: v.pris || null, repris: true };
+  }catch(e){}
+  return null;
 }
 /** Message d'état discret, affiché dans l'en-tête. */
 function setSync(k,t){
@@ -205,7 +204,8 @@ function appliquerEtat(d){
   repos     = [...normaliserRepos(d.repos)].sort();
   reposCond = Boolean(d.reposCond);
   reports   = d.reports   || {};
-  partJour  = d.partJour  || null;
+  partJour  = d.partJour && /^\d{4}-\d{2}-\d{2}$/.test(d.partJour.date)
+              && Number.isFinite(d.partJour.h) ? d.partJour : null;
   demarrageFait = Boolean(d.demarrage);
   // Le programme vécu est le programme assaini, pas celui qu'on a lu. `versGroupes`
   // le nettoyait déjà à chaque rendu, mais l'objet gardé en mémoire, lui, restait
@@ -293,31 +293,9 @@ function log(text){
   journal=journal.slice(0,150);
 }
 function saveState(){
-  etatSale = true;
-  saveLocal();
-  if(!canEdit) return;
-  setSync("warn","enregistrement");
-  differer("etat", 600, async()=>{
-    const lignes=pendingLog.splice(0);
-    try{
-      const {error}=await sb.from("ciel_state")
-        .update({data:etat(),updated_at:new Date().toISOString()},
-                { garderEnVie: enFermeture })
-        .eq("user_id",session.user.id);
-      if(error) throw error;
-      if(lignes.length){
-        await sb.from("ciel_journal")
-          .insert(lignes.map(body=>({user_id:session.user.id,body})));
-      }
-      /* Le serveur a cette version. La copie locale ne porte plus de retard —
-         sauf si on a retapé quelque chose pendant l'aller-retour : cette
-         modification-là attend son tour, on ne va pas la déclarer enregistrée. */
-      if (!differes.has("etat")) { etatSale = false; saveLocal(); }
-      setSync("ok","enregistré");
-      // Ce que les autres ont le droit de savoir : mes plages libres, et rien d'autre.
-      publierDispos().catch(() => {});
-    }catch(e){ pendingLog.unshift(...lignes); setSync("warn","hors ligne — gardé en local"); }
-  });
+  pendingLog.length = 0;
+  if (saveLocal()) setSync("ok", "enregistré sur cet appareil");
+  else setSync("warn", "pas enregistré — le navigateur refuse d'écrire");
 }
 const saveProgress=saveState, saveEvents=saveState, saveGrades=saveState;
 
@@ -508,15 +486,12 @@ function quinzaineDe(iso){
  * Une vue d'ensemble bâtie sur le seul programme ne les montrait nulle part —
  * un stage de huit semaines y était invisible, alors que c'est lui qui décide
  * de ce qu'on peut faire d'autre pendant ce temps.
- *
- * Le titre suit la même règle qu'ailleurs : on ne le montre que s'il est
- * explicitement partagé. Chez un visiteur, une période reste « Occupé ».
  */
 function seriesEvenements(){
   const par=new Map();
   for(const e of events){
     if(!e.serie||!e.date) continue;
-    const nom=(canEdit||e.visible)?(e.titre||e.title||"Période"):"Occupé";
+    const nom=e.titre||e.title||"Période";
     const v=par.get(e.serie)||{serie:e.serie,titre:nom,jours:0,debut:e.date,fin:e.date};
     v.jours++;
     if(e.date<v.debut)v.debut=e.date;
@@ -699,281 +674,6 @@ function demanderIci(id) {
    Deux séries : le plan, en gris, sert de repère ; les heures réellement faites
    portent la couleur du statut — c'est elle qu'on vient lire. La ligne du fait
    s'arrête à aujourd'hui : on ne dessine pas un avenir qui n'existe pas. */
-/* ═════════ AGENDA IMPORTÉ ═════════
-   Amener son emploi du temps depuis Pronote, Google Agenda ou un EDT scolaire.
-
-   Par l'adresse ICS que ces services publient, jamais par un identifiant de
-   connexion : un cookie de session Pronote donne accès aux notes, aux absences
-   et à la messagerie de quelqu'un, et souvent d'un mineur. L'adresse ICS ne
-   donne que l'emploi du temps, en lecture seule. Elle reste malgré tout un
-   secret — qui l'a, voit l'emploi du temps — donc elle n'est pas conservée :
-   on la recolle pour réimporter. */
-
-let apercu = null;   // { evenements, nombre, source }
-
-async function lireAgenda(adresse) {
-  const r = await fetch("/api/agenda", {
-    method: "POST",
-    headers: { "Content-Type": "application/json",
-               Authorization: `Bearer ${session.access_token}` },
-    body: JSON.stringify({ adresse }),
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error || `Erreur ${r.status}`);
-  return d;
-}
-
-/** Ne garde que ce que le planning sait placer, et jette le reste. */
-function enEvenements(bruts) {
-  const out = [];
-  for (const e of bruts) {
-    if (!e.debut || !e.titre) continue;
-    const j = String(e.debut.iso).slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(j)) continue;
-    if (e.debut.jour) {
-      out.push({ id: "ics-" + (e.uid || out.length), jour: j, debut: "08:00", fin: "18:00",
-                 titre: e.titre, visible: false, importe: true });
-      continue;
-    }
-    const h = (x) => String(x.iso).slice(11, 16) || "08:00";
-    out.push({ id: "ics-" + (e.uid || out.length), jour: j,
-               debut: h(e.debut), fin: e.fin ? h(e.fin) : "23:59",
-               titre: e.titre + (e.lieu ? ` · ${e.lieu}` : ""),
-               visible: false, importe: true });
-  }
-  return out;
-}
-
-function renderAgenda() {
-  const box = $("agendaBox");
-  if (!box || !canEdit) return;
-  box.innerHTML = `
-    <p class="aide">Pronote, Google Agenda et la plupart des emplois du temps publient
-      une <b>adresse ICS</b> — une adresse en lecture seule qui ne donne que l'agenda.
-      Colle-la ici. Elle n'est pas conservée : recolle-la pour réimporter.</p>
-    <label class="ch"><span>Adresse ICS</span>
-      <input id="icsUrl" type="url" inputmode="url" autocomplete="off"
-        placeholder="https://…/ical/…ics"></label>
-    <div class="actes">
-      <button class="btn pri" id="icsLire">Lire l'agenda</button>
-    </div>
-    <div id="icsEtat" class="fl2"></div>
-    <div id="icsApercu"></div>`;
-
-  $("icsLire").onclick = async () => {
-    const u = ($("icsUrl").value || "").trim();
-    const etat = $("icsEtat"), ap = $("icsApercu");
-    ap.innerHTML = ""; apercu = null;
-    if (!u) { etat.textContent = "Colle d'abord une adresse."; return; }
-    etat.textContent = "Lecture…";
-    try {
-      const d = await lireAgenda(u);
-      apercu = { evenements: d.evenements, nombre: d.nombre,
-                 source: new URL(u.replace(/^webcal:/, "https:")).hostname };
-      etat.textContent = `${plural(d.nombre, "événement")} lu${d.nombre > 1 ? "s" : ""}`
-        + (d.tronque ? " (les 600 premiers)" : "") + ` · ${apercu.source}`;
-      renderApercu();
-    } catch (e) {
-      apercu = null;
-      etat.innerHTML = `<b class="late">${esc(String(e.message || e))}</b>`;
-    }
-  };
-}
-
-function renderApercu() {
-  const ap = $("icsApercu");
-  if (!ap || !apercu) return;
-  const ev = enEvenements(apercu.evenements);
-  const premiers = ev.slice(0, 8);
-  ap.innerHTML = `
-    <div class="soustitre">Aperçu</div>
-    <div class="frise">${premiers.map((e) => `<div class="ligne ev">
-      <span class="hh">${esc(e.jour)} ${esc(e.debut)}</span>
-      <span class="quoi"><b>${esc(e.titre)}</b></span></div>`).join("")}</div>
-    ${ev.length > premiers.length
-      ? `<div class="fl2">+ ${ev.length - premiers.length} autres</div>` : ""}
-    <div class="actes" style="margin-top:.7rem">
-      <button class="btn pri" id="icsGarder">Ajouter à mon planning</button>
-      <button class="btn" id="icsEnvoyer">Envoyer en demande…</button>
-    </div>
-    <p class="aide">Les événements importés sont <b>privés</b> : les autres verront
-      « Occupé », sans titre.</p>`;
-
-  $("icsGarder").onclick = () => {
-    const n = fusionnerEvenements(ev);
-    log(`a importé ${plural(n, "événement")} depuis ${apercu.source}`);
-    saveEvents(); renderAll();
-    dialogue({ titre: "Importé", ton: "info",
-      corps: `<p class="aide">${plural(n, "événement")} ajouté${n > 1 ? "s" : ""} à ton planning.
-        Le travail se replace tout seul autour.</p>` });
-    apercu = null; renderAgenda();
-  };
-  $("icsEnvoyer").onclick = () => demanderEnvoi(ev);
-}
-
-/** Réimporter ne doit pas doubler : un même identifiant d'événement remplace. */
-function fusionnerEvenements(nouveaux) {
-  const par = new Map(events.map((e) => [e.id, e]));
-  for (const e of nouveaux) par.set(e.id, e);
-  events = [...par.values()];
-  return nouveaux.length;
-}
-
-/* ═════════ DEMANDES ═════════ */
-
-/** Le mot de passe est redemandé : envoyer son emploi du temps à quelqu'un n'est
- *  pas un geste qu'on doit pouvoir faire sur un téléphone laissé déverrouillé. */
-function demanderEnvoi(ev) {
-  dialogue({
-    titre: "Envoyer en demande",
-    ton: "info",
-    corps: `<p class="aide">La demande part vers un <b>identifiant unique</b>
-        (${plural(ev.length, "événement")}). Ton adresse ICS n'est pas transmise —
-        seulement les événements lus.</p>
-      <label class="ch"><span>Identifiant du destinataire</span>
-        <input id="dmUid" placeholder="ID12345678" autocomplete="off"
-          maxlength="10" style="text-transform:uppercase"></label>
-      <label class="ch"><span>Un mot, si tu veux</span>
-        <input id="dmMot" maxlength="200" placeholder="facultatif"></label>
-      <label class="ch"><span>Ton mot de passe</span>
-        <input id="dmMdp" type="password" autocomplete="current-password"></label>
-      <div id="dmEtat" class="fl2"></div>`,
-    actions: [
-      { texte: "Envoyer", pri: true, faire: null },
-      { texte: "Annuler" },
-    ],
-  });
-  // On reprend la main sur le bouton : le dialogue se ferme de lui-même, et on
-  // veut pouvoir refuser sans le perdre.
-  setTimeout(() => {
-    const b = document.querySelector("#modalA button");
-    if (!b) return;
-    b.onclick = async () => {
-      const uid = ($("dmUid").value || "").trim().toUpperCase();
-      const mdp = ($("dmMdp").value || "");
-      const mot = ($("dmMot").value || "").trim();
-      const etat = $("dmEtat");
-      if (!/^ID\d{8}$/.test(uid)) { etat.innerHTML = `<b class="late">Un identifiant ressemble à ID12345678.</b>`; return; }
-      if (!mdp) { etat.innerHTML = `<b class="late">Ton mot de passe est demandé pour envoyer.</b>`; return; }
-      b.disabled = true; etat.textContent = "Vérification…";
-      const { error: mauvais } = await sb.auth.verifierMotDePasse(session.user.email, mdp);
-      if (mauvais) { b.disabled = false; etat.innerHTML = `<b class="late">Mot de passe incorrect.</b>`; return; }
-      etat.textContent = "Envoi…";
-      const { error } = await sb.rpc("envoyer_demande", {
-        vers: uid, charge_j: ev, source_t: apercu ? apercu.source : null, message_t: mot || null });
-      b.disabled = false;
-      if (error) { etat.innerHTML = `<b class="late">${esc(messageDemande(error))}</b>`; return; }
-      fermerDialogue();
-      log(`a envoyé une demande à ${uid}`);
-      dialogue({ titre: "Demande envoyée", ton: "info",
-        corps: `<p class="aide">${esc(uid)} la verra dans ses demandes.</p>` });
-    };
-  }, 60);
-}
-
-const messageDemande = (e) => {
-  const m = String(e.message || e);
-  if (m.includes("destinataire_inconnu")) return "Aucun compte ne porte cet identifiant.";
-  if (m.includes("destinataire_soi")) return "C'est ton propre identifiant.";
-  if (m.includes("demande_deja_en_attente")) return "Une demande attend déjà chez cette personne.";
-  if (m.includes("demande_vide")) return "Il n'y a rien à envoyer.";
-  if (m.includes("demande_trop_grande")) return "Cet agenda est trop gros pour une demande.";
-  return "Envoi impossible : " + m;
-};
-
-let demandesPlanning = [];
-
-async function chargerDemandesPlanning() {
-  const { data } = await sb.rpc("mes_demandes");
-  demandesPlanning = Array.isArray(data) ? data : [];
-  renderDemandesPlanning();
-}
-
-function renderDemandesPlanning() {
-  const box = $("demandesBox");
-  if (!box) return;
-  const recues = demandesPlanning.filter((d) => d.sens === "recue");
-  const envoyees = demandesPlanning.filter((d) => d.sens === "envoyee");
-  if (!recues.length && !envoyees.length) {
-    box.innerHTML = `<div class="vide">Aucune demande.</div>`;
-    return;
-  }
-  const bloc = (l, titre, recue) => !l.length ? "" : `
-    <div class="tetel"><h3>${titre}</h3><span class="nb">${l.length}</span></div>
-    ${l.map((d) => `<details class="dem${d.etat !== "attente" ? " clos" : ""}">
-      <summary>
-        <span class="duid">${esc(d.qui_uid || "—")}</span>
-        <span class="dqui">${recue ? "une nouvelle demande" : "envoyée"}${
-          d.source ? ` · ${esc(d.source)}` : ""}</span>
-        <span class="dnb">${plural(d.nombre, "événement")}</span>
-        ${d.etat !== "attente" ? `<span class="detat ${esc(d.etat)}">${
-          d.etat === "accepte" ? "acceptée" : "refusée"}</span>` : ""}
-      </summary>
-      <div class="demcorps">
-        ${d.message ? `<p class="aide">« ${esc(d.message)} »</p>` : ""}
-        ${recue && d.charge && d.charge.length ? `<div class="frise recue">${
-          d.charge.map((e) => `<div class="ligne ev">
-            <span class="hh">${esc(e.jour || "")} ${esc(e.debut || "")}${
-              e.fin ? `–${esc(e.fin)}` : ""}</span>
-            <span class="quoi"><b>${esc(e.titre || "")}</b></span></div>`).join("")}</div>
-          <p class="aide">Ce planning reste le sien. Rien n'est écrit dans le tien —
-            tu le lis, tu l'exportes si tu en as besoin, c'est tout.</p>
-          <div class="actes"><button class="btn" data-dem="ics:${esc(d.id)}"
-            >Exporter en .ics</button></div>` : ""}
-        ${recue && d.etat === "attente" ? `<div class="actes">
-          <button class="btn pri" data-dem="oui:${esc(d.id)}">Accepter</button>
-          <button class="btn" data-dem="non:${esc(d.id)}">Refuser</button></div>` : ""}
-      </div>
-    </details>`).join("")}`;
-  box.innerHTML = bloc(recues, "Reçues", true) + bloc(envoyees, "Envoyées", false);
-}
-
-async function repondreDemande(id, accepte) {
-  const d = demandesPlanning.find((x) => x.id === id);
-  const { error } = await sb.rpc("repondre_demande", { quelle: id, accepte });
-  if (error) {
-    dialogue({ titre: "Réponse impossible", corps: `<p class="aide">${esc(String(error.message || error))}</p>` });
-    return;
-  }
-  /* Accepter dit à l'autre « c'est pris », et rien de plus. Ça n'écrit pas une
-     ligne dans mon planning : le sien reste le sien. Une demande est une boîte
-     de réception, pas une greffe. Avant, accepter recopiait ses événements chez
-     moi — ils occupaient mes journées, décalaient mon travail et changeaient mon
-     retard ; et comme la fusion se faisait par identifiant, un envoi bien choisi
-     pouvait remplacer mes propres événements sans que rien ne se voie. */
-  if (d) log(accepte ? `a accepté une demande de ${d.qui_uid}`
-                     : `a refusé une demande de ${d.qui_uid}`);
-  saveState();
-  await chargerDemandesPlanning();
-  renderAll();
-}
-
-/** Ce qu'on a reçu, en fichier, pour pouvoir s'en servir ailleurs. */
-function exporterDemande(id) {
-  const d = demandesPlanning.find((x) => x.id === id);
-  if (!d || !Array.isArray(d.charge) || !d.charge.length) return;
-  const pad = (n) => String(n).padStart(2, "0");
-  const hz = (j, h) => `${String(j).replace(/-/g, "")}T${String(h || "00:00").replace(":", "")}00`;
-  const lignes = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Repere//Demande//FR", "CALSCALE:GREGORIAN"];
-  d.charge.forEach((e, i) => {
-    if (!e || !e.jour) return;
-    lignes.push("BEGIN:VEVENT",
-      `UID:${String(e.id || i)}@repere`,
-      `DTSTART:${hz(e.jour, e.debut)}`,
-      `DTEND:${hz(e.jour, e.fin || e.debut)}`,
-      // Les virgules et points-virgules ferment un champ en RFC 5545 : on les échappe.
-      `SUMMARY:${String(e.titre || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\n/g, " ")}`,
-      "END:VEVENT");
-  });
-  lignes.push("END:VCALENDAR");
-  const blob = new Blob([lignes.join("\r\n")], { type: "text/calendar;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `demande-${(d.qui_uid || "planning")}.ics`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-}
-
 /* ═════════ BLOCAGES ═════════
    Certaines étapes ne peuvent pas avancer sans quelqu'un : une question au
    tuteur, un corrigé qui n'est pas encore sorti. L'application les reproposait
@@ -1163,9 +863,8 @@ async function renderFiche() {
     const etat = $("ficheEtat");
     etat.textContent = "préparation…";
     try {
-      const { deposer } = await import("./photos.js");
       // 1600 px : une page manuscrite doit rester lisible une fois agrandie.
-      const chemin = await deposer(sb, "photos", session.user.id, fichier, 1600, 0.82);
+      const chemin = await rangerPhoto(await preparerImage(fichier, 1600, 0.82));
       const fi = laFiche(id) || { t: "", p: [] };
       poserFiche(id, { p: [...(fi.p || []), chemin].slice(0, 20) });
       etat.textContent = "";
@@ -1183,13 +882,13 @@ async function renderFichePhotos(id) {
   const f = laFiche(id);
   const l = (f && f.p) || [];
   if (!l.length) { box.innerHTML = `<div class="fl2">Aucune photo.</div>`; return; }
-  // Le seau est privé : il faut une adresse signée, qui expire.
-  const { data } = await sb.stockage.signer("photos", l, 3600);
-  const par = new Map((data || []).map((x) => [x.path, x.signedURL]));
-  box.innerHTML = l.map((c) => `<figure class="fph">
-    <img src="${esc(par.get(c) || "")}" alt="Photo de la fiche" loading="lazy">
+  const par = await adressesPhotos(l);
+  const restees = l.filter((c) => !par.has(c)).length;
+  box.innerHTML = l.filter((c) => par.has(c)).map((c) => `<figure class="fph">
+    <img src="${esc(par.get(c))}" alt="Photo de la fiche" loading="lazy">
     ${canEdit ? `<button class="btn mini" data-fph="${esc(c)}" title="Retirer">✕</button>` : ""}
-  </figure>`).join("");
+  </figure>`).join("") + (restees ? `<div class="fl2">${plural(restees, "photo")} restée(s)
+    sur l'ancien serveur, en pause : elles ne s'affichent plus ici.</div>` : "");
 }
 
 function retirerPhotoFiche(chemin) {
@@ -1197,7 +896,7 @@ function retirerPhotoFiche(chemin) {
   const f = laFiche(id);
   if (!f) return;
   poserFiche(id, { p: (f.p || []).filter((x) => x !== chemin) });
-  sb.stockage.supprimer("photos", [chemin]).catch(() => {});
+  oublierPhoto(chemin).catch(() => {});
   renderFichePhotos(id);
   majFichePastilles();
 }
@@ -2110,11 +1809,6 @@ function renderJournal(){
         <span class="jt">${new Date(j.ts).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"})} ${hhmm(Date.parse(j.ts))}</span>
         <span>${esc(j.text)}</span></div>`).join("")
     : `<div class="empty muted">Rien encore. Chaque changement s'inscrira ici.</div>`;
-  document.getElementById("subs").innerHTML= canEdit
-    ? (subs.length
-        ? subs.map((e,i)=>`<span class="pill">${esc(e)}<button data-sub="${i}" title="Retirer">✕</button></span>`).join("")
-        : `<span class="muted" style="font-size:.73rem">Aucun abonné pour l'instant.</span>`)
-    : `<span class="muted" style="font-size:.73rem">${subCount} personne${subCount>1?"s":""} ${subCount>1?"suivent":"suit"} ce planning.</span>`;
 }
 /* ═════════ ORCHESTRATION ═════════ */
 function applyMode(){
@@ -2152,8 +1846,7 @@ function renderAll(){
   paintGantt();renderGrades();renderJournal();
   // Reconstruire les champs de réglage sous les doigts de quelqu'un qui écrit
   // efface ce qu'il tape : on ne les redessine que s'ils sont à l'écran.
-  if(vueCourante==="moi"){renderCapacites();renderProfil();renderProgramme();renderCompte();renderJoignable();}
-  majPastille();
+  if(vueCourante==="moi"){renderCapacites();renderProgramme();renderSauvegarde();}
   if(!document.querySelector('[data-panel="cal"]').hidden) renderCal();
   syncChecks();applyMode();
   painting=false;
@@ -2363,11 +2056,6 @@ function friseHTML(cle, { compact = false, depuis = null, max = 0 } = {}) {
       </div>`;
     }
     const e = x.ev;
-    // On ne montre le titre d'un événement que s'il est explicitement partagé.
-    if (!canEdit && !e.visible) {
-      return `<div class="ligne occupe"><span class="hh">${plage}</span>
-        <span class="quoi">Occupé · ${dur}</span></div>`;
-    }
     return `<div class="ligne ${x.type}"><span class="hh">${plage}</span>
       <span class="quoi"><b>${esc(e.titre || e.title || "")}</b>
         ${e.urgent ? `<span class="urg">urgent</span>` : ""}
@@ -2439,8 +2127,6 @@ function nouvelEvenement() {
     lien: lienSur($("evL").value.trim()),
     urgent: $("evU").checked,
     pause: $("evP").checked,
-    // Par défaut un événement est privé : les autres voient « occupé », rien de plus.
-    visible: $("evV").checked,
   };
 }
 
@@ -2603,7 +2289,7 @@ function ajouter(force) {
     : `a ajouté « ${ev.titre} » le ${leJour(ev.date)} de ${ev.debut} à ${ev.fin}`);
   saveEvents();
   $("evT").value = ""; $("evL").value = "";
-  $("evU").checked = false; $("evP").checked = false; $("evV").checked = false;
+  $("evU").checked = false; $("evP").checked = false;
   $("evR").checked = false; $("evRJ").value = ""; majRepetition();
   const z = $("alerte"); if (z) z.innerHTML = "";
   calSel = new Date(ev.date + "T00:00");
@@ -2644,7 +2330,7 @@ function renderCapacites() {
       <label class="rep" title="Aucune heure de travail n'est posée ce jour-là">
         <input type="checkbox" data-repos="${j}"${coche ? " checked" : ""}${canEdit ? "" : " disabled"}>
         <span>repos</span></label>
-      <input type="text" data-cap="${j}" value="${txt}" placeholder="09:00-12:00, 14:00-18:00"
+      <input type="text" data-cap="${j}" value="${esc(txt)}" placeholder="09:00-12:00, 14:00-18:00"
         ${canEdit && !(off && !reposCond) ? "" : "disabled"}>
       <em>${off ? "repos" : suspendu ? (h ? `suspendu · ${h.toFixed(1).replace(".0","")} h` : "suspendu · 0 h")
         : h ? h.toFixed(1).replace(".0","") + " h" : "—"}</em>
@@ -2808,283 +2494,6 @@ function renderDispo() {
           la zone de tâche du calendrier.
         </div>`;
   }, 30);
-}
-
-/* ═════════ PROFIL, PARTAGES ET INVITATIONS ═════════
-   Un planning privé n'est pas seulement caché : la base refuse de le servir à
-   qui n'est pas dans la liste. Ce qui suit ne fait que piloter cette liste. */
-
-/**
- * Le vrai nom vit dans sa propre table : les politiques de sécurité portent sur
- * des lignes et non sur des colonnes, donc le loger dans le profil l'aurait
- * rendu lisible par quiconque peut lire ce profil. Ici, la requête ne renvoie
- * rien quand on n'y a pas droit — ce n'est pas l'interface qui cache, c'est la
- * base qui refuse.
- */
-async function chargerNomReel() {
-  nomReel = null;
-  if (!vue || !session) return;
-  const { data } = await sb.from("ciel_identites").select("nom_reel").eq("user_id", vue.id).maybeSingle();
-  nomReel = data && data.nom_reel ? data.nom_reel : null;
-}
-
-function renderProfil() {
-  const box = $("profilBox");
-  if (!box || !vue) return;
-  const url = location.origin + "?profil=" + vue.slug;
-  if (!canEdit) {
-    box.innerHTML = `<p class="aide">Tu consultes le planning de <b>${esc(vue.nom)}</b>
-      (<span class="mono">@${esc(vue.slug)}</span>), en lecture seule.</p>`;
-    return;
-  }
-  box.innerHTML = `
-    <div class="fiche">
-      <div class="haut">
-        ${vignette(vue, "gr")}
-        <div style="min-width:0;flex:1">
-          <h2>${esc(vue.nom)}</h2>
-          <div class="arobase">@${esc(vue.slug)}</div>
-          ${vue.uid ? `<button class="uid" id="copierUid" title="Copier">
-            <span>${esc(vue.uid)}</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/>
-              <path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>` : ""}
-          <div class="actes" style="margin-top:.5rem">
-            <input type="file" id="pfFichier" accept="image/*" class="horsvue">
-            <button class="btn" id="pfPhoto">${vue.avatar ? "Changer la photo" : "Ajouter une photo"}</button>
-            ${vue.avatar ? `<button class="btn danger" id="pfSansPhoto">Retirer</button>` : ""}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="deuxchamps">
-      <div class="champ">
-        <label class="fl" for="pfNom">Pseudonyme</label>
-        <input id="pfNom" type="text" maxlength="40" value="${esc(vue.nom)}">
-        <div class="dispo" id="pfDispo"></div>
-        <div class="fl2">Ce que tout le monde voit.</div>
-      </div>
-      <div class="champ">
-        <label class="fl" for="pfSlug">Identifiant public</label>
-        <input id="pfSlug" type="text" maxlength="32" value="${esc(vue.slug)}"
-          pattern="[a-z0-9-]+" autocapitalize="none" spellcheck="false">
-        <div class="dispo" id="pfSlugDispo"></div>
-        <div class="fl2">Dans l'adresse de ton profil. Un changement par jour.</div>
-      </div>
-    </div>
-
-    <div class="champ">
-      <label class="fl" for="pfBio">Une ligne sur toi <span class="opt-t">facultatif</span></label>
-      <input id="pfBio" type="text" maxlength="160" value="${esc(vue.bio || "")}"
-        placeholder="BTS CIEL 2ᵉ année · révisions le soir">
-    </div>
-
-    <div class="deuxchamps">
-      <div class="champ">
-        <label class="fl" for="pfFuseau">Mon fuseau horaire</label>
-        <select id="pfFuseau">${fuseauxProposes(vue.fuseau).map((f) =>
-          `<option value="${esc(f)}"${f === (vue.fuseau || "Europe/Paris") ? " selected" : ""}>${
-            esc(f.replace(/_/g, " "))} · ${esc(heureChez(f) || "")}</option>`).join("")}</select>
-        <div class="fl2">Les autres voient l'heure qu'il est chez toi.</div>
-      </div>
-      <div class="champ">
-        <label class="fl" for="pfRegion">Ma région <span class="opt-t">facultatif</span></label>
-        <input id="pfRegion" type="text" maxlength="60" value="${esc(vue.region || "")}"
-          placeholder="Nouvelle-Aquitaine">
-        <label class="urgcase" style="margin-top:.35rem"><input type="checkbox" id="pfRegionVue"
-          ${vue.region_visible ? "checked" : ""}><span>La montrer sur mon profil</span></label>
-      </div>
-    </div>
-
-    <div class="champ">
-      <label class="fl" for="pfReel">Vrai nom <span class="opt-t">facultatif</span></label>
-      <input id="pfReel" type="text" maxlength="80" value="${esc(nomReel || "")}" placeholder="Prénom Nom">
-      <div class="fl2">Visible seulement par les gens que tu coches dans Contacts.</div>
-    </div>
-
-    <div class="visi">
-      <label class="opt${vue.public ? "" : " on"}">
-        <input type="radio" name="visi" value="prive"${vue.public ? "" : " checked"}>
-        <span><b>Privé</b><em>Toi, et les gens que tu acceptes.</em></span></label>
-      <label class="opt${vue.public ? " on" : ""}">
-        <input type="radio" name="visi" value="public"${vue.public ? " checked" : ""}>
-        <span><b>Public</b><em>Consultable par n'importe qui, sans compte.</em></span></label>
-    </div>
-
-    <label class="urgcase" style="margin-top:.7rem"><input type="checkbox" id="pfClassement"
-      ${vue.au_classement ? "checked" : ""}>
-      <span>Figurer au classement des heures de la semaine</span></label>
-
-    ${vue.public ? `<div class="lp" style="margin-top:.7rem"><code>${esc(url)}</code>
-      <button class="btn" id="copierLien">Copier</button></div>` : ""}`;
-
-  /* ── la photo ──────────────────────────────────────────────────── */
-  $("pfPhoto").onclick = () => $("pfFichier").click();
-  $("pfFichier").onchange = async (e) => {
-    const f = e.target.files && e.target.files[0];
-    e.target.value = "";                      // pour pouvoir rechoisir le même fichier
-    if (!f) return;
-    try {
-      const coupe = await recadrerImage(f, { ratio: 1, rond: true, cote: 512,
-        qualite: 0.88, titre: "Cadre ta photo de profil" });
-      if (!coupe) return;                     // annulé, sans bruit
-      setSync("warn", "envoi de la photo");
-      const chemin = await deposerImage(sb, AVATARS, vue.id, coupe);
-      const { error } = await sb.from("ciel_profiles").update({ avatar: chemin }).eq("id", vue.id);
-      if (error) throw new Error(error.message);
-      vue.avatar = chemin; if (moi) moi.avatar = chemin;
-      majBoutonCompte(); renderProfil(); setSync("ok", "photo enregistrée");
-    } catch (err) {
-      setSync("warn", "photo refusée");
-      dialogue({ titre: "Photo non enregistrée", corps: `<p>${esc(err.message)}</p>
-        <p class="aide">Si ça se reproduit, réessaie avec une autre photo, ou
-        recharge la page : une session expirée fait échouer le dépôt.</p>` });
-    }
-  };
-  const sp = $("pfSansPhoto");
-  if (sp) sp.onclick = async () => {
-    const ancien = vue.avatar;
-    await sb.from("ciel_profiles").update({ avatar: null }).eq("id", vue.id);
-    if (ancien) await sb.stockage.supprimer(AVATARS, [ancien]);
-    vue.avatar = null; if (moi) moi.avatar = null;
-    majBoutonCompte(); renderProfil();
-  };
-
-  /* ── pseudonyme ────────────────────────────────────────────────── */
-  const nomInp = $("pfNom");
-  nomInp.oninput = () => {
-    clearTimeout(tmr.nom);
-    tmr.nom = setTimeout(async () => {
-      const v = nomInp.value.trim(), z = $("pfDispo");
-      if (v === vue.nom || v.length < 2) { z.className = "dispo"; z.textContent = ""; return; }
-      const { data } = await sb.rpc("nom_disponible", { candidat: v });
-      z.className = "dispo " + (data ? "oui" : "non");
-      z.textContent = data ? "Ce nom est libre." : "Ce nom est déjà pris.";
-    }, 400);
-  };
-  nomInp.onchange = async () => {
-    const nom = nomInp.value.trim().slice(0, 40);
-    if (!nom || nom === vue.nom) return;
-    const { error } = await sb.from("ciel_profiles").update({ nom }).eq("id", vue.id);
-    if (error) {
-      nomInp.value = vue.nom;
-      return dialogue({ ton: "warn", titre: "Ce nom est déjà pris",
-        corps: `<p>Les noms affichés sont uniques, à la casse près. Essaie autre chose.</p>` });
-    }
-    vue.nom = nom; if (moi) moi.nom = nom;
-    majBoutonCompte(); renderProfil();
-  };
-
-  /* ── identifiant public ────────────────────────────────────────── */
-  const slugInp = $("pfSlug");
-  slugInp.oninput = () => {
-    slugInp.value = slugInp.value.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-{2,}/g, "-");
-    clearTimeout(tmr.slug);
-    tmr.slug = setTimeout(async () => {
-      const v = slugInp.value, z = $("pfSlugDispo");
-      if (v === vue.slug) { z.className = "dispo"; z.textContent = ""; return; }
-      const { data } = await sb.rpc("identifiant_disponible", { candidat: v });
-      z.className = "dispo " + (data ? "oui" : "non");
-      z.textContent = data ? "Libre." : "Pris, ou mal formé.";
-    }, 400);
-  };
-  slugInp.onchange = async () => {
-    const v = slugInp.value;
-    if (!v || v === vue.slug) return;
-    const { error } = await sb.from("ciel_profiles").update({ slug: v }).eq("id", vue.id);
-    if (error) {
-      slugInp.value = vue.slug;
-      return dialogue({ ton: "warn", titre: "Identifiant refusé",
-        corps: `<p>${/trop_recent/.test(error.message)
-          ? "Tu l'as déjà changé aujourd'hui. Un changement par jour : l'identifiant sert d'adresse."
-          : "Il est déjà pris, ou mal formé — minuscules, chiffres et tirets, 3 caractères au moins."}</p>` });
-    }
-    vue.slug = v; if (moi) moi.slug = v;
-    renderProfil(); setSync("ok", "identifiant changé");
-  };
-
-  /* ── le reste : une ligne, un enregistrement ───────────────────── */
-  const champ = (id, colonne, lire) => {
-    const e = $(id);
-    if (!e) return;
-    e.onchange = async () => {
-      const v = lire(e);
-      const { error } = await sb.from("ciel_profiles").update({ [colonne]: v }).eq("id", vue.id);
-      if (error) return setSync("warn", "changement refusé");
-      vue[colonne] = v;
-      setSync("ok", "enregistré");
-      if (colonne === "au_classement" && v) publierDispos().catch(() => {});
-    };
-  };
-  champ("pfBio", "bio", (e) => e.value.trim() || null);
-  champ("pfRegion", "region", (e) => e.value.trim() || null);
-  champ("pfRegionVue", "region_visible", (e) => e.checked);
-  champ("pfFuseau", "fuseau", (e) => e.value);
-  champ("pfClassement", "au_classement", (e) => e.checked);
-
-  const reelInp = $("pfReel");
-  reelInp.onchange = async () => {
-    const v = reelInp.value.trim().slice(0, 80);
-    if (v === (nomReel || "")) return;
-    const { error } = v
-      ? await sb.from("ciel_identites").upsert({ user_id: vue.id, nom_reel: v, maj_le: new Date().toISOString() })
-      : await sb.from("ciel_identites").delete().eq("user_id", vue.id);
-    if (error) return setSync("warn", "vrai nom non enregistré");
-    nomReel = v || null;
-    setSync("ok", v ? "vrai nom enregistré" : "vrai nom effacé");
-  };
-
-  box.querySelectorAll('input[name="visi"]').forEach((r) => (r.onchange = async () => {
-    const pub = r.value === "public";
-    const { error } = await sb.from("ciel_profiles").update({ public: pub }).eq("id", vue.id);
-    if (error) return setSync("warn", "changement refusé");
-    vue.public = pub;
-    log(pub ? "a rendu son planning public" : "a rendu son planning privé");
-    saveState(); renderProfil();
-  }));
-
-  const cp = $("copierLien");
-  if (cp) cp.onclick = async () => {
-    try { await navigator.clipboard.writeText(url); cp.textContent = "Copié ✓"; }
-    catch { cp.textContent = "Échec"; }
-    setTimeout(() => (cp.textContent = "Copier"), 1600);
-  };
-}
-
-/** Une poignée de fuseaux courants, plus celui du navigateur et celui déjà posé. */
-function fuseauxProposes(actuel) {
-  const l = ["Europe/Paris", "Europe/London", "Europe/Lisbon", "Europe/Bucharest",
-    "Atlantic/Reykjavik", "Africa/Casablanca", "Africa/Dakar", "Africa/Abidjan",
-    "Indian/Antananarivo", "Indian/Reunion", "Asia/Ho_Chi_Minh", "Asia/Bangkok",
-    "Asia/Tokyo", "Asia/Shanghai", "Asia/Kolkata", "Asia/Dubai", "Asia/Jerusalem",
-    "America/Montreal", "America/New_York", "America/Chicago", "America/Los_Angeles",
-    "America/Cayenne", "America/Guadeloupe", "America/Martinique", "Pacific/Noumea",
-    "Pacific/Tahiti", "Australia/Sydney"];
-  try { const n = Intl.DateTimeFormat().resolvedOptions().timeZone; if (n) l.unshift(n); } catch {}
-  if (actuel) l.unshift(actuel);
-  return [...new Set(l)];
-}
-
-/** Le bouton qui fabrique un lien d'invitation, où qu'il se trouve. */
-function brancherInvitation() {
-  const b = $("faireInvit");
-  if (!b) return;
-  b.onclick = async () => {
-    b.disabled = true; b.textContent = "…";
-    const avecNom = $("invReel").checked;
-    const { data, error } = await sb.rpc("creer_invitation", { avec_nom_reel: avecNom });
-    b.disabled = false; b.textContent = "Créer un lien";
-    if (error || !data) {
-      return dialogue({ ton: "warn", titre: "Lien impossible",
-        corps: `<p>${/trop de liens/.test(error?.message || "")
-          ? "Tu as déjà 20 liens actifs. Attends qu'ils expirent."
-          : "Le lien n'a pas pu être créé. Réessaie dans un instant."}</p>` });
-    }
-    const lien = location.origin + "?invite=" + String(data).replace(/"/g, "");
-    $("lienInvit").textContent = lien;
-    try { await navigator.clipboard.writeText(lien); setSync("ok", "lien copié"); } catch {}
-    log(avecNom ? "a créé un lien d'invitation donnant son vrai nom" : "a créé un lien d'invitation");
-  };
 }
 
 /* ═════════ MON PROGRAMME ═════════
@@ -3312,625 +2721,77 @@ function brancherProgramme() {
 }
 brancherProgramme();
 
-/* ═════════ MON COMPTE ═════════ */
-function renderCompte() {
-  const box = $("compteBox");
-  if (!box) return;
-  if (!canEdit || !session) { box.innerHTML = ""; return; }
-  const nue = sansAdresse();
-  box.innerHTML = `
-    <p class="aide">${nue
-      ? `Compte <b>sans adresse électronique</b>. Tout ce qui est enregistré est
-         visible dans cet onglet et modifiable.`
-      : `Compte <b>${esc(session.user.email)}</b>.
-         Tout ce qui est enregistré est visible dans cet onglet et modifiable.`}
-      Le détail est dans la
-      <a href="confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</p>
-    ${nue ? `<div class="zaction pose">
-      <div><b>Ajouter une adresse électronique</b>
-        <em>Ton compte ne tient aujourd'hui qu'à ce navigateur : effacer les données
-          du site l'efface, et il n'y a aucun moyen de le retrouver. Une adresse le
-          rend récupérable, ouvre le fil, les messages et les contacts, et te permet
-          de l'ouvrir sur un autre appareil. Ton planning, tes fiches et tes heures
-          restent exactement là où ils sont.</em></div>
-      <form class="carte mince" id="formLier">
-        <div class="champ"><label class="fl" for="lierEmail">Adresse électronique</label>
-          <input id="lierEmail" type="email" autocomplete="email" required></div>
-        <div class="champ"><label class="fl" for="lierMdp">Mot de passe</label>
-          <input id="lierMdp" type="password" autocomplete="new-password" minlength="8" required>
-          <div class="fl2">8 caractères au minimum.</div></div>
-        <div class="fl2" id="lierEtat"></div>
-        <button class="btn pri" type="submit">Poser mon adresse</button>
-      </form>
-    </div>` : ""}
-    <div class="zaction">
-      <div><b>Se déconnecter</b>
-        <em>${nue
-          ? `Attention : sans adresse, se déconnecter ferme la seule porte. Ce compte
-             et son planning deviennent inaccessibles, pour de bon.`
-          : `Ferme la session sur cet appareil. Ton planning n'est pas touché.`}</em></div>
-      <button class="btn${nue ? " danger" : ""}" id="deco">Se déconnecter</button>
-    </div>
-    ${nue ? "" : `<div class="zaction">
-      <div><b>Changer mon mot de passe</b>
-        <em>Un lien part vers ${esc(session.user.email)}. Il n'y a pas d'autre chemin :
-          personne, pas même l'éditeur, ne peut lire ni fixer ton mot de passe.</em></div>
-      <button class="btn" id="mdpLien">Recevoir le lien</button>
-    </div>`}
-    <div class="zdanger">
-      <div><b>Supprimer mon compte</b>
-        <em>Efface immédiatement le compte, le planning, le journal, les partages,
-          les publications, les photos déposées et les conversations.
-          C'est définitif : il n'y a pas de sauvegarde.</em></div>
-      <button class="btn danger" id="supprCompte">Supprimer mon compte</button>
-    </div>
-    <div id="blocages"></div>`;
-  renderBlocages();
-  if (nue) brancherLiaison();
-  $("deco").onclick = async () => {
-    await sb.auth.signOut();
-    session = null; moi = null; vue = null; canEdit = false;
-    try { sessionStorage.removeItem("ciel.vue"); } catch {}
-    history.replaceState(null, "", location.pathname);
-    await lancer();
-  };
-  if (!nue) $("mdpLien").onclick = async () => {
-    const b = $("mdpLien");
-    b.disabled = true; b.textContent = "Envoi…";
-    const { error } = await sb.auth.resetPasswordForEmail(session.user.email,
-      { redirectTo: location.origin + "?reinit=1" });
-    b.disabled = false; b.textContent = "Recevoir le lien";
-    dialogue({ ton: error ? "warn" : "info",
-      titre: error ? "L'envoi a échoué" : "Le lien est parti",
-      corps: error
-        ? `<p>${esc(error.message)}</p><p class="petit">Si tu viens d'en demander un,
-             attends une minute avant de réessayer.</p>`
-        : `<p>Ouvre le courriel envoyé à <b>${esc(session.user.email)}</b> et suis le lien.
-             Tu choisiras un nouveau mot de passe, puis tu reviendras à la connexion.</p>` });
-  };
+/* ═════════ LES PHOTOS DES FICHES ═════════
+   Une page manuscrite photographiée pèse 200 ko : quelques dizaines rempliraient
+   la mémoire du navigateur réservée au texte. Elles vont dans IndexedDB, faite
+   pour ça, et la fiche ne garde que leur clé — « idb:… ». */
 
-  $("supprCompte").onclick = () => dialogue({
-    ton: "stop", titre: "Supprimer définitivement ce compte ?",
-    corps: `<p>Le compte <b>${esc(session.user.email)}</b>, ton planning, ton journal,
-        tes partages et tes abonnés seront effacés <b>immédiatement</b>.</p>
-      <p>Il n'y a pas de sauvegarde et aucune restauration n'est possible.</p>`,
-    actions: [
-      { texte: "Annuler", pri: true },
-      { texte: "Supprimer définitivement", faire: async () => {
-          const { error } = await sb.rpc("supprimer_mon_compte");
-          if (error) return dialogue({ ton: "warn", titre: "Suppression impossible",
-            corps: `<p>${esc(error.message)}</p>` });
-          try { localStorage.clear(); } catch {}
-          location.href = "/";
-        } },
-    ],
+const BASE_PHOTOS = "repere-photos";
+function basePhotos() {
+  return new Promise((ok, ko) => {
+    const r = indexedDB.open(BASE_PHOTOS, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("photos");
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => ko(r.error);
   });
 }
-
-/** Bloquer sans pouvoir débloquer serait un piège : la liste vit dans le compte. */
-async function renderBlocages() {
-  const box = $("blocages");
-  if (!box || !session) return;
-  const { data } = await sb.from("ciel_blocages").select("cible,cree_le").eq("qui", session.user.id);
-  const l = Array.isArray(data) ? data : [];
-  // Le panneau a pu être redessiné pendant l'attente : on ne parle qu'au sien.
-  const cible = $("blocages");
-  if (!cible) return;
-  if (!l.length) { cible.innerHTML = ""; return; }
-  const noms = {};
-  const { data: profs } = await sb.from("ciel_profiles").select("id,nom,slug,avatar")
-    .in("id", l.map((x) => x.cible));
-  (profs || []).forEach((x) => (noms[x.id] = x));
-  const zone = $("blocages");
-  if (!zone) return;
-  zone.innerHTML = `<details class="repli" style="margin-top:.8rem">
-    <summary>Personnes bloquées <span class="note">${l.length}</span></summary>
-    <div class="gens">${l.map((b) => {
-      const x = noms[b.cible] || { nom: "Compte supprimé" };
-      return `<div class="pers">${vignette(x, "pt")}
-        <span class="qui"><b>${esc(x.nom)}</b>${x.slug ? `<em>@${esc(x.slug)}</em>` : ""}</span>
-        <span class="act"><button class="btn" data-debloquer="${esc(b.cible)}">Débloquer</button></span>
-      </div>`;
-    }).join("")}</div></details>`;
+async function transaction(mode, faire) {
+  const db = await basePhotos();
+  return new Promise((ok, ko) => {
+    const tx = db.transaction("photos", mode);
+    const res = faire(tx.objectStore("photos"));
+    tx.oncomplete = () => { db.close(); ok(res && "result" in res ? res.result : undefined); };
+    tx.onerror = () => { db.close(); ko(tx.error); };
+  });
 }
-
-/* ═════════ CONTACTS ═════════
-   S'abonner, accepter, demander un créneau. Toutes les règles — qui peut
-   demander quoi à qui — sont appliquées par la base : l'interface ne fait que
-   les refléter. Masquer un bouton n'a jamais protégé personne. */
-
-const initiales = (n) => esc(String(n || "?").trim().slice(0, 2).toUpperCase());
-const jourFr = (d) => new Date(d + "T00:00").toLocaleDateString("fr-FR",
-  { weekday: "long", day: "numeric", month: "long" });
-
-async function chargerSocial() {
-  if (!session) {
-    abonnements = abonnes = resaRecues = resaEnvoyees = fils = [];
-    veilles = new Set();
-    return;
-  }
-  const [a, b, r, f, w] = await Promise.all([
-    sb.rpc("mes_abonnements"),
-    sb.rpc("mes_abonnes"),
-    sb.from("ciel_reservations").select("*").order("jour", { ascending: true }),
-    sb.rpc("mes_fils"),
-    sb.from("ciel_veilles").select("cible").eq("qui", session.user.id),
-  ]);
-  abonnements = Array.isArray(a.data) ? a.data : [];
-  abonnes = Array.isArray(b.data) ? b.data : [];
-  fils = Array.isArray(f.data) ? f.data : [];
-  veilles = new Set((Array.isArray(w.data) ? w.data : []).map((x) => x.cible));
-  majPastilleMsg();
-  const tout = Array.isArray(r.data) ? r.data : [];
-  resaRecues = tout.filter((x) => x.hote === session.user.id);
-  resaEnvoyees = tout.filter((x) => x.demandeur === session.user.id);
-  majPastille();
+async function rangerPhoto(blob) {
+  const cle = `idb:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  await transaction("readwrite", (st) => st.put(blob, cle));
+  return cle;
 }
+const lirePhoto = (cle) => transaction("readonly", (st) => st.get(cle));
+const oublierPhoto = (cle) => transaction("readwrite", (st) => st.delete(cle));
 
-/** Le nombre de choses qui attendent vraiment une réponse de moi. */
-function aTraiter() {
-  return abonnes.filter((x) => x.etat === "attente").length
-       + resaRecues.filter((x) => x.etat === "attente").length;
-}
-function majPastille() {
-  const p = $("pastille");
-  if (!p) return;
-  const n = aTraiter();
-  p.hidden = n === 0;
-  p.textContent = n > 9 ? "9+" : String(n);
-}
-
-function renderSocial() {
-  if (!$("abonnements")) return;
-  renderDemandes();
-  renderAbonnements();
-  renderAbonnes();
-  renderMesResa();
-  renderInviter();
-  majPastille();
-  // Les compteurs à côté des titres : on voit d'un coup s'il y a quelque chose,
-  // sans avoir à décider si une liste est vide ou mal chargée.
-  const n = (id, v) => { const e = $(id); if (e) e.textContent = v ? String(v) : "aucun"; };
-  n("nbAbonnements", abonnements.filter((x) => x.etat === "accepte").length);
-  n("nbAbonnes", abonnes.filter((x) => x.etat === "accepte").length);
-  n("nbDemandes", abonnes.filter((x) => x.etat === "attente").length);
-
-  const r = $("rappelDem");
-  if (r) {
-    const att = aTraiter();
-    r.hidden = att === 0;
-    r.innerHTML = `<b>${plural(att, "demande")}</b> ${att > 1 ? "attendent" : "attend"} ta réponse`;
-    r.onclick = () => {
-      const b = document.querySelector('.segs[data-segs="contacts"] button[data-seg="demandes"]');
-      if (b) b.click();
-    };
-  }
-}
-
-/* ── ce qui attend une réponse ───────────────────────── */
-function renderDemandes() {
-  const box = $("demandes");
-  const dem = abonnes.filter((x) => x.etat === "attente");
-  const res = resaRecues.filter((x) => x.etat === "attente");
-  const dp = $("pastDem");
-  if (dp) { dp.hidden = !(dem.length + res.length); dp.textContent = String(dem.length + res.length); }
-  if (!dem.length && !res.length) {
-    box.innerHTML = `<div class="vide">Personne n'attend de réponse de ta part.</div>`;
-    return;
-  }
-  box.innerHTML = `<div class="gens">` + dem.map((d) => `
-    <div class="pers attente">
-      ${vignette(d, "pt")}
-      <span class="qui"><b>${esc(d.nom || "Compte")}</b>
-        <em>@${esc(d.slug || "?")} · demande à suivre ton planning</em></span>
-      <span class="act">
-        <button class="btn pri" data-abok="${esc(d.qui)}">Accepter</button>
-        <button class="btn" data-abnon="${esc(d.qui)}">Refuser</button>
-      </span>
-    </div>`).join("") + `</div>`
-    + (res.length ? `<div class="soustitre" style="margin-top:.9rem">Créneaux demandés</div>
-      <div class="gens">` + res.map((r) => carteResa(r, true)).join("") + `</div>` : "");
-}
-
-function carteResa(r, cotehote) {
-  // Une proposition peut venir de quelqu'un qui n'est ni abonné ni suivi :
-  // c'est tout l'intérêt du motif. On retrouve alors son nom par la conversation.
-  const cible = cotehote ? r.demandeur : r.hote;
-  const qui = abonnes.find((a) => a.qui === cible) || abonnements.find((a) => a.qui === cible)
-           || fils.find((f) => f.autre === cible);
-  const nom = qui ? qui.nom : "Quelqu'un";
-  const etats = { attente: "en attente", accepte: "accepté", refuse: "refusé", annule: "annulé" };
-  return `<div class="resa ${r.etat}">
-    <div class="l1">
-      <span class="t">${esc(r.titre)}</span>
-      <span class="etiq ${r.etat === "accepte" ? "ok" : r.etat === "attente" ? "att" : "non"}">${etats[r.etat]}</span>
-    </div>
-    <div class="quand">${jourFr(r.jour)} · ${r.debut.slice(0, 5)} – ${r.fin.slice(0, 5)}
-      · ${cotehote ? "de" : "chez"} ${esc(nom)}</div>
-    ${r.message ? `<div class="msg">${esc(r.message)}</div>` : ""}
-    ${r.reponse ? `<div class="msg">Réponse : ${esc(r.reponse)}</div>` : ""}
-    <div class="act">
-      ${cotehote && r.etat === "attente" ? `
-        <button class="btn pri" data-rok="${r.id}">Accepter</button>
-        <button class="btn" data-rnon="${r.id}">Refuser</button>` : ""}
-      ${!cotehote && r.etat === "attente" ? `<button class="btn" data-rann="${r.id}">Annuler</button>` : ""}
-    </div>
-  </div>`;
-}
-
-/* ── mes abonnements ─────────────────────────────────── */
-function renderAbonnements() {
-  $("abonnements").innerHTML = abonnements.length
-    ? `<div class="gens">` + abonnements.map((a) => `
-      <div class="pers ${a.etat === "accepte" ? "ok" : "attente"}">
-        ${vignette(a, "pt")}
-        <span class="qui"><b>${esc(a.nom || "Compte")}</b>
-          <em>@${esc(a.slug || "?")}${a.public ? " · public" : ""}</em></span>
-        <span class="act">
-          ${a.etat === "attente" ? `<span class="etiq att">demande envoyée</span>` : ""}
-          ${a.etat === "accepte" ? `<label class="urgcase"><input type="checkbox"
-            data-veille="${esc(a.qui)}"${veilles.has(a.qui) ? " checked" : ""}>
-            <span>me prévenir quand il est libre</span></label>` : ""}
-          ${a.slug ? `<button class="btn" data-fiche="${esc(a.slug)}">Voir</button>` : ""}
-          <button class="btn" data-desab="${esc(a.qui)}">Se désabonner</button>
-        </span>
-      </div>`).join("") + `</div>`
-    : `<div class="vide">Tu ne suis encore personne.
-        <button class="btn" data-vers="fil">Trouver quelqu'un</button></div>`;
-}
-
-/* ── mes abonnés ─────────────────────────────────────── */
-/** Où j'en suis avec quelqu'un : accepté, en attente, ou rien. */
-const suivi = (id) => (abonnements.find((a) => a.qui === id) || {}).etat || null;
-
-function renderAbonnes() {
-  const l = abonnes.filter((x) => x.etat === "accepte");
-  $("abonnes").innerHTML = l.length
-    ? `<div class="gens">` + l.map((a) => `
-      <div class="pers ok">
-        ${vignette(a, "pt")}
-        <span class="qui"><b>${esc(a.nom || "Compte")}</b>
-          <em>@${esc(a.slug || "?")} · depuis le ${new Date(a.cree_le).toLocaleDateString("fr-FR",
-            { day: "numeric", month: "long" })}</em></span>
-        <span class="act">
-          <label class="urgcase"><input type="checkbox" data-reel="${esc(a.qui)}"
-            ${a.voit_nom_reel ? "checked" : ""}><span>vrai nom</span></label>
-          ${suivi(a.qui) === "accepte"
-            ? `<span class="etiq ok">tu le suis</span>`
-            : suivi(a.qui) === "attente"
-              ? `<span class="etiq att">demande envoyée</span>`
-              : `<button class="btn pri" data-sab="${esc(a.qui)}">${
-                  a.public ? "Suivre" : "Demander à suivre"}</button>`}
-          ${a.joignable !== "personne"
-            ? `<button class="btn" data-ecrire="${esc(a.qui)}">Message</button>` : ""}
-          ${a.slug ? `<button class="btn" data-fiche="${esc(a.slug)}">Voir</button>` : ""}
-          <button class="btn" data-retirer="${esc(a.qui)}">Retirer</button>
-        </span>
-      </div>`).join("") + `</div>`
-    : `<div class="vide">Personne ne suit ton planning.</div>`;
-}
-
-/* ── inviter par lien ────────────────────────────────── */
-function renderInviter() {
-  const box = $("inviterBox");
-  if (!box || !vue || !canEdit) return;
-  box.innerHTML = `
-    <p class="aide">Accès en lecture pour qui l'ouvre. 30 jours, 25 usages.
-      À ne donner qu'à des gens de confiance.</p>
-    <label class="urgcase" style="margin-bottom:.45rem"><input type="checkbox" id="invReel">
-      <span>Ce lien donne aussi accès à mon vrai nom</span></label>
-    <div class="lp"><code id="lienInvit">—</code>
-      <button class="btn" id="faireInvit">Créer un lien</button></div>`;
-  brancherInvitation();
-}
-
-function renderMesResa() {
-  const l = resaEnvoyees.filter((r) => r.etat !== "annule");
-  $("mesResa").innerHTML = l.length
-    ? `<div class="gens">` + l.map((r) => carteResa(r, false)).join("") + `</div>`
-    : `<div class="vide">Aucune demande envoyée.</div>`;
-}
-
-/* ── annuaire ────────────────────────────────────────── */
-async function chargerAnnuaire() {
-  const { data } = await sb.from("ciel_profiles")
-    .select("id,slug,nom,public,joignable,avatar,bio,region,region_visible,fuseau")
-    .eq("public", true).order("nom");
-  annuaire = (data || []).filter((p) => !session || p.id !== session.user.id);
-}
-
-async function renderAnnuaire() {
-  const box = $("annuaire");
-  if (!box) return;
-  const q = ($("chercheP")?.value || "").trim().toLowerCase();
-  const l = annuaire.filter((p) => !q || p.nom.toLowerCase().includes(q) || p.slug.includes(q));
-  // Un compte privé n'est dans aucune liste — c'est le but. Mais qui connaît
-  // son identifiant exact doit pouvoir lui demander à le suivre, sinon il est
-  // injoignable pour toujours.
-  if (!l.length && q.length >= 2 && session) {
-    const { data } = await sb.rpc("carte_profil", { identifiant: q });
-    const c = Array.isArray(data) ? data[0] : null;
-    if (c && c.lien !== "moi") {
-      box.innerHTML = `<div class="gens"><div class="pers">
-        ${vignette(c, "pt")}
-        <span class="qui"><b>${esc(c.nom)}</b><em>@${esc(c.slug)} · compte privé</em></span>
-        <span class="act">
-          <button class="btn" data-fiche="${esc(c.slug)}">Voir</button>
-          ${c.lien === "aucun"
-            ? `<button class="btn pri" data-sab="${esc(c.id)}">Demander à suivre</button>`
-            : `<span class="etiq att">${c.lien === "attente" ? "demande envoyée" : "tu le suis"}</span>`}
-        </span></div></div>`;
-      return;
+/** Clé → adresse affichable. Une photo de l'ancienne version (un chemin sur le
+ *  serveur) n'a pas d'adresse : on la compte, on ne l'invente pas. */
+const adressesVues = new Map();
+async function adressesPhotos(cles) {
+  const par = new Map();
+  for (const c of cles) {
+    if (!String(c).startsWith("idb:")) continue;
+    if (!adressesVues.has(c)) {
+      const b = await lirePhoto(c).catch(() => null);
+      if (!b) continue;
+      adressesVues.set(c, URL.createObjectURL(b));
     }
+    par.set(c, adressesVues.get(c));
   }
-  box.innerHTML = l.length
-    ? `<div class="gens">` + l.slice(0, 40).map((p) => `
-      <div class="pers">
-        ${vignette(p, "pt")}
-        <span class="qui"><b>${esc(p.nom)}</b><em>@${esc(p.slug)}</em></span>
-        <span class="act">
-          <button class="btn" data-fiche="${esc(p.slug)}">Voir</button>
-          ${session && !abonnements.some((a) => a.qui === p.id)
-            ? `<button class="btn pri" data-sab="${esc(p.id)}">S'abonner</button>` : ""}
-        </span>
-      </div>`).join("") + `</div>`
-    : `<div class="vide">${q
-        ? "Aucun compte ne porte ce nom. Les comptes privés ne se trouvent que par leur identifiant exact."
-        : "Personne d'ouvert à la consultation. Cherche quelqu'un par son identifiant."}</div>`;
+  return par;
 }
 
-function renderJoignable() {
-  const box = $("joignableBox");
-  if (!box || !vue) return;
-  if (!canEdit) { box.innerHTML = ""; return; }
-  const j = vue.joignable || "abonnes";
-  const opts = [
-    ["tous", "Tout le monde", "N'importe quel compte peut t'écrire et te proposer un moment."],
-    ["abonnes", "Mes contacts", "Eux seuls t'écrivent. Les autres ne peuvent qu'une chose : proposer un moment, avec un mot."],
-    ["personne", "Personne", "Ni message ni proposition. Ton planning reste consultable selon ta visibilité."],
-  ];
-  box.innerHTML = `<div class="joi">` + opts.map(([v, t, d]) => `
-    <label class="opt${j === v ? " on" : ""}">
-      <input type="radio" name="joi" value="${v}"${j === v ? " checked" : ""}>
-      <span><b>${t}</b><em>${d}</em></span></label>`).join("") + `</div>
-    <label class="urgcase" style="margin-top:.7rem"><input type="checkbox" id="resaAuto"
-      ${vue.reservations_auto ? "checked" : ""}>
-      <span>Accepter les demandes automatiquement</span></label>
-    <p class="aide">Sans elle, chaque demande attend ta réponse.</p>`;
+/* ═════════ DÉMARRAGE ═════════
+   Plus rien à attendre : pas de session à vérifier, pas de base à interroger.
+   On lit la copie du navigateur et on ouvre. */
 
-  box.querySelectorAll('input[name="joi"]').forEach((r) => (r.onchange = async () => {
-    const { error } = await sb.from("ciel_profiles").update({ joignable: r.value }).eq("id", vue.id);
-    if (error) return setSync("warn", "changement refusé");
-    vue.joignable = r.value; renderJoignable(); setSync("ok", "enregistré");
-  }));
-  $("resaAuto").onchange = async (e) => {
-    const { error } = await sb.from("ciel_profiles")
-      .update({ reservations_auto: e.target.checked }).eq("id", vue.id);
-    if (error) { e.target.checked = !e.target.checked; return setSync("warn", "changement refusé"); }
-    vue.reservations_auto = e.target.checked; setSync("ok", "enregistré");
-  };
-}
-
-/* ── actions ─────────────────────────────────────────── */
-document.addEventListener("change", async (e) => {
-  const c = e.target.closest("[data-reel]");
-  if (!c) return;
-  const { error } = await sb.rpc("regler_nom_reel", { qui: c.dataset.reel, autorise: c.checked });
-  if (error) { c.checked = !c.checked; return setSync("warn", "changement refusé"); }
-  const a = abonnes.find((x) => x.qui === c.dataset.reel);
-  if (a) a.voit_nom_reel = c.checked;
-  setSync("ok", c.checked ? "vrai nom partagé" : "vrai nom masqué");
-});
-
-document.addEventListener("click", async (e) => {
-  const r = e.target.closest("[data-retirer]");
-  if (r) {
-    return dialogue({ ton: "warn", titre: "Retirer cette personne ?",
-      corps: `<p>Elle n'aura plus accès à ton planning. Elle pourra redemander.</p>`,
-      actions: [{ texte: "Annuler", pri: true },
-                { texte: "Retirer", faire: async () => {
-                    await sb.rpc("repondre_abonnement", { qui: r.dataset.retirer, accepte: false });
-                    await sb.from("ciel_partages").delete()
-                      .eq("proprietaire", vue.id).eq("invite", r.dataset.retirer);
-                    await chargerSocial(); renderSocial();
-                  } }] });
-  }
-});
-
-document.addEventListener("click", async (e) => {
-  const t = e.target;
-  const rpc = async (nom, args, apres) => {
-    const b = t.closest("button");
-    if (b) { b.disabled = true; }
-    const { error } = await sb.rpc(nom, args);
-    if (error) { if (b) b.disabled = false; return setSync("warn", "action refusée"); }
-    await chargerSocial();
-    renderSocial();
-    if (apres) apres();
-  };
-
-  const sab = t.closest("[data-sab]");
-  if (sab) {
-    const b = sab; b.disabled = true;
-    const { data } = await sb.rpc("s_abonner", { cible: b.dataset.sab });
-    const r = String(data || "").replace(/"/g, "");
-    await chargerSocial(); renderSocial();
-    // La fiche affichée doit refléter le nouvel état, pas celui d'avant le clic.
-    if (vueCourante === "personne" && argCourant) await ouvrirFiche(argCourant);
-    if (vueCourante === "fil") renderAnnuaire();
-    return dialogue({ ton: "info", titre: r === "accepte" ? "Abonné" : "Demande envoyée",
-      corps: r === "accepte"
-        ? `<p>Ce planning est public : tu le suis désormais.</p>`
-        : `<p>Ce compte est privé. La personne recevra ta demande et décidera.</p>` });
-  }
-  const des = t.closest("[data-desab]");
-  if (des) return rpc("se_desabonner", { cible: des.dataset.desab });
-  const ok = t.closest("[data-abok]");
-  if (ok) return rpc("repondre_abonnement", { qui: ok.dataset.abok, accepte: true });
-  const non = t.closest("[data-abnon]");
-  if (non) return rpc("repondre_abonnement", { qui: non.dataset.abnon, accepte: false });
-
-  const rok = t.closest("[data-rok]");
-  if (rok) return repondreResa(+rok.dataset.rok, "accepte");
-  const rnon = t.closest("[data-rnon]");
-  if (rnon) return repondreResa(+rnon.dataset.rnon, "refuse");
-  const rann = t.closest("[data-rann]");
-  if (rann) return repondreResa(+rann.dataset.rann, "annule");
-});
-
-/**
- * Accepter une demande la pose dans mon planning comme un événement : c'est ce
- * qui fait que le planificateur en tient compte, et que mes proches la voient
- * comme un moment occupé.
- */
-async function repondreResa(id, etat) {
-  const r = resaRecues.concat(resaEnvoyees).find((x) => x.id === id);
-  if (!r) return;
-  const { error } = await sb.from("ciel_reservations")
-    .update({ etat, maj_le: new Date().toISOString() }).eq("id", id);
-  if (error) return setSync("warn", "réponse refusée");
-
-  if (etat === "accepte" && canEdit) {
-    const qui = abonnes.find((a) => a.qui === r.demandeur);
-    events.push({
-      id: "r" + r.id, date: r.jour, debut: r.debut.slice(0, 5), fin: r.fin.slice(0, 5),
-      titre: r.titre, urgent: false, pause: false, visible: true, resa: r.id,
-    });
-    events.sort((a, b) => (a.date + (a.debut || "")).localeCompare(b.date + (b.debut || "")));
-    log(`a accepté un créneau avec ${qui ? qui.nom : "quelqu'un"} le ${jourFr(r.jour)}`);
-    saveEvents();
-  }
-  if (etat === "annule" || etat === "refuse") {
-    events = events.filter((x) => x.resa !== r.id);
-    saveEvents();
-  }
-  await chargerSocial();
-  renderSocial();
-  renderAll();
-}
-
-/* ═════════ AUTHENTIFICATION ═════════ */
 function montrer(ecran) {
-  ["chargement", "porte", "ecranAuth", "ecranProfils", "appli"].forEach((k) => {
+  ["chargement", "appli"].forEach((k) => {
     const e = $(k); if (e) e.hidden = k !== ecran;
   });
 }
-function messageAuth(txt, ok) {
-  const m = $("authMsg");
-  m.className = "authmsg " + (ok ? "ok" : "err");
-  m.textContent = txt;
-  m.hidden = !txt;
-}
-/** Les plannings qu'on peut ouvrir : les publics, plus ceux partagés avec moi. */
-async function chargerProfils(cible = "listeProfils2") {
-  const { data } = await sb.from("ciel_profiles").select("id,slug,nom,public,avatar").order("nom");
-  const l = (data || []).filter((p) => !session || p.id !== session.user.id);
-  const box = $(cible);
-  if (!box) return l;
-  box.innerHTML = l.length
-    ? l.map((p) => `<a class="profil" href="?profil=${encodeURIComponent(p.slug)}">
-        ${vignette(p, "")}
-        <span><b>${esc(p.nom)}</b><em>@${esc(p.slug)}${p.public ? "" : " · partagé avec toi"}</em></span></a>`).join("")
-    : `<p class="muted">Aucun planning ouvert à la consultation pour l'instant.</p>`;
-  return l;
-}
-async function chargerProfil(slug) {
-  let q = sb.from("ciel_profiles")
-    .select("id,slug,nom,public,avatar,bio,fuseau,region,region_visible,joignable,reservations_auto,au_classement");
-  q = slug ? q.eq("slug", slug) : q.eq("id", session.user.id);
-  const { data } = await q.maybeSingle();
-  return data;
-}
-async function ouvrir(profil) {
-  vue = profil;
-  canEdit = estMoi();
-  const { data: st, error: errEtat } = await sb.from("ciel_state")
-    .select("data,updated_at").eq("user_id", profil.id).maybeSingle();
-  const local = lireLocal(profil.id);
-  let d = st ? st.data : null;
-  let secours = false, aRenvoyer = false, ecarte = null;
-  if (errEtat) {
-    // Le serveur ne répond pas : on ouvre sur la copie locale plutôt que sur rien.
-    if (local && local.data) { d = local.data; secours = true; }
-  } else if (local && local.sale && local.data && estMoi()) {
-    /* Cette copie porte des modifications qui ne sont jamais parties — une coche
-       posée juste avant de verrouiller l'écran, par exemple. On ne les reprend
-       que si personne n'a écrit ailleurs depuis : sinon on effacerait le travail
-       fait sur l'autre appareil, et mieux vaut perdre une coche qu'une journée. */
-    const serveurPlusRecent = st && st.updated_at && local.pris
-      && Date.parse(st.updated_at) > Date.parse(local.pris);
-    if (serveurPlusRecent) ecarte = local.pris;
-    else { d = local.data; aRenvoyer = true; }
+
+function routeDepart() {
+  let dernier = null;
+  try { dernier = sessionStorage.getItem("ciel.vue"); } catch {}
+  if (location.hash.startsWith("#/") && VUES[lireAdresse()[0]]) return appliquerRoute();
+  if (dernier && dernier.startsWith("#/")) {
+    history.replaceState(null, "", dernier);
+    return appliquerRoute();
   }
-  appliquerEtat(d || {});
-  // Reprises : on les renvoie au serveur tout de suite, une fois pour toutes.
-  if (aRenvoyer) saveState();
-  // Premier passage après inscription : on pose le modèle retenu.
-  if (!modeleEnAttente) { try { modeleEnAttente = localStorage.getItem("ciel.modele"); } catch {} }
-  if (modeleEnAttente && estMoi() && !(programme.matieres || []).length && programme.modele === "cned") {
-    programme = depuisModele(modeleEnAttente);
-    modeleEnAttente = null;
-    try { localStorage.removeItem("ciel.modele"); } catch {}
-    chargerProgramme(programme);
-    saveState();
-  }
-  try { localStorage.removeItem("ciel.modele"); } catch {}
-  await chargerNomReel();
-  await chargerSocial();
-  await chargerAnnuaire();
-  const { data: jr } = await sb.from("ciel_journal").select("ts,body")
-    .eq("user_id", profil.id).order("ts", { ascending: false }).limit(120);
-  journal = (jr || []).map((j) => ({ ts: j.ts, text: j.body }));
-  if (canEdit) {
-    const { data: ab } = await sb.from("ciel_subs").select("email").eq("user_id", profil.id).eq("actif", true);
-    subs = (ab || []).map((x) => x.email);
-    subCount = subs.length;
-  } else {
-    subs = []; subCount = 0;
-  }
-  const sr = $("sousReel");
-  if (sr) {
-    sr.hidden = canEdit || !nomReel;
-    sr.textContent = nomReel ? nomReel : "";
-  }
-  const ro = $("robar");
-  ro.hidden = canEdit;
-  ro.innerHTML = `<b>Vue publique.</b><span>Lecture seule.</span>`;
-  // L'en-tête ne montre plus l'adresse électronique : c'était en donner un
-  // morceau à quiconque regarde l'écran par-dessus l'épaule.
-  majBoutonCompte();
-  majAccesSansAdresse();
-  chargerNouveautes().catch(() => {});
-  montrer("appli");
-  buildGantt(); buildAcc();
-  routeDepart();
-  $("evD").value = isoJour(new Date(NOW));
-  renderAll();
-  // Le repli sur la copie locale doit se voir : c'est le dernier mot de l'ouverture.
-  if (secours) setSync("warn", "hors ligne — copie locale");
-  else setSync("ok", canEdit ? "mode édition" : "lecture publique");
-  /* Perdre du travail en silence est pire que le perdre. Un bandeau d'état
-     serait recouvert par le premier enregistrement venu : il faut le dire une
-     fois, franchement, à l'écran. */
-  if (ecarte) dialogue({ ton: "warn", titre: "Des changements n'ont pas pu être repris",
-    corps: `<p>Cet appareil gardait des modifications faites le
-      <b>${esc(fmtDY(Date.parse(ecarte)))}</b> qui ne sont jamais parties — l'application
-      a dû se fermer avant.</p>
-      <p>Depuis, ton planning a été modifié ailleurs, et ce qui a été enregistré
-      là-bas est plus récent. Reprendre l'ancienne copie aurait effacé ce
-      travail-là, donc elle a été écartée. Revérifie ce que tu avais coché sur
-      cet appareil.</p>` });
-  // Le modèle CNED n'a légitimement aucune matière déclarée : ses matières
-  // viennent du référentiel. Se fier à cette liste faisait reposer la question
-  // à chaque ouverture. C'est le drapeau qui décide, plus la forme du programme.
-  const neuf = !demarrageFait && !Object.keys(done).length
-    && !events.length && !journal.length && !(programme.matieres || []).length;
-  if (canEdit && neuf) demanderModele();
+  aller("jour", null, { remplacer: true });
 }
 
 /* Par quoi commencer. La question ne se pose qu'une fois, à la première
-   ouverture — et pas au milieu du formulaire d'inscription, où elle ne faisait
-   qu'allonger la page qu'on venait remplir. */
+   ouverture. */
 function demanderModele() {
   // Posée à l'affichage, pas à la réponse : fermer la fenêtre d'un geste de
   // côté compte aussi comme une réponse. On ne redemande jamais.
@@ -3949,1485 +2810,137 @@ function demanderModele() {
       chargerProgramme(programme);
       demarrageFait = true;
       log(`a démarré avec le modèle « ${MODELES[c.value].nom} »`);
-      saveState(); renderAll();
+      saveState(); buildGantt(); buildAcc(); renderAll();
     } }] });
 }
 
-async function demarrer() {
+function lancer() {
   tickClock();
-  await sb.auth.recupererDepuisUrl();
-  const { data: { session: s } } = await sb.auth.getSession();
-  session = s;
-  const params = new URLSearchParams(location.search);
-
-  // Lien d'invitation : le jeton n'est lisible par personne, seule la base le
-  // consomme. On le retire de l'adresse dès qu'il est traité.
-  const invite = params.get("invite");
-  if (invite) {
-    if (!session) {
-      ecranCompte("connexion", "Connecte-toi ou crée un compte : l'invitation s'appliquera juste après.");
-      try { sessionStorage.setItem("ciel.invite", invite); } catch {}
-      return;
-    }
-    await consommerInvitation(invite);
-    return;
+  const local = lireLocal();
+  // Le journal d'abord : appliquerEtat peut déjà enregistrer (un minuteur qui
+  // reprend), et écrirait sinon un journal vide par-dessus le vrai.
+  journal = local && Array.isArray(local.journal) ? local.journal : [];
+  appliquerEtat(local ? local.data : {});
+  montrer("appli");
+  buildGantt(); buildAcc();
+  routeDepart();
+  $("evD").value = isoJour(new Date(NOW));
+  renderAll();
+  if (local && local.repris) {
+    // Écrite tout de suite sous la nouvelle clé : la reprise ne se fait qu'une fois.
+    saveState();
+    dialogue({ ton: "info", titre: "Ton planning est là",
+      corps: `<p>Repère ne passe plus par un serveur : tout reste sur cet appareil.
+        Ce que tu avais fait ici a été repris tel quel.</p>
+        <p>Pense à <b>Moi → Sauvegarde</b> de temps en temps : un fichier, c'est ce qui
+        survit à un navigateur effacé ou à un téléphone perdu.</p>` });
+  } else {
+    setSync("ok", local ? "enregistré sur cet appareil" : "nouveau planning");
   }
-  // Invitation mise de côté avant la connexion.
-  let attente = null;
-  try { attente = sessionStorage.getItem("ciel.invite"); } catch {}
-  if (attente && session) {
-    try { sessionStorage.removeItem("ciel.invite"); } catch {}
-    await consommerInvitation(attente);
-    return;
-  }
-
-  const slug = params.get("profil");
-  if (slug) {
-    if (session) moi = await chargerProfil(null);
-    const p = await chargerProfil(slug);
-    if (p) { await ouvrir(p); return true; }
-    // Une requête qui n'est pas partie ne veut pas dire « ce profil n'existe
-    // pas ». Sans cette distinction, une coupure réseau ressemblait à un refus.
-    if (!sb.reseau.ok) return false;
-    montrer("ecranProfils"); chargerProfils(); return true;
-  }
-  if (session) {
-    moi = await chargerProfil(null);
-    if (moi) { await ouvrir(moi); return true; }
-    if (!sb.reseau.ok) {
-      // Le réseau manque, mais la dernière copie est là : autant ouvrir le
-      // planning tel qu'on l'a laissé plutôt que de renvoyer sur un mur.
-      const copie = lireLocal(session.user.id);
-      if (copie && copie.profil) { moi = copie.profil; await ouvrir(moi); return true; }
-      return false;
-    }
-  }
-  montrer("porte");
-  return true;
+  const neuf = !demarrageFait && !Object.keys(done).length
+    && !events.length && !journal.length && !(programme.matieres || []).length;
+  if (neuf) demanderModele();
 }
 
-/* ═════════ LE RUBAN ═════════
-   Quand une mise à jour est en cours, autant le dire : une application qui
-   change sous les doigts sans prévenir passe pour cassée. L'annonce vit dans
-   la base, avec une fin obligatoire — elle s'éteint donc toute seule, même si
-   on oublie de l'éteindre. */
-
-let rubanVu = null;
-
-async function chargerRuban() {
-  const z = $("ruban");
-  if (!z) return;
-  const { data, error } = await sb.from("ciel_annonces")
-    .select("id,texte,ton").order("debut", { ascending: false }).limit(1);
-  const a = Array.isArray(data) ? data[0] : null;
-  // Hors réseau, on garde ce qui est affiché : effacer ferait clignoter.
-  if (error) return;
-  if (!a) { z.hidden = true; rubanVu = null; return; }
-  let ecarte = null;
-  try { ecarte = sessionStorage.getItem("ciel.ruban"); } catch {}
-  if (ecarte === a.id) { z.hidden = true; return; }
-  if (rubanVu === a.id && !z.hidden) return;   // déjà à l'écran, on ne le rejoue pas
-  rubanVu = a.id;
-  $("rubanTexte").textContent = a.texte;
-  $("rubanEcho").textContent = a.texte;
-  z.className = "ruban " + (a.ton || "travaux");
-  z.hidden = false;
-}
-
-// Toute la bande se touche, pas seulement la croix : viser 40 px de large au
-// pouce, sur un bandeau de 44 px de haut, c'est demander de la précision pour
-// écarter un message qu'on n'a pas demandé.
-$("ruban").addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("ruban").click(); }
-});
-$("ruban").addEventListener("click", () => {
-  $("ruban").hidden = true;
-  try { sessionStorage.setItem("ciel.ruban", rubanVu || ""); } catch {}
-});
-
-// Assez souvent pour qu'une annonce arrive pendant qu'on est là, assez rare
-// pour ne rien coûter. Et jamais quand l'onglet est en arrière-plan.
-setInterval(() => {
-  if (document.hidden) return;
-  chargerRuban();
-  chargerNouveautes({ silencieux: false });
-}, 90000);
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) return;
-  chargerRuban();
-  chargerNouveautes({ silencieux: false });
-});
-
-/* ═════════ L'ATTENTE ═════════
-   Une page blanche pendant que la base répond ne dit rien ; une page blanche
-   qui ne finit jamais ment. Le bras du logo tourne, et s'il ne se passe rien
-   il décroche : on sait alors que ce n'est pas la peine d'attendre, et qu'un
-   geste suffit à relancer. */
-
-const RECULS = [5000, 8000, 13000, 21000, 30000];
-let essais = 0, chargeEnCours = false, tPatience = null, tReprise = null;
-
-function direAttente(titre, aide) {
-  $("etatCh").textContent = titre;
-  $("aideCh").textContent = aide || "";
-}
-
-/** Le bras décroche. Rien n'est perdu : on repart au toucher, ou tout seul. */
-/** L'erreur qui a interrompu le démarrage, si ce n'était pas le réseau. */
-let pannePropre = null;
-
-function attenteCassee() {
-  chargeEnCours = false;
-  clearTimeout(tPatience);
-  montrer("chargement");
-  $("chargement").classList.add("casse");
-  const horsLigne = navigator.onLine === false;
-  // Un défaut de l'application ne se répare pas en réessayant : le dire, plutôt
-  // que de faire croire à une coupure et boucler.
-  if (pannePropre && !horsLigne && sb.reseau.ok) {
-    direAttente("Repère s'est arrêté en chemin",
-      "Ce n'est pas ta connexion : quelque chose a échoué dans l'application. "
-      + "Touche l'écran pour réessayer. Si ça recommence, dis-le — le détail est "
-      + "dans la console du navigateur.");
-    essais++;
-    clearTimeout(tReprise);
-    tReprise = setTimeout(lancer, RECULS[Math.min(essais - 1, RECULS.length - 1)]);
-    return;
-  }
-  direAttente(horsLigne ? "Pas de réseau ici" : "Repère ne répond pas",
-    horsLigne
-      ? "Ton appareil n'est connecté à rien. Touche l'écran pour réessayer — ça repart aussi tout seul dès que la connexion revient."
-      : "Le serveur n'a pas répondu. Touche l'écran pour réessayer.");
-  essais++;
-  clearTimeout(tReprise);
-  tReprise = setTimeout(lancer, RECULS[Math.min(essais - 1, RECULS.length - 1)]);
-}
-
-async function lancer() {
-  if (chargeEnCours) return;
-  chargeEnCours = true;
-  clearTimeout(tReprise); clearTimeout(tPatience);
-  $("chargement").classList.remove("casse");
-  montrer("chargement");
-  direAttente(essais ? "Nouvelle tentative" : "Repère", "");
-  // Au-delà, ce n'est plus un chargement : c'est une attente sans fin.
-  tPatience = setTimeout(attenteCassee, 9000);
-  chargerRuban().catch(() => {});
-  const debut = Date.now();
-  let abouti = false;
-  pannePropre = null;
-  try { abouti = (await demarrer()) !== false; }
-  catch (e) {
-    abouti = false;
-    /* Ce catch existe pour que l'application ne meure pas sur un écran blanc.
-       Mais avaler l'erreur la déguisait en coupure réseau : on réessayait sans
-       fin une requête qui n'avait jamais été le problème, et le défaut restait
-       introuvable. On la garde, on la dit, et on l'écrit dans la console. */
-    pannePropre = e;
-    console.error("Repère — le démarrage s'est interrompu :", e);
-  }
-  clearTimeout(tPatience);
-  chargeEnCours = false;
-  // C'est demarrer() qui sait si elle a abouti : une requête échouée en chemin
-  // n'est pas un échec si la copie locale a pris le relais.
-  if (!abouti) {
-    // Un échec instantané rendrait le geste invisible : on laisse le bras
-    // tourner le temps qu'on voie qu'il s'est passé quelque chose.
-    const reste = 900 - (Date.now() - debut);
-    if (reste > 0) await new Promise((r) => setTimeout(r, reste));
-    return attenteCassee();
-  }
-  essais = 0;
-}
-
-// Un geste sur l'écran cassé relance. Le clavier aussi : rien ne doit
-// dépendre du seul toucher.
-$("chargement").addEventListener("click", () => {
-  if ($("chargement").classList.contains("casse")) lancer();
-});
-document.addEventListener("keydown", (e) => {
-  if (!$("chargement").hidden && $("chargement").classList.contains("casse")
-      && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); lancer(); }
-});
-// Et le navigateur prévient lui-même quand la connexion revient.
-addEventListener("online", () => {
-  if (!$("chargement").hidden && $("chargement").classList.contains("casse")) lancer();
-});
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && !$("chargement").hidden
-      && $("chargement").classList.contains("casse")) lancer();
-});
-
-/** Consomme un lien d'invitation et ouvre le planning auquel il donne accès. */
-async function consommerInvitation(jeton) {
-  const { data, error } = await sb.rpc("accepter_invitation", { jeton_recu: jeton });
-  const res = String(data || "").replace(/"/g, "");
-  history.replaceState(null, "", location.pathname);
-  if (error || res === "invalide") {
-    ecranCompte("connexion", "Ce lien d'invitation n'est plus valable. Demande-en un nouveau.");
-    return;
-  }
-  if (res === "connexion") { ecranCompte("connexion"); return; }
-  if (res === "soi") { location.href = "/"; return; }
-  const p = await chargerProfil(res);
-  if (p) { setSync("ok", "invitation acceptée"); return ouvrir(p); }
-  location.href = "/";
-}
-
-/**
- * Fin d'un parcours (compte créé, mot de passe changé) : on referme la session
- * et on revient à la connexion, adresse pré-remplie. Se reconnecter une fois
- * confirme que les identifiants marchent vraiment.
- */
-async function versConnexion(message, email) {
-  try { await sb.auth.signOut(); } catch {}
-  session = null; moi = null; vue = null; canEdit = false;
-  history.replaceState(null, "", location.pathname);
-  ecranCompte("connexion", message, true);
-  if (email) $("conEmail").value = email;
-  setTimeout(() => $(email ? "conMdp" : "conEmail").focus(), 120);
-}
-
-/* ═════════ LA PORTE ═════════
-   Un écran, trois chemins. Chaque chemin mène à un écran qui ne contient que
-   ce qu'il faut pour le suivre. */
-
-const FORMS = { inscription: "formInscription", connexion: "formConnexion",
-                oubli: "formOubli", nouveau: "formNouveau" };
-const TITRES_AUTH = { inscription: "Créer un compte", connexion: "Se connecter",
-                      oubli: "Mot de passe oublié", nouveau: "Nouveau mot de passe" };
-
-function ongletAuth(m) {
-  Object.entries(FORMS).forEach(([cle, f]) => ($(f).hidden = cle !== m));
-  $("titreAuth").textContent = TITRES_AUTH[m] || "Compte";
-  messageAuth("");
-}
-function ecranCompte(m, message, ok) {
-  montrer("ecranAuth");
-  ongletAuth(m);
-  if (message) messageAuth(message, ok !== false);
-}
-document.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-auth],[data-porte]");
-  if (!b) return;
-  if (b.dataset.auth) return ongletAuth(b.dataset.auth);
-  const p = b.dataset.porte;
-  if (p === "retour") return montrer("porte");
-  if (p === "visite") return entrerEnVisite();
-  ecranCompte(p);
-  setTimeout(() => $(p === "connexion" ? "conEmail" : "insNom")?.focus(), 260);
-});
-
-/* Basculer d'application ne ferme pas la page : une requête normale part très
-   bien, et c'est le cas courant sur un téléphone. La fermer, si — d'où
-   keepalive, qui laisse la requête vivre plus longtemps que la page.
-   beforeunload ne se déclenche pas de façon fiable sur mobile ; ces deux-là si. */
+/* Les saisies attendent un peu avant de s'écrire (une note qu'on tape, une plage
+   horaire). Quitter la page ne doit pas les perdre : sur un téléphone, basculer
+   d'application est le cas courant, et beforeunload ne s'y déclenche pas. */
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") viderDifferes();
 });
 addEventListener("pagehide", () => { enFermeture = true; viderDifferes(); });
-// Le navigateur peut rendre la page telle quelle après un retour en arrière :
-// elle n'est plus en train de mourir, et keepalive bride la taille du corps.
 addEventListener("pageshow", () => { enFermeture = false; });
 
-document.addEventListener("input", (e) => {
-  if (e.target.id === "chercheP") { clearTimeout(tmr.ann); tmr.ann = setTimeout(renderAnnuaire, 200); }
-});
+/* ═════════ SAUVEGARDE ═════════
+   La mémoire du navigateur s'efface : « effacer les données du site », un
+   nettoyage du téléphone, un navigateur changé. Le fichier, lui, reste. C'est
+   aussi le seul pont entre deux appareils : on sauvegarde sur l'un, on
+   recharge sur l'autre. */
 
-$("insNom").addEventListener("input", () => {
-  clearTimeout(tmr.insNom);
-  tmr.insNom = setTimeout(verifierNom, 450);
-});
+const FORMAT = "repere-sauvegarde";
 
-let modeleChoisi = "cned";
-
-/** Le nom affiché est unique : on le dit avant de valider, pas après. */
-async function verifierNom() {
-  const inp = $("insNom"), zone = $("nomDispo");
-  if (!inp || !zone) return true;
-  const v = inp.value.trim();
-  if (v.length < 2) { zone.className = "dispo"; zone.textContent = ""; return false; }
-  const { data, error } = await sb.rpc("nom_disponible", { candidat: v });
-  if (error) { zone.className = "dispo"; zone.textContent = ""; return true; }
-  zone.className = "dispo " + (data ? "oui" : "non");
-  zone.textContent = data ? "Ce nom est libre." : "Ce nom est déjà pris. Choisis-en un autre.";
-  return Boolean(data);
-}
-
-/* ═════════ COMPTE SANS ADRESSE ═════════
-   On peut se servir de Repère sans donner d'adresse électronique. Ce que ça
-   coûte est net, et l'application le dit avant, pendant et après : le compte ne
-   tient qu'à ce navigateur. Pas d'adresse, donc rien pour le retrouver si le
-   stockage est effacé, et rien pour l'ouvrir sur un autre appareil.
-
-   Ce qui marche : le planning, le minuteur, les fiches, les
-   blocages, l'import de son propre agenda, les notifications sur cet appareil.
-   Ce qui ne marche pas : tout ce qui sort du compte — le fil, les messages, les
-   contacts, le classement, publier son planning, envoyer sa demande à quelqu'un.
-
-   Ces refus ne sont pas une affaire d'écran caché : ils sont tenus en base par
-   un déclencheur sur chaque table concernée, qui lit « is_anonymous » dans le
-   jeton. L'interface ne fait que ne pas proposer de portes qui ne s'ouvrent pas. */
-
-const sansAdresse = () => Boolean(session && session.user && session.user.is_anonymous);
-const VUES_ADRESSE = ["fil", "messages", "contacts"];
-
-/** Les sections qui supposent une adresse disparaissent de la barre du bas. */
-function majAccesSansAdresse() {
-  const nue = sansAdresse();
-  const bar = $("sansAdrBar");
-  if (bar) bar.hidden = !nue || !canEdit;
-  document.querySelectorAll("#socle button[data-vue]").forEach((b) => {
-    if (VUES_ADRESSE.includes(b.dataset.vue)) b.hidden = nue;
-  });
-}
-
-async function creerSansAdresse(nom) {
-  messageAuth("Création du compte…", true);
-  const { error } = await sb.auth.signInAnonymously({
-    data: { nom: nom || "Membre", public: false, conditions: "1", modele: modeleChoisi },
-  });
-  if (error) {
-    // Le fournisseur se règle côté Supabase : tant qu'il est fermé, mieux vaut
-    // le dire que de laisser un bouton qui ne fait rien.
-    const ferme = /anonymous|disabled|422/i.test(String(error.message || ""));
-    return messageAuth(ferme
-      ? "Les comptes sans adresse ne sont pas encore ouverts sur ce serveur."
-      : String(error.message || "Création impossible."));
+async function exporterSauvegarde() {
+  const photos = {};
+  const cles = Object.values(fiches).flatMap((f) => (f && f.p) || [])
+    .filter((c) => String(c).startsWith("idb:"));
+  for (const c of cles) {
+    const b = await lirePhoto(c).catch(() => null);
+    if (!b) continue;
+    photos[c] = await new Promise((ok) => {
+      const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(b);
+    });
   }
-  messageAuth("");
-  await lancer();
+  const contenu = JSON.stringify({ format: FORMAT, version: 1, pris: new Date().toISOString(),
+                                   data: etat(), journal, photos });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([contenu], { type: "application/json" }));
+  a.download = `repere-${isoJour(new Date(NOW))}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  try { localStorage.setItem("repere.derniereSauvegarde", new Date().toISOString()); } catch {}
+  log("a sauvegardé son planning dans un fichier");
+  saveState(); renderSauvegarde();
 }
 
-/** Poser une adresse sur un compte qui n'en avait pas. Rien n'est perdu. */
-function brancherLiaison() {
-  const f = $("formLier");
-  if (!f) return;
-  f.onsubmit = async (ev) => {
-    ev.preventDefault();
-    const etat = $("lierEtat");
-    const email = $("lierEmail").value.trim().toLowerCase();
-    const mdp = $("lierMdp").value;
-    if (mdp.length < 8) { etat.textContent = "Le mot de passe doit faire au moins 8 caractères."; return; }
-    etat.textContent = "Envoi…";
-    const { error } = await sb.auth.updateUser({ email, password: mdp });
-    if (error) {
-      etat.textContent = /already|exists|registered/i.test(String(error.message))
-        ? "Cette adresse est déjà prise par un autre compte."
-        : String(error.message);
+function importerSauvegarde(fichier) {
+  const r = new FileReader();
+  r.onload = () => {
+    let s = null;
+    try { s = JSON.parse(String(r.result)); } catch {}
+    if (!s || s.format !== FORMAT || !s.data || typeof s.data !== "object") {
+      dialogue({ titre: "Ce fichier n'est pas une sauvegarde de Repère",
+        corps: `<p>Choisis un fichier <b>repere-….json</b> créé par le bouton
+          « Sauvegarder dans un fichier ».</p>` });
       return;
     }
-    etat.textContent = "";
-    const { data } = await sb.auth.getSession();
-    session = data.session;
-    // Si le serveur demande une confirmation, le drapeau ne tombe qu'au clic sur
-    // le lien : on ne prétend pas que c'est fait tant que le jeton dit le contraire.
-    const encoreNue = sansAdresse();
-    dialogue({ ton: "info", titre: encoreNue ? "Presque" : "Adresse posée",
-      corps: encoreNue
-        ? `<p>Ouvre le courriel envoyé à <b>${esc(email)}</b> et suis le lien : ton compte
-             sera confirmé et tout s'ouvrira.</p>
-           <p class="petit">Tant que ce n'est pas fait, le compte reste lié à ce
-             navigateur — ne vide pas les données du site.</p>`
-        : `<p>Ton compte a maintenant une adresse. Le fil, les messages et les contacts
-             sont ouverts, et tu peux l'ouvrir sur un autre appareil.</p>
-           <p class="petit">Ton planning, tes fiches et tes heures n'ont pas bougé.</p>` });
-    majAccesSansAdresse();
-    renderCompte(); renderProfil();
+    dialogue({ ton: "warn", titre: "Remplacer ton planning ?",
+      corps: `<p>La sauvegarde du <b>${esc(fmtDL(Date.parse(s.pris) || NOW))}</b> va
+        remplacer tout ce qui est sur cet appareil.</p>
+        <p class="petit">Sauvegarde d'abord l'état actuel si tu veux pouvoir y revenir.</p>`,
+      actions: [{ texte: "Annuler", pri: true }, { texte: "Remplacer", faire: async () => {
+        for (const [c, url] of Object.entries(s.photos || {})) {
+          // Des photos, et seulement des photos : pas de SVG, qui est un document.
+          if (!String(c).startsWith("idb:")
+              || !/^data:image\/(jpeg|png|webp);base64,/.test(String(url))) continue;
+          const b = await (await fetch(url)).blob();
+          await transaction("readwrite", (st) => st.put(b, c)).catch(() => {});
+        }
+        journal = Array.isArray(s.journal)
+          ? s.journal.slice(0, 150).filter((j) => j && typeof j.text === "string") : [];
+        appliquerEtat(s.data);
+        log("a rechargé une sauvegarde");
+        saveState(); buildGantt(); buildAcc(); renderAll();
+      } }] });
   };
+  r.readAsText(fichier);
 }
 
-$("insSansAdresse").addEventListener("click", () => {
-  const nom = $("insNom").value.trim();
-  dialogue({
-    ton: "warn",
-    titre: "Un compte sans adresse, c'est un compte sans filet",
-    corps: `<p>Il ne tient qu'à <b>ce navigateur</b>. Si tu effaces les données du site,
-        changes d'appareil ou te déconnectes, le compte et son planning sont perdus —
-        il n'existe aucun moyen de les retrouver, pas même pour nous.</p>
-      <p>Le planning, le minuteur, les fiches et les blocages fonctionnent normalement.
-        Le fil, les messages et les contacts demandent une adresse.</p>
-      <p class="petit">Tu pourras en poser une plus tard, dans « Moi », sans rien perdre.</p>`,
-    actions: [
-      { texte: "Créer sans adresse", pri: true, faire: () => creerSansAdresse(nom) },
-      { texte: "Revenir" },
-    ],
-  });
-});
-
-$("formInscription").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const email = $("insEmail").value.trim().toLowerCase();
-  const mdp = $("insMdp").value;
-  const nom = $("insNom").value.trim();
-  if (nom.length < 2) return messageAuth("Choisis un nom affiché d'au moins 2 caractères.");
-  if (mdp.length < 8) return messageAuth("Le mot de passe doit faire au moins 8 caractères.");
-  if (!$("insCgu").checked) return messageAuth("Il faut accepter les conditions pour créer un compte.");
-  if (!(await verifierNom())) return messageAuth("Ce nom est déjà pris. Choisis-en un autre.");
-  messageAuth("Création du compte…", true);
-  const { data, error } = await sb.auth.signUp({
-    email, password: mdp,
-    options: {
-      // Le déclencheur en base lit ces champs : nom dédoublonné, profil privé,
-      // et la date d'acceptation des conditions, qui doit pouvoir être prouvée.
-      data: { nom, public: false, conditions: "1", modele: modeleChoisi },
-      emailRedirectTo: location.origin,
-    },
-  });
-  if (error) {
-    const dup = /already|exists|registered/i.test(error.message);
-    return messageAuth(dup
-      ? "Un compte existe déjà avec cette adresse. Utilise « Connexion », ou « Mot de passe oublié »."
-      : error.message);
-  }
-  await versConnexion(data.session
-    ? "Compte créé. Connecte-toi pour ouvrir ton planning."
-    : "Compte créé. Ouvre le courriel de confirmation, puis connecte-toi ici.", email);
-});
-
-$("formConnexion").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  messageAuth("Connexion…", true);
-  const { error } = await sb.auth.signInWithPassword({
-    email: $("conEmail").value.trim().toLowerCase(),
-    password: $("conMdp").value,
-  });
-  if (error) return messageAuth("Adresse ou mot de passe incorrect.");
-  messageAuth("");
-  await lancer();
-});
-
-$("formOubli").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const email = $("oubEmail").value.trim().toLowerCase();
-  messageAuth("Envoi…", true);
-  const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: location.origin + "?reinit=1",
-  });
-  // On ne révèle pas si l'adresse existe : même réponse dans les deux cas.
-  messageAuth(error && !/rate/i.test(error.message)
-    ? error.message
-    : "Si un compte utilise cette adresse, un lien de réinitialisation vient de partir.", !error);
-});
-
-/* retour depuis le lien de réinitialisation */
-sb.auth.onAuthStateChange(async (evt) => {
-  if (evt === "PASSWORD_RECOVERY") {
-    ecranCompte("nouveau", "Choisis ton nouveau mot de passe. Tu seras ensuite ramené à la connexion.");
-  }
-});
-$("formNouveau").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const mdp = $("nouMdp").value;
-  if (mdp.length < 8) return messageAuth("Le mot de passe doit faire au moins 8 caractères.");
-  if (mdp !== $("nouMdp2").value) return messageAuth("Les deux mots de passe ne correspondent pas.");
-  const { error } = await sb.auth.updateUser({ password: mdp });
-  if (error) return messageAuth(error.message);
-  await versConnexion("Mot de passe changé. Connecte-toi avec le nouveau.");
-});
-
-
-/* ═════════════════════════════════════════════════════════════════════
-   LE RÉSEAU
-   Un planning qui ne parle qu'à soi-même n'a pas besoin de réseau. Celui-ci
-   sert à une chose : savoir quand les gens qu'on connaît sont libres, et le
-   leur dire. Tout le reste — le fil, les conversations, le classement — tourne
-   autour de ça.
-
-   Aucune règle d'accès n'est décidée ici. Les fonctions appelées plus bas sont
-   des fonctions de la base : c'est elle qui refuse, l'interface ne fait que
-   montrer le refus.
-   ═════════════════════════════════════════════════════════════════════ */
-
-const AVATARS = "avatars", PHOTOS = "photos";
-let posts = [], fils = [], communs = [], rangs = [];
-let convFil = null, convAutre = null, titreConv = "", titreFiche = "";
-let brouillon = { blob: null, apercu: null, portee: "abonnes" };
-let modeVisite = false;
-let signees = {};          // chemin d'image → adresse signée, valable une heure
-
-const urlAvatar = (c) => (c ? sb.stockage.urlPublique(AVATARS, c) : null);
-
-/** La vignette de quelqu'un : sa photo, ou ses initiales. */
-function vignette(p, taille = "") {
-  const u = urlAvatar(p && p.avatar);
-  const cls = `av ${taille}`.trim();
-  return u
-    ? `<span class="${cls}"><img src="${esc(u)}" alt="" loading="lazy" width="72" height="72"></span>`
-    : `<span class="${cls}">${initiales(p && p.nom)}</span>`;
-}
-
-function tempsRelatif(quand) {
-  const d = (Date.now() - new Date(quand).getTime()) / 1000;
-  if (d < 60) return "à l'instant";
-  if (d < 3600) return Math.floor(d / 60) + " min";
-  if (d < 86400) return Math.floor(d / 3600) + " h";
-  if (d < 604800) return Math.floor(d / 86400) + " j";
-  return new Date(quand).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-}
-
-/** L'heure qu'il est chez quelqu'un d'autre. Une sœur au Vietnam n'est pas
-    « injoignable » : elle est simplement à sept heures d'ici. */
-function heureChez(fuseau) {
-  try {
-    return new Intl.DateTimeFormat("fr-FR", { timeZone: fuseau || "Europe/Paris",
-      hour: "2-digit", minute: "2-digit" }).format(new Date());
-  } catch { return null; }
-}
-function decalage(fuseau) {
-  try {
-    const p = (tz) => {
-      const f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric",
-        minute: "numeric", hour12: false, day: "numeric" });
-      const o = Object.fromEntries(f.formatToParts(new Date()).map((x) => [x.type, Number(x.value)]));
-      return o.day * 1440 + o.hour * 60 + o.minute;
-    };
-    let d = p(fuseau) - p(TZ);
-    if (d > 720) d -= 1440; else if (d < -720) d += 1440;
-    const h = Math.round(d / 60);
-    return h === 0 ? "même heure qu'ici" : `${h > 0 ? "+" : ""}${h} h par rapport à toi`;
-  } catch { return null; }
-}
-
-/* ── Le bouton de compte, en haut à droite ─────────────────────────── */
-function majBoutonCompte() {
-  const z = $("quiSuisJe");
-  if (!z) return;
-  if (!session) {
-    z.innerHTML = `<button class="btn" data-porte="connexion">Se connecter</button>`;
-    return;
-  }
-  z.innerHTML = `<button class="av" id="btnMoi" aria-label="Mon profil">${
-    moi && moi.avatar
-      ? `<img src="${esc(urlAvatar(moi.avatar))}" alt="" width="36" height="36">`
-      : initiales(moi && moi.nom)}</button>`;
-  $("btnMoi").onclick = () => aller("moi");
-}
-
-/** Une attente à l'intérieur de l'application : même figure, même langage. */
-function enAttente(texte) {
-  return `<div class="vide" role="status">
-    <svg class="releve mini" viewBox="0 0 100 100" aria-hidden="true">
-      <line class="ref" x1="44" y1="10" x2="44" y2="90"/>
-      <g class="tourne"><g class="chute"><path class="bras" d="M13 81 L44 68 L88 27"/></g></g>
-      <circle class="pivot" cx="44" cy="68" r="9.5"/>
-    </svg><span>${esc(texte)}</span></div>`;
-}
-
-/* ═════════ LE FIL ═════════ */
-
-async function chargerFil() {
-  const box = $("posts");
-  if (!box) return;
-  if (!box.dataset.pret) box.innerHTML = enAttente("On regarde ce qui est nouveau…");
-  renderEcrire();
-  const { data, error } = await sb.rpc("fil_actualite", { taille: 25 });
-  posts = Array.isArray(data) ? data : [];
-  if (error) { box.innerHTML = `<div class="vide">Le fil n'a pas pu être chargé.</div>`; return; }
-  await signerImages(posts);
-  box.dataset.pret = "1";
-  renderFil();
-  if (posts.length) chargerCommentaires(posts.map((p) => p.id));
-}
-
-/** Une image de publication n'est jamais publique : on demande à la base une
-    adresse signée, et elle ne la donne qu'à qui a le droit de voir. */
-async function signerImages(liste) {
-  const manquants = liste.map((p) => p.image).filter((c) => c && !signees[c]);
-  if (!manquants.length || !session) return;
-  Object.assign(signees, await sb.stockage.signer(PHOTOS, [...new Set(manquants)], 3600));
-}
-
-let commentaires = {};
-async function chargerCommentaires(ids) {
-  const { data } = await sb.from("ciel_commentaires")
-    .select("id,post,auteur,texte,cree_le").in("post", ids).order("cree_le");
-  commentaires = {};
-  (data || []).forEach((c) => (commentaires[c.post] = commentaires[c.post] || []).push(c));
-  renderFil();
-}
-
-function renderEcrire() {
-  const z = $("ecrire");
-  if (!z) return;
-  if (!session) {
-    z.innerHTML = `<div class="col"><p class="aide">Crée un compte pour publier,
-      commenter et suivre des gens.</p>
-      <button class="btn pri" data-porte="inscription">Créer un compte</button></div>`;
-    return;
-  }
-  z.innerHTML = `${vignette(moi)}
-    <div class="col">
-      <label class="horsvue" for="postTexte">Ce que tu publies</label>
-      <textarea id="postTexte" maxlength="600" rows="2"
-        placeholder="Quoi de neuf dans ton planning ?"></textarea>
-      ${brouillon.apercu ? `<div class="apercuimg"><img src="${esc(brouillon.apercu)}" alt="">
-        <button class="btn mini danger" id="postSansImage">Retirer</button></div>` : ""}
-      <div class="outils">
-        <input type="file" id="postFichier" accept="image/*" class="horsvue">
-        <button class="btn" id="postImage">Photo</button>
-        <select id="postPortee" aria-label="Qui peut voir">
-          <option value="abonnes"${brouillon.portee === "abonnes" ? " selected" : ""}>Mes abonnés</option>
-          <option value="public"${brouillon.portee === "public" ? " selected" : ""}>Tout le monde</option>
-        </select>
-        <button class="btn pri" id="postEnvoyer">Publier</button>
-      </div>
-    </div>`;
-  $("postImage").onclick = () => $("postFichier").click();
-  $("postFichier").onchange = async (e) => {
+function renderSauvegarde() {
+  const box = $("sauvegardeBox"); if (!box) return;
+  let derniere = null;
+  try { derniere = localStorage.getItem("repere.derniereSauvegarde"); } catch {}
+  const jours = derniere ? Math.floor((NOW - Date.parse(derniere)) / DAY) : null;
+  box.innerHTML = `
+    <p>Ton planning est enregistré <b>dans ce navigateur</b>, et nulle part ailleurs.
+      Effacer les données du site, ou changer de téléphone, l'efface aussi.</p>
+    <p class="${jours === null || jours > 7 ? "late" : "muted"}">${derniere
+      ? `Dernière sauvegarde : ${esc(fmtDL(Date.parse(derniere)))}${jours > 7 ? ` — il y a ${plural(jours, "jour")}` : ""}.`
+      : "Aucune sauvegarde dans un fichier pour l'instant."}</p>
+    <div class="mact">
+      <button class="btn pri" id="sauverFichier">Sauvegarder dans un fichier</button>
+      <button class="btn" id="chargerFichier">Recharger une sauvegarde</button>
+      <input type="file" id="fichierSauvegarde" accept="application/json,.json" hidden>
+    </div>
+    <p class="petit">Pour passer d'un appareil à l'autre : sauvegarde sur le premier,
+      recharge sur le second. Le fichier contient aussi les photos de tes fiches.</p>`;
+  $("sauverFichier").onclick = () => exporterSauvegarde().catch((e) =>
+    dialogue({ titre: "La sauvegarde a échoué", corps: `<p>${esc(String(e.message || e))}</p>` }));
+  $("chargerFichier").onclick = () => $("fichierSauvegarde").click();
+  $("fichierSauvegarde").onchange = (e) => {
     const f = e.target.files && e.target.files[0];
     e.target.value = "";
-    if (!f) return;
-    try {
-      const coupe = await recadrerImage(f, { ratio: 1, cote: 1440, qualite: 0.84,
-        choixRatio: true, titre: "Cadre ta photo" });
-      if (!coupe) return;
-      brouillon.blob = coupe;
-      if (brouillon.apercu) URL.revokeObjectURL(brouillon.apercu);
-      brouillon.apercu = URL.createObjectURL(brouillon.blob);
-      renderEcrire();
-    } catch (err) { dialogue({ titre: "Image refusée", corps: `<p>${esc(err.message)}</p>` }); }
+    if (f) importerSauvegarde(f);
   };
-  const sans = $("postSansImage");
-  if (sans) sans.onclick = () => {
-    if (brouillon.apercu) URL.revokeObjectURL(brouillon.apercu);
-    brouillon = { blob: null, apercu: null, portee: brouillon.portee };
-    renderEcrire();
-  };
-  $("postPortee").onchange = (e) => (brouillon.portee = e.target.value);
-  $("postEnvoyer").onclick = publier;
-}
-
-async function publier() {
-  const t = $("postTexte"), b = $("postEnvoyer");
-  const texte = t.value.trim();
-  if (!texte && !brouillon.blob) return;
-  b.disabled = true; b.textContent = "…";
-  try {
-    let chemin = null;
-    if (brouillon.blob) chemin = await deposerImage(sb, PHOTOS, session.user.id, brouillon.blob);
-    const { error } = await sb.from("ciel_posts")
-      .insert({ auteur: session.user.id, texte: texte || null, image: chemin, portee: brouillon.portee });
-    if (error) throw new Error(error.message);
-    t.value = "";
-    if (brouillon.apercu) URL.revokeObjectURL(brouillon.apercu);
-    brouillon = { blob: null, apercu: null, portee: brouillon.portee };
-    await chargerFil();
-  } catch (err) {
-    dialogue({ titre: "Publication refusée", corps: `<p>${esc(err.message)}</p>` });
-  } finally { b.disabled = false; b.textContent = "Publier"; }
-}
-
-const COEUR = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7.2-4.6-9.1-8.5C1.3 8 3.2 4.5 6.6 4.5c2 0 3.4 1.1 4.4 2.4h2c1-1.3 2.4-2.4 4.4-2.4 3.4 0 5.3 3.5 3.7 7C19.2 15.4 12 20 12 20Z"/></svg>`;
-const BULLE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 12c0 3.9-3.8 7.1-8.5 7.1a10 10 0 0 1-2.4-.3l-4.6 1.7 1.4-3.7A6.8 6.8 0 0 1 3.5 12c0-3.9 3.8-7.1 8.5-7.1s8.5 3.2 8.5 7.1Z"/></svg>`;
-
-function renderFil() {
-  const box = $("posts");
-  if (!box) return;
-  if (!posts.length) {
-    box.innerHTML = `<div class="vide">${session
-      ? "Rien pour l'instant. Publie quelque chose, ou abonne-toi à quelqu'un."
-      : "Rien de public pour l'instant."}</div>`;
-    return;
-  }
-  box.innerHTML = posts.map((p) => {
-    const img = p.image && signees[p.image];
-    const coms = commentaires[p.id] || [];
-    const aMoi = session && p.auteur === session.user.id;
-    return `<article class="post">
-      <div class="tete">
-        ${vignette(p, "pt")}
-        <span class="qui"><b>${esc(p.nom || "Compte")}</b><em>@${esc(p.slug || "?")}</em></span>
-        ${p.portee === "public" ? `<span class="portee">public</span>` : ""}
-        <span class="quand">${tempsRelatif(p.cree_le)}</span>
-      </div>
-      ${p.texte ? `<div class="corps">${esc(p.texte)}</div>` : ""}
-      ${img ? `<img class="cliche" src="${esc(img)}" alt="Image publiée par ${esc(p.nom || "")}" loading="lazy">` : ""}
-      <div class="actions">
-        <button class="bta${p.aime ? " actif" : ""}" data-aime="${esc(p.id)}"
-          aria-pressed="${p.aime ? "true" : "false"}">${COEUR}<span>${p.jaime || ""}</span></button>
-        <button class="bta" data-com="${esc(p.id)}">${BULLE}<span>${p.commentaires || ""}</span></button>
-        ${aMoi ? `<button class="bta fin" data-suppost="${esc(p.id)}">Supprimer</button>`
-               : session ? `<button class="bta fin" data-signaler="publication:${esc(p.id)}">Signaler</button>` : ""}
-      </div>
-      ${coms.length || session ? `<div class="fils" data-fils="${esc(p.id)}">
-        ${coms.map((c) => `<div class="com">
-          <b>${esc(nomDe(c.auteur, p))}</b>
-          <span class="txt">${esc(c.texte)}</span>
-          ${session && (c.auteur === session.user.id || aMoi)
-            ? `<button class="btn mini danger sup" data-supcom="${esc(c.id)}">✕</button>` : ""}
-        </div>`).join("")}
-        ${session ? `<form class="repondre" data-post="${esc(p.id)}">
-          <label class="horsvue" for="c${esc(p.id)}">Commenter</label>
-          <input id="c${esc(p.id)}" maxlength="400" placeholder="Commenter…" autocomplete="off">
-          <button class="btn" type="submit">Envoyer</button></form>` : ""}
-      </div>` : ""}
-    </article>`;
-  }).join("");
-}
-
-/** Le nom d'un auteur de commentaire, pris là où on le connaît déjà. */
-function nomDe(id, post) {
-  if (session && id === session.user.id) return moi ? moi.nom : "Moi";
-  if (post && post.auteur === id) return post.nom;
-  const a = [...abonnements, ...abonnes, ...annuaire]
-    .find((x) => x.qui === id || x.id === id);
-  return a ? a.nom : "Quelqu'un";
-}
-
-document.addEventListener("click", async (e) => {
-  const j = e.target.closest("[data-aime]");
-  if (j) {
-    if (!session) return ecranCompte("inscription", "Crée un compte pour réagir.");
-    const p = posts.find((x) => x.id === j.dataset.aime);
-    if (!p) return;
-    p.aime = !p.aime;
-    p.jaime = Number(p.jaime || 0) + (p.aime ? 1 : -1);
-    renderFil();
-    const q = { post: p.id, qui: session.user.id };
-    const { error } = p.aime
-      ? await sb.from("ciel_jaime").insert(q)
-      : await sb.from("ciel_jaime").delete().eq("post", p.id).eq("qui", session.user.id);
-    if (error) { p.aime = !p.aime; p.jaime += p.aime ? 1 : -1; renderFil(); }
-    return;
-  }
-  const c = e.target.closest("[data-com]");
-  if (c) { const z = document.querySelector(`[data-fils="${c.dataset.com}"] input`); if (z) z.focus(); return; }
-
-  const d = e.target.closest("[data-suppost]");
-  if (d) {
-    return dialogue({ ton: "warn", titre: "Supprimer cette publication ?",
-      corps: `<p>Elle disparaît pour tout le monde, avec ses commentaires.</p>`,
-      actions: [{ texte: "Annuler", pri: true }, { texte: "Supprimer", faire: async () => {
-        await sb.from("ciel_posts").delete().eq("id", d.dataset.suppost);
-        await chargerFil();
-      } }] });
-  }
-  const sc = e.target.closest("[data-supcom]");
-  if (sc) {
-    await sb.from("ciel_commentaires").delete().eq("id", sc.dataset.supcom);
-    return chargerFil();
-  }
-  const sg = e.target.closest("[data-signaler]");
-  if (sg) return signaler(sg.dataset.signaler);
-});
-
-document.addEventListener("submit", async (e) => {
-  const f = e.target.closest("form.repondre");
-  if (!f) return;
-  e.preventDefault();
-  const inp = f.querySelector("input"), v = inp.value.trim();
-  if (!v || !session) return;
-  inp.disabled = true;
-  const { error } = await sb.from("ciel_commentaires")
-    .insert({ post: f.dataset.post, auteur: session.user.id, texte: v });
-  inp.disabled = false;
-  if (error) return setSync("warn", "commentaire refusé");
-  inp.value = "";
-  await chargerFil();
-});
-
-/* ── Signaler ──────────────────────────────────────────────────────── */
-function signaler(cible) {
-  const [objet, id] = cible.split(":");
-  dialogue({ ton: "warn", titre: "Signaler ce contenu",
-    corps: `<p>Dis en une phrase ce qui pose problème. Le signalement part à
-      l'éditeur du service ; il n'est pas visible par la personne concernée.</p>
-      <div class="champ"><label class="fl" for="sgMotif">Ce qui pose problème</label>
-        <input id="sgMotif" maxlength="500" placeholder="Contenu haineux, harcèlement, image volée…"></div>`,
-    actions: [{ texte: "Annuler", pri: true }, { texte: "Signaler", faire: async () => {
-      const m = ($("sgMotif") || {}).value || "";
-      if (m.trim().length < 3) return;
-      const { error } = await sb.from("ciel_signalements")
-        .insert({ auteur: session.user.id, objet, objet_id: id, motif: m.trim() });
-      setSync(error ? "warn" : "ok", error ? "signalement refusé" : "signalement envoyé");
-    } }] });
-}
-
-async function bloquer(qui, nom) {
-  dialogue({ ton: "warn", titre: `Bloquer ${nom} ?`,
-    corps: `<p>Vous ne verrez plus rien l'un de l'autre : ni planning, ni publications,
-      ni messages. Tu peux revenir dessus dans <b>Moi → Compte</b>.</p>`,
-    actions: [{ texte: "Annuler", pri: true }, { texte: "Bloquer", faire: async () => {
-      await sb.from("ciel_blocages").insert({ qui: session.user.id, cible: qui });
-      await chargerSocial();
-      aller("contacts");
-    } }] });
-}
-
-/* ═════════ CE QUI A BOUGÉ ═════════
-   Une application qu'il faut ouvrir pour savoir qu'il s'y passe quelque chose
-   ne se rouvre pas. La cloche rassemble ce qui attend une réponse et ce qui
-   mérite un coup d'œil — et la pastille ne compte que le premier : une pastille
-   qui ne s'éteint jamais cesse d'être lue. */
-
-let nouveautes = [], veilles = new Set();
-
-const ICONES = {
-  message: `<path d="M20.5 12c0 3.9-3.8 7.1-8.5 7.1a10 10 0 0 1-2.4-.3l-4.6 1.7 1.4-3.7A6.8 6.8 0 0 1 3.5 12c0-3.9 3.8-7.1 8.5-7.1s8.5 3.2 8.5 7.1Z"/>`,
-  abonnement: `<circle cx="9.2" cy="8.4" r="3.3"/><path d="M3 19.5a6.2 6.2 0 0 1 12.4 0"/><path d="M18.5 8v6M21.5 11h-6"/>`,
-  creneau: `<rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8.5 3.5v4M15.5 3.5v4"/>`,
-  reponse: `<path d="M4 12.5 9.5 18 20 6.5"/>`,
-  publication: `<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="m3.6 15.5 4.6-3.8 3.6 2.7 3-2.2 5.6 4.6"/><circle cx="9" cy="9.2" r="1.5"/>`,
-  dispo: `<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.3l3.4 2"/>`,
-};
-
-async function chargerNouveautes({ silencieux = true } = {}) {
-  if (!session) { nouveautes = []; return majCloche(); }
-  const { data } = await sb.rpc("nouveautes");
-  const avant = compteAttente();
-  nouveautes = Array.isArray(data) ? data : [];
-  majCloche(!silencieux || compteAttente() > avant);
-  if (vueCourante === "nouveautes") renderNouveautes();
-}
-
-const compteAttente = () =>
-  nouveautes.filter((x) => x.attend).reduce((a, x) => a + Number(x.nombre || 1), 0);
-
-function majCloche(sonner = false) {
-  const c = $("cloche"), p = $("pastNouv");
-  if (!c || !p) return;
-  c.hidden = !session;
-  const n = compteAttente();
-  p.hidden = n === 0;
-  p.textContent = n > 9 ? "9+" : String(n);
-  if (sonner && n && !SOBRE.matches) {
-    c.classList.remove("sonne"); void c.offsetWidth; c.classList.add("sonne");
-  }
-}
-
-/* ═════════ SONNERIE ═════════
-   Les notifications poussées : ce qui fait sonner le téléphone même application
-   fermée. Trois refus légitimes qu'il faut savoir dire sans jargon — le
-   navigateur ne sait pas faire, la permission a été refusée une fois pour
-   toutes, ou l'application n'est pas installée (l'exigence d'Apple).
-
-   Rien n'est demandé à l'ouverture : une demande de permission qui tombe sans
-   qu'on l'ait sollicitée se refuse par réflexe, et un refus ne se reprend pas. */
-
-const PUSH_POSSIBLE = "serviceWorker" in navigator && "PushManager" in window
-                      && "Notification" in window;
-// Sur iPhone, la poussée n'existe que si l'application est posée sur l'écran d'accueil.
-const INSTALLEE = matchMedia("(display-mode: standalone)").matches
-                  || navigator.standalone === true;
-const IOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-
-const enOctets = (b64) => {
-  const p = "=".repeat((4 - (b64.length % 4)) % 4);
-  const brut = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from(brut, (c) => c.charCodeAt(0));
-};
-
-let sonnerieEtat = { abonne: false, occupe: false, souci: null };
-
-/** L'endpoint est unique en base : réabonner le même téléphone met à jour sa
- *  ligne au lieu de rendre un conflit. */
-function enregistrerAppareil(ab) {
-  const j = ab.toJSON();
-  return sb.from("ciel_push").upsert({
-    user_id: session.user.id, endpoint: j.endpoint,
-    p256dh: j.keys.p256dh, auth: j.keys.auth,
-    appareil: (navigator.userAgentData?.platform || navigator.platform || "").slice(0, 60),
-    vu_le: new Date().toISOString(),
-  });
-}
-
-async function abonnementCourant() {
-  if (!PUSH_POSSIBLE) return null;
-  try {
-    const reg = await navigator.serviceWorker.getRegistration();
-    return reg ? await reg.pushManager.getSubscription() : null;
-  } catch { return null; }
-}
-
-async function activerSonnerie() {
-  sonnerieEtat.occupe = true; sonnerieEtat.souci = null; renderSonnerie();
-  try {
-    const perm = await Notification.requestPermission();
-    if (perm !== "granted") {
-      sonnerieEtat.souci = perm === "denied"
-        ? "Ton navigateur a retenu un refus. Il faut le lever dans ses réglages de site — je ne peux pas le faire d'ici."
-        : "Permission non accordée.";
-      return;
-    }
-    const r = await fetch("/api/vapid");
-    if (!r.ok) throw new Error("clé publique indisponible");
-    const { cle } = await r.json();
-    const reg = await navigator.serviceWorker.ready;
-    const ab = await reg.pushManager.subscribe({
-      userVisibleOnly: true, applicationServerKey: enOctets(cle),
-    });
-    const { error } = await enregistrerAppareil(ab);
-    if (error) throw error;
-    sonnerieEtat.abonne = true;
-    log("a activé les notifications sur un appareil");
-  } catch (e) {
-    sonnerieEtat.souci = "Impossible d'activer : " + String(e.message || e);
-  } finally {
-    sonnerieEtat.occupe = false; renderSonnerie();
-  }
-}
-
-async function couperSonnerie() {
-  sonnerieEtat.occupe = true; renderSonnerie();
-  try {
-    const ab = await abonnementCourant();
-    if (ab) {
-      await sb.from("ciel_push").delete().eq("endpoint", ab.endpoint);
-      await ab.unsubscribe();
-    }
-    sonnerieEtat.abonne = false;
-    log("a coupé les notifications sur un appareil");
-  } catch (e) {
-    sonnerieEtat.souci = "Impossible de couper : " + String(e.message || e);
-  } finally {
-    sonnerieEtat.occupe = false; renderSonnerie();
-  }
-}
-
-function renderSonnerie() {
-  const box = $("sonnerie");
-  if (!box) return;
-  if (!canEdit) { box.innerHTML = ""; return; }
-
-  const dire = (classe, titre, detail, action = "") =>
-    box.innerHTML = `<div class="sonnerie ${classe}"><div class="cl">
-      <div class="t">${titre}</div><div class="d">${detail}</div></div>${action}</div>`;
-
-  if (!PUSH_POSSIBLE)
-    return dire("", "Notifications", "Ce navigateur ne sait pas les recevoir. La cloche, elle, marche partout.");
-  if (IOS && !INSTALLEE)
-    return dire("", "Notifications", `Sur iPhone, il faut d'abord poser Repère sur ton écran d'accueil.
-      <a href="installer.html">Comment faire</a>.`);
-  if (Notification.permission === "denied")
-    return dire("refus", "Notifications bloquées",
-      `Ton navigateur a retenu un refus pour ce site. Lui seul peut le lever, dans ses réglages —
-       je n'ai pas la main dessus.`);
-
-  const a = sonnerieEtat.abonne;
-  dire(a ? "active" : "",
-    a ? "Notifications activées" : "Être prévenu, même appli fermée",
-    a ? `Cet appareil sonnera pour un message, une demande, un moment proposé et sa réponse,
-         et pour les personnes que tu surveilles. Jamais pour les publications du fil.`
-      : `Un message, une demande, un moment proposé ou sa réponse. Rien d'autre —
-         et tu peux couper d'un geste.` +
-        (sonnerieEtat.souci ? ` <b>${esc(sonnerieEtat.souci)}</b>` : ""),
-    `<label class="bascule btn-zone"><input type="checkbox" id="basculeSonnerie"
-        ${a ? "checked" : ""}${sonnerieEtat.occupe ? " disabled" : ""}>
-      <span class="piste"></span></label>`);
-
-  const b = $("basculeSonnerie");
-  if (b) b.onchange = () => (b.checked ? activerSonnerie() : couperSonnerie());
-}
-
-let majEnCours = null;
-/** Ouvrir deux fois le panneau lançait deux vérifications en parallèle, qui
- *  concluaient toutes deux « absent de la base » et enregistraient chacune. */
-function majSonnerie() {
-  if (!majEnCours) majEnCours = majSonnerieVraiment().finally(() => (majEnCours = null));
-  return majEnCours;
-}
-
-async function majSonnerieVraiment() {
-  if (!PUSH_POSSIBLE || !canEdit) return renderSonnerie();
-  const ab = await abonnementCourant();
-  sonnerieEtat.abonne = Boolean(ab) && Notification.permission === "granted";
-  // Un abonnement que le navigateur garde mais que la base ignore ne sonnera
-  // jamais : on le recolle plutôt que de mentir sur l'interrupteur.
-  if (ab && sonnerieEtat.abonne) {
-    const { data } = await sb.from("ciel_push").select("endpoint").eq("endpoint", ab.endpoint);
-    if (!data || !data.length) await enregistrerAppareil(ab);
-  }
-  renderSonnerie();
-}
-
-async function ouvrirNouveautes() {
-  await chargerNouveautes();
-  renderNouveautes();
-  majSonnerie();
-  // Marquer comme vu après l'affichage : ce qu'on vient de voir ne doit pas
-  // resurgir, mais ce qui attend encore une réponse reste dans la liste.
-  await sb.rpc("marquer_nouveautes_vues");
-}
-
-function renderNouveautes() {
-  const box = $("nouveautes");
-  if (!box) return;
-  if (!nouveautes.length) {
-    box.innerHTML = `<div class="vide">Rien de neuf. Tout est à jour.</div>`;
-    return;
-  }
-  const bloc = (titre, l) => l.length ? `<div class="groupenouv">${titre}</div>` + l.map((x) => `
-    <button class="nouv ${x.attend ? "attend" : esc(x.genre)}" data-nouv="${esc(x.ou || "")}">
-      ${x.avatar || x.nom ? vignette(x, "pt")
-        : `<span class="rond"><svg viewBox="0 0 24 24">${ICONES[x.genre] || ""}</svg></span>`}
-      <span class="qui">
-        <b>${x.nom ? esc(x.nom) : "Le fil"}${Number(x.nombre) > 1
-          ? ` <span class="pastille">${x.nombre}</span>` : ""}</b>
-        <em>${esc(x.texte || "")}</em></span>
-      <span class="quand">${x.quand ? tempsRelatif(x.quand) : ""}</span>
-    </button>`).join("") : "";
-  box.innerHTML =
-      bloc("Ça attend ta réponse", nouveautes.filter((x) => x.attend))
-    + bloc("Bon à savoir", nouveautes.filter((x) => !x.attend));
-}
-
-document.addEventListener("click", (e) => {
-  const c = e.target.closest("#cloche");
-  if (c) return aller("nouveautes");
-  const n = e.target.closest("[data-nouv]");
-  if (n && n.dataset.nouv) {
-    location.hash = n.dataset.nouv;
-    // L'adresse suffit : le routeur écoute déjà les changements de fragment.
-  }
-});
-
-/** « Préviens-moi quand il est libre » : une ligne par personne surveillée. */
-document.addEventListener("change", async (e) => {
-  const v = e.target.closest("[data-veille]");
-  if (!v || !session) return;
-  const cible = v.dataset.veille;
-  const { error } = v.checked
-    ? await sb.from("ciel_veilles").insert({ qui: session.user.id, cible })
-    : await sb.from("ciel_veilles").delete().eq("qui", session.user.id).eq("cible", cible);
-  if (error) { v.checked = !v.checked; return setSync("warn", "changement refusé"); }
-  if (v.checked) veilles.add(cible); else veilles.delete(cible);
-  setSync("ok", v.checked ? "tu seras prévenu" : "alerte retirée");
-  chargerNouveautes();
-});
-
-/* ═════════ CONVERSATIONS ═════════ */
-
-async function chargerFils() {
-  const box = $("fils");
-  if (!box) return;
-  if (!session) { box.innerHTML = `<div class="vide">Crée un compte pour écrire à quelqu'un.</div>`; return; }
-  if (!box.dataset.pret) box.innerHTML = enAttente("Chargement des conversations…");
-  const { data } = await sb.rpc("mes_fils");
-  fils = Array.isArray(data) ? data : [];
-  box.dataset.pret = "1";
-  majPastilleMsg();
-  box.innerHTML = fils.length ? fils.map((f) => `
-    <button class="filrang${f.non_lus > 0 ? " neuf" : ""}" data-fil="${esc(f.fil)}">
-      ${vignette(f, "pt")}
-      <span class="qui"><b>${esc(f.nom || "Compte")}</b>
-        <em>${f.de_moi ? "Toi : " : ""}${esc(String(f.dernier || "").split("\n")[0].slice(0, 70))}</em></span>
-      <span class="quand">${tempsRelatif(f.maj_le)}</span>
-    </button>`).join("")
-    : `<div class="vide">Aucune conversation.
-       <button class="btn" data-vers="contacts">Voir mes contacts</button></div>`;
-}
-
-function majPastilleMsg() {
-  const p = $("pastMsg");
-  if (!p) return;
-  const n = fils.reduce((a, f) => a + Number(f.non_lus || 0), 0);
-  p.hidden = n === 0;
-  p.textContent = n > 9 ? "9+" : String(n);
-}
-
-document.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-fil]");
-  if (b) aller("conv", b.dataset.fil);
-});
-
-async function ouvrirConversation(id) {
-  const box = $("convCorps");
-  if (!box || !session) return;
-  if (!fils.length) { const { data } = await sb.rpc("mes_fils"); fils = Array.isArray(data) ? data : []; }
-  convFil = id;
-  const f = fils.find((x) => x.fil === id);
-  convAutre = f ? f.autre : null;
-  titreConv = f ? f.nom : "Conversation";
-  $("titreProfil").textContent = titreConv;
-
-  const { data } = await sb.from("ciel_messages")
-    .select("id,auteur,texte,genre,cree_le").eq("fil", id).order("cree_le");
-  const l = Array.isArray(data) ? data : [];
-  box.innerHTML = l.map((m) => {
-    const moiM = m.auteur === session.user.id;
-    const lignes = String(m.texte).split("\n");
-    // Le contenu se colle sans espace : la bulle respecte les retours à la
-    // ligne du message, elle ne doit pas hériter de ceux du gabarit.
-    const corps = m.genre === "creneau"
-      ? `<span class="quoi">Proposition · ${esc(lignes[0])}</span>${esc(lignes.slice(1).join("\n").trim())}`
-      : esc(m.texte);
-    return `<div class="mot${moiM ? " moi" : ""}${m.genre === "creneau" ? " creneau" : ""}">`
-      + corps + `<span class="h">${hhmm(new Date(m.cree_le).getTime())}</span></div>`;
-  }).join("") || `<div class="vide">Rien encore.</div>`;
-  // On descend dans la liste, pas dans la page : c'est la liste qui défile.
-  // Après une image de plus, pour que la hauteur du panneau soit calculée :
-  // la poser trop tôt donne une hauteur d'avant et la liste reste en haut.
-  const enBas = () => { box.scrollTop = box.scrollHeight; };
-  enBas();
-  requestAnimationFrame(() => requestAnimationFrame(enBas));
-
-  const ouvert = f ? f.ouvert : false;
-  $("convPied").hidden = !ouvert;
-  $("convFerme").hidden = ouvert;
-  $("convFerme").innerHTML = ouvert ? "" :
-    `Tant que cette personne n'a pas répondu, tu ne peux rien envoyer d'autre.
-     C'est ce que remplace le motif de ta proposition.`;
-  if (f && f.non_lus) { await sb.rpc("marquer_lu", { fil_id: id }); f.non_lus = 0; majPastilleMsg(); }
-}
-
-$("convPied").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const inp = $("convTexte"), v = inp.value.trim();
-  if (!v || !convAutre) return;
-  inp.disabled = true;
-  const { data } = await sb.rpc("envoyer_message", { cible: convAutre, corps: v });
-  inp.disabled = false;
-  const r = String(data || "").replace(/"/g, "");
-  if (r !== "ok") {
-    return dialogue({ ton: "warn", titre: "Message non envoyé", corps: `<p>${esc({
-      ferme: "Cette personne ne reçoit pas de messages de ta part.",
-      bloque: "Cette conversation est bloquée.",
-      trop: "Trop de messages d'affilée. Attends quelques minutes.",
-      vide: "Message vide ou trop long.",
-    }[r] || "Envoi refusé.")}</p>` });
-  }
-  inp.value = "";
-  const { data: fs } = await sb.rpc("mes_fils");
-  fils = Array.isArray(fs) ? fs : [];
-  await ouvrirConversation(convFil);
-  inp.focus();
-});
-
-/* ═════════ LA FICHE DE QUELQU'UN ═════════ */
-
-async function ouvrirFiche(slug) {
-  const box = $("fichePersonne");
-  if (!box) return;
-  box.innerHTML = enAttente("Ouverture du profil…");
-  // La table masque entièrement un compte privé : quelqu'un qui vous suit
-  // devenait introuvable. La carte rend le strict nécessaire pour agir.
-  const { data: cartes } = await sb.rpc("carte_profil", { identifiant: slug });
-  const p = Array.isArray(cartes) ? cartes[0] : null;
-  if (!p) {
-    box.innerHTML = `<div class="vide">Aucun compte ne porte cet identifiant, ou il t'a bloqué.</div>`;
-    return;
-  }
-  titreFiche = p.nom;
-  $("titreProfil").textContent = p.nom;
-
-  const [{ data: pub }, { data: dsp }] = await Promise.all([
-    sb.rpc("publications_de", { qui: p.id, taille: 12 }),
-    p.ouvert
-      ? sb.from("ciel_dispos").select("jour,debut,fin").eq("user_id", p.id)
-          .gte("jour", isoJour(new Date(NOW))).order("jour").limit(12)
-      : Promise.resolve({ data: [] }),
-  ]);
-  const sien = Array.isArray(pub) ? pub : [];
-  await signerImages(sien);
-
-  const suit = p.lien === "aucun" ? null : p.lien;
-  // Sans fuseau connu (compte privé), pas d'horloge : afficher l'heure de Paris
-  // en la présentant comme la sienne serait un renseignement inventé.
-  const heure = p.fuseau ? heureChez(p.fuseau) : null;
-  const dec = p.fuseau ? decalage(p.fuseau) : null;
-  const soi = session && p.id === session.user.id;
-
-  box.innerHTML = `
-    <div class="fiche">
-      <div class="haut">
-        ${vignette(p, "gr")}
-        <div style="min-width:0;flex:1">
-          <h2>${esc(p.nom)}</h2>
-          <div class="arobase">@${esc(p.slug)}</div>
-          ${p.bio ? `<p class="bio">${esc(p.bio)}</p>` : ""}
-        </div>
-      </div>
-      <div class="traits">
-        ${heure ? `<span class="trait">Il est <b class="mono">${esc(heure)}</b> chez ${esc(p.nom)}${
-          dec ? ` · ${esc(dec)}` : ""}</span>` : ""}
-        ${p.region ? `<span class="trait">${esc(p.region)}</span>` : ""}
-        <span class="trait">${p.public ? "Planning public" : "Planning privé"}</span>
-        ${p.me_suit ? `<span class="trait">Te suit</span>` : ""}
-        <span class="trait">${{ tous: "Joignable par tous", abonnes: "Joignable par ses contacts",
-          personne: "Ne reçoit pas de demandes" }[p.joignable] || ""}</span>
-      </div>
-      ${soi ? "" : `<div class="actes">
-        ${suit === "accepte" ? `<button class="btn" data-desab="${esc(p.id)}">Se désabonner</button>`
-          : suit === "attente" ? `<span class="etiq att">demande envoyée</span>`
-          : `<button class="btn pri" data-sab="${esc(p.id)}">${
-              p.public ? "S'abonner" : "Demander à suivre"}</button>`}
-        ${p.joignable !== "personne"
-          ? `<button class="btn" data-moment="${esc(p.id)}">Proposer un moment</button>` : ""}
-        ${p.peut_ecrire ? `<button class="btn" data-ecrire="${esc(p.id)}">Message</button>` : ""}
-        ${p.ouvert
-          ? `<a class="btn" href="?profil=${encodeURIComponent(p.slug)}">Voir son planning</a>` : ""}
-      </div>
-      <details class="repli" style="margin-top:.7rem"><summary>Un problème avec ce profil ?</summary>
-        <div class="actes">
-          <button class="btn" data-signaler="profil:${esc(p.id)}">Signaler</button>
-          <button class="btn danger" data-bloquer="${esc(p.id)}|${esc(p.nom)}">Bloquer</button>
-        </div></details>`}
-    </div>
-
-    ${dsp && dsp.length ? `<div class="panel">
-      <div class="phead"><h2>Quand ${esc(p.nom)} est libre</h2></div>
-      ${grouperDispos(dsp)}</div>` : ""}
-
-    <div class="panel">
-      <div class="phead"><h2>Ses publications</h2></div>
-      ${!p.ouvert && !sien.length
-        ? `<div class="vide">Ce compte est privé. Demande à le suivre pour voir
-           son planning et ses publications.</div>`
-        : sien.length ? sien.map((x) => {
-        const img = x.image && signees[x.image];
-        return `<article class="post">
-          <div class="tete">${vignette(x, "pt")}
-            <span class="qui"><b>${esc(x.nom)}</b><em>@${esc(x.slug)}</em></span>
-            <span class="quand">${tempsRelatif(x.cree_le)}</span></div>
-          ${x.texte ? `<div class="corps">${esc(x.texte)}</div>` : ""}
-          ${img ? `<img class="cliche" src="${esc(img)}" alt="" loading="lazy">` : ""}
-        </article>`;
-      }).join("") : `<div class="vide">Rien de visible pour toi.</div>`}
-    </div>`;
-}
-
-function grouperDispos(l) {
-  const par = {};
-  l.forEach((d) => (par[d.jour] = par[d.jour] || []).push(d));
-  return Object.entries(par).slice(0, 7).map(([j, plages]) => `
-    <div class="commun"><div class="qui"><b>${esc(jourFr(j))}</b>
-      <em>${plages.map((x) => `${x.debut.slice(0, 5)} – ${x.fin.slice(0, 5)}`).join(" · ")}</em></div></div>`).join("");
-}
-
-/** Premier message à quelqu'un. Si la porte est fermée, la base le dit, et on
-    bascule sur la seule chose qu'on puisse encore adresser : une proposition. */
-function ecrireA(qui, nom) {
-  dialogue({ ton: "info", titre: `Écrire à ${nom}`,
-    corps: `<div class="champ"><label class="fl" for="msgTexte">Ton message</label>
-      <input id="msgTexte" maxlength="2000" placeholder="Salut, …"></div>`,
-    actions: [{ texte: "Annuler" }, { texte: "Envoyer", pri: true, faire: async () => {
-      const v = (($("msgTexte") || {}).value || "").trim();
-      if (!v) return;
-      const { data } = await sb.rpc("envoyer_message", { cible: qui, corps: v });
-      const r = String(data || "").replace(/"/g, "");
-      if (r === "ok") {
-        const { data: fs } = await sb.rpc("mes_fils");
-        fils = Array.isArray(fs) ? fs : [];
-        const f = fils.find((x) => x.autre === qui);
-        setSync("ok", "message envoyé");
-        return f ? aller("conv", f.fil) : aller("messages");
-      }
-      if (r === "ferme") {
-        return dialogue({ ton: "info", titre: `${nom} ne reçoit pas de messages`,
-          corps: `<p>Tu peux quand même lui proposer un moment : c'est la seule chose
-            qu'on adresse à quelqu'un qui ne vous lit pas, et le mot qui l'accompagne
-            dit qui tu es.</p>`,
-          actions: [{ texte: "Fermer" }, { texte: "Proposer un moment", pri: true,
-            faire: () => proposerMoment(qui, nom, true) }] });
-      }
-      dialogue({ ton: "warn", titre: "Message non envoyé", corps: `<p>${esc({
-        bloque: "Cette conversation est bloquée.",
-        trop: "Trop de messages d'affilée. Attends quelques minutes.",
-        vide: "Message vide ou trop long.",
-      }[r] || "Envoi refusé.")}</p>` });
-    } }] });
-}
-
-/* ── Proposer un moment ────────────────────────────────────────────── */
-function proposerMoment(qui, nom, obligeMotif) {
-  dialogue({ ton: "info", titre: `Proposer un moment à ${nom}`,
-    corps: `
-      <div class="rform">
-        <div class="champ"><label class="fl" for="pmJour">Quel jour</label>
-          <input id="pmJour" type="date" value="${isoJour(new Date(NOW + DAY))}"></div>
-        <div class="champ"><label class="fl" for="pmD">De</label>
-          <input id="pmD" type="time" value="14:00"></div>
-        <div class="champ"><label class="fl" for="pmF">À</label>
-          <input id="pmF" type="time" value="17:00"></div>
-        <div class="champ large"><label class="fl" for="pmT">Pour quoi faire</label>
-          <input id="pmT" maxlength="90" placeholder="Réviser les maths ensemble"></div>
-        <div class="champ large"><label class="fl" for="pmM">Un mot${
-          obligeMotif ? "" : ` <span class="opt-t">facultatif</span>`}</label>
-          <input id="pmM" maxlength="500" placeholder="${obligeMotif
-            ? "Dis qui tu es et pourquoi tu écris" : "Chez moi ou à la bibli, comme tu veux"}"></div>
-      </div>
-      ${obligeMotif ? `<p class="aide">Cette personne ne reçoit pas de messages de ta part.
-        Ce mot est le seul que tu peux lui adresser : il part avec la proposition.</p>` : ""}`,
-    actions: [{ texte: "Annuler" }, { texte: "Envoyer", pri: true, faire: async () => {
-      const v = (id) => ($(id) || {}).value || "";
-      const { data } = await sb.rpc("proposer_creneau", {
-        hote_id: qui, jour_d: v("pmJour"), debut_h: v("pmD"), fin_h: v("pmF"),
-        titre_t: v("pmT"), motif_t: v("pmM"),
-      });
-      const r = String(data || "").replace(/"/g, "");
-      if (r === "attente" || r === "accepte") {
-        await chargerSocial();
-        setSync("ok", r === "accepte" ? "moment accepté d'office" : "proposition envoyée");
-        return aller("messages");
-      }
-      dialogue({ ton: "warn", titre: "Proposition refusée", corps: `<p>${esc({
-        motif: "Il faut écrire un mot : c'est ce qui remplace la présentation.",
-        ferme: "Cette personne ne reçoit aucune proposition.",
-        horaires: "L'heure de fin doit venir après celle de début.",
-        passe: "Ce jour est déjà passé.",
-        titre: "Dis pour quoi faire.",
-        trop: "Tu as déjà des propositions en attente chez cette personne.",
-        bloque: "Cette personne est bloquée.",
-      }[r] || "Envoi refusé.")}</p>` });
-    } }] });
-}
-
-document.addEventListener("click", async (e) => {
-  const m = e.target.closest("[data-moment]");
-  if (m) {
-    if (!session) return ecranCompte("inscription", "Crée un compte pour proposer un moment.");
-    const p = annuaireOuAbonnement(m.dataset.moment);
-    const libre = p && p.joignable === "tous";
-    const abonne = abonnements.some((a) => a.qui === m.dataset.moment && a.etat === "accepte");
-    return proposerMoment(m.dataset.moment, (p && p.nom) || "cette personne", !(libre || abonne));
-  }
-  const w = e.target.closest("[data-ecrire]");
-  if (w) {
-    if (!session) return ecranCompte("inscription", "Crée un compte pour écrire.");
-    const { data } = await sb.rpc("mes_fils");
-    fils = Array.isArray(data) ? data : [];
-    const f = fils.find((x) => x.autre === w.dataset.ecrire);
-    if (f) return aller("conv", f.fil);
-    // Pas de conversation ne veut pas dire pas le droit d'en ouvrir une :
-    // on proposait la seule porte de secours alors que la porte était ouverte.
-    const p = annuaireOuAbonnement(w.dataset.ecrire);
-    return ecrireA(w.dataset.ecrire, (p && p.nom) || "cette personne");
-  }
-  const db = e.target.closest("[data-debloquer]");
-  if (db) {
-    await sb.from("ciel_blocages").delete()
-      .eq("qui", session.user.id).eq("cible", db.dataset.debloquer);
-    await chargerSocial();
-    renderCompte();
-    return setSync("ok", "débloqué");
-  }
-  const bl = e.target.closest("[data-bloquer]");
-  if (bl) { const [qui, nom] = bl.dataset.bloquer.split("|"); return bloquer(qui, nom); }
-  const dv = e.target.closest("[data-vers]");
-  if (dv) return aller(dv.dataset.vers);
-  const fp = e.target.closest("[data-fiche]");
-  if (fp) { e.preventDefault(); aller("personne", fp.dataset.fiche); }
-});
-
-const annuaireOuAbonnement = (id) =>
-  annuaire.find((x) => x.id === id) || abonnements.find((x) => x.qui === id)
-  || abonnes.find((x) => x.qui === id) || null;
-
-/* ═════════ CLASSEMENT ═════════ */
-
-async function chargerClassement() {
-  const box = $("classement");
-  if (!box) return;
-  if (!session) { box.innerHTML = `<div class="vide">Crée un compte pour voir le classement.</div>`; return; }
-  const { data } = await sb.rpc("classement");
-  rangs = Array.isArray(data) ? data : [];
-  box.innerHTML = `
-    <p class="aide">Les heures validées cette semaine, par celles et ceux qui ont
-      choisi d'y figurer. Chacun déclare les siennes : c'est une émulation, pas une mesure.</p>
-    ${rangs.length ? rangs.map((r) => `
-      <div class="rang${r.moi ? " moi" : ""}${r.rang <= 3 ? " podium" : ""}">
-        <span class="n">${r.rang}</span>
-        ${vignette(r, "pt")}
-        <span class="qui"><b>${esc(r.nom)}</b><em>@${esc(r.slug)}${
-          r.region ? " · " + esc(r.region) : ""}</em></span>
-        <span class="h">${Number(r.heures).toFixed(1)} h</span>
-      </div>`).join("")
-    : `<div class="vide">Personne n'y figure encore.</div>`}
-    ${moi && !moi.au_classement
-      ? `<p class="aide">Tu n'y figures pas. Ça se règle dans <b>Moi → Profil</b>.</p>` : ""}`;
-}
-
-/* ═════════ MOMENTS COMMUNS ═════════ */
-
-async function chargerCommuns() {
-  const box = $("communs");
-  if (!box || !session) return;
-  const { data } = await sb.rpc("moments_communs");
-  communs = Array.isArray(data) ? data : [];
-  box.innerHTML = communs.length ? `
-    <p class="aide">Les heures où tu es libre en même temps qu'eux, d'ici une semaine.</p>` +
-    communs.map((c) => `
-      <div class="commun">
-        ${vignette(c, "pt")}
-        <div class="qui"><b>${esc(c.nom)}</b>
-          <em>${esc(jourFr(c.jour))} · ${c.debut.slice(0, 5)} – ${c.fin.slice(0, 5)}</em></div>
-        <button class="btn" data-moment="${esc(c.qui)}">Proposer</button>
-      </div>`).join("")
-    : `<div class="vide">Rien en commun pour l'instant — il faut que vous soyez
-       abonnés l'un à l'autre et que vos plannings se croisent.</div>`;
-}
-
-/* ═════════ CE QUE JE PUBLIE DE MOI ═════════
-   Deux choses, et rien d'autre : mes plages libres des quinze prochains jours,
-   et le total d'heures de la semaine si j'ai demandé à figurer au classement.
-   Jamais le contenu de mon planning. */
-
-async function publierDispos() {
-  if (!session || !canEdit || !plan) return;
-  // Un compte sans adresse ne publie ni créneaux ni heures : la base le refuse,
-  // et tenter quand même ferait une requête perdue à chaque enregistrement.
-  if (sansAdresse()) return;
-  const lignes = [];
-  const debut = minuitLocal(NOW);
-  for (let i = 0; i < 15; i++) {
-    const cle = isoJour(new Date(debut + i * DAY));
-    const j = plan.jours.get(cle);
-    if (!j) continue;
-    for (const [d, f] of (j.creneaux || [])) {
-      if (f - d < 60) continue;
-      lignes.push({ user_id: session.user.id, jour: cle,
-        debut: mmss(d), fin: mmss(f) });
-    }
-  }
-  await sb.from("ciel_dispos").delete().eq("user_id", session.user.id);
-  if (lignes.length) await sb.from("ciel_dispos").insert(lignes);
-
-  const lundi = new Date(NOW);
-  lundi.setDate(lundi.getDate() - ((lundi.getDay() + 6) % 7));
-  let h = 0;
-  for (let i = 0; i < 7; i++) h += heuresFaitesLe(isoJour(new Date(lundi.getTime() + i * DAY)));
-  await sb.from("ciel_scores").upsert({ user_id: session.user.id,
-    semaine: isoJour(lundi), heures: Math.min(168, Math.round(h * 100) / 100),
-    serie: 0, maj_le: new Date().toISOString() });
-}
-const mmss = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}:00`;
-
-/* ═════════ MODE VISITE ═════════
-   Regarder sans compte : le fil public et l'annuaire, rien de plus. Le planning
-   n'a pas de sens sans compte — il n'y a rien à y répartir. */
-
-function entrerEnVisite() {
-  modeVisite = true;
-  montrer("appli");
-  // Sans compte, il n'y a rien à répartir : seul le fil a un sens, avec
-  // l'annuaire qu'il contient. Le reste attend une inscription.
-  document.querySelectorAll("#socle button").forEach((b) => (b.hidden = b.dataset.vue !== "fil"));
-  const ro = $("robar");
-  ro.hidden = false;
-  ro.innerHTML = `<b>Tu regardes sans compte.</b>
-    <span>Seules les publications publiques s'affichent.</span>
-    <button class="btn pri mini" data-porte="inscription">Créer un compte</button>`;
-  majBoutonCompte();
-  aller("fil", null, { remplacer: true });
-  chargerAnnuaire();
-}
-
-function routeDepart() {
-  modeVisite = false;
-  // On sort peut-être du mode visite, qui ne laissait que « Fil » : on rouvre
-  // tout, puis on laisse majAccesSansAdresse retirer ce qui doit l'être. L'ordre
-  // compte — l'inverse rouvrirait les sections qu'on vient de fermer.
-  document.querySelectorAll("#socle button").forEach((b) => (b.hidden = false));
-  majAccesSansAdresse();
-  let dernier = null;
-  try { dernier = sessionStorage.getItem("ciel.vue"); } catch {}
-  if (location.hash.startsWith("#/")) return appliquerRoute();
-  if (dernier && dernier.startsWith("#/") && !/^#\/(conv|p)\//.test(dernier)) {
-    history.replaceState(null, "", dernier);
-    return appliquerRoute();
-  }
-  aller("jour", null, { remplacer: true });
 }
 
 /* ═════════ ÉVÉNEMENTS D'INTERFACE ═════════ */
@@ -5515,18 +3028,6 @@ document.addEventListener("click", (e) => {
     saveState(); renderAll();
   }
 });
-$("subf").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const inp = $("subE"), v = inp.value.trim().toLowerCase();
-  if (!v || !vue) return;
-  const btn = e.target.querySelector("button");
-  btn.disabled = true; btn.textContent = "…";
-  const { error } = await sb.from("ciel_subs").insert({ user_id: vue.id, email: v, actif: true });
-  btn.textContent = error ? (/(duplicate|unique)/i.test(error.message) ? "Déjà inscrit" : "Refusé") : "Inscrit ✓";
-  if (!error) inp.value = "";
-  setTimeout(() => { btn.disabled = false; btn.textContent = "M'abonner"; }, 1900);
-});
-
 $("durees").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-h]"); if (!b) return;
   dureeCherchee = Number(b.dataset.h);
@@ -5547,13 +3048,7 @@ $("todayM").onclick = () => {
 const VUES = {
   jour:     { panneau: "today",    titre: "Aujourd'hui" },
   planning: { panneau: "cal",      titre: "Planning", volets: ["cal", "dispo", "todo"] },
-  fil:      { panneau: "fil",      titre: "Le fil" },
-  messages: { panneau: "messages", titre: "Messages" },
-  contacts: { panneau: "social",   titre: "Contacts" },
   moi:      { panneau: "regl",     titre: "Moi" },
-  conv:     { panneau: "conv",     titre: "Conversation", retour: "messages" },
-  personne: { panneau: "personne", titre: "Profil",      retour: "contacts" },
-  nouveautes: { panneau: "nouveautes", titre: "Nouveautés", retour: "jour" },
   minuteur: { panneau: "minuteur", titre: "En cours", retour: "jour" },
   fiche:    { panneau: "fiche",    titre: "Ma fiche",  retour: "planning" },
 };
@@ -5562,8 +3057,6 @@ const TITRES = { cal: "Calendrier", dispo: "Quand je suis libre", todo: "Étapes
 let vueCourante = "jour", argCourant = null, sousPlanning = "cal";
 
 function versAdresse(v, arg) {
-  if (v === "conv") return `#/conv/${arg}`;
-  if (v === "personne") return `#/p/${arg}`;
   if (v === "planning") return `#/planning/${arg || sousPlanning}`;
   if (v === "minuteur" && arg) return `#/minuteur/${encodeURIComponent(arg)}`;
   if (v === "fiche" && arg) return `#/fiche/${encodeURIComponent(arg)}`;
@@ -5581,8 +3074,6 @@ function aller(v, arg = null, { remplacer = false } = {}) {
 function lireAdresse() {
   const m = location.hash.replace(/^#\/?/, "").split("/");
   const v = m[0] || "";
-  if (v === "conv" && m[1]) return ["conv", m[1]];
-  if (v === "p" && m[1]) return ["personne", decodeURIComponent(m[1])];
   if (v === "planning") return ["planning", m[1] || sousPlanning];
   // Sans étape dans l'adresse, on reprend celle du minuteur en cours : revenir
   // sur l'application par un raccourci ne doit pas perdre la séance.
@@ -5597,7 +3088,7 @@ function appliquerRoute() {
   montrerVue(v, arg);
 }
 
-/** La hauteur réelle de l'en-tête : la conversation s'y ajuste au pixel. */
+/** La hauteur réelle de l'en-tête : les panneaux collants s'y ajustent. */
 function mesurerEnTete() {
   const b = document.querySelector(".barre");
   if (b) document.documentElement.style.setProperty("--entete", b.offsetHeight + "px");
@@ -5605,11 +3096,6 @@ function mesurerEnTete() {
 addEventListener("resize", mesurerEnTete);
 
 function montrerVue(v, arg) {
-  // Un compte sans adresse n'a pas ces sections : on le ramène à sa journée
-  // plutôt que de lui montrer un panneau qui ne se remplira jamais.
-  if (sansAdresse() && canEdit && (VUES_ADRESSE.includes(v) || v === "conv" || v === "personne")) {
-    return aller("jour", null, { remplacer: true });
-  }
   const def = VUES[v] || VUES.jour;
   vueCourante = v; argCourant = arg;
   if (v === "planning") sousPlanning = VUES.planning.volets.includes(arg) ? arg : sousPlanning;
@@ -5622,15 +3108,15 @@ function montrerVue(v, arg) {
       sec.classList.remove("entre"); void sec.offsetWidth; sec.classList.add("entre");
     }
   });
-  // Le planning a besoin de place sur un écran large ; le fil et les
-  // conversations se lisent mieux en colonne étroite, comme partout.
+  // Le planning a besoin de place sur un écran large ; les réglages se lisent
+  // mieux en colonne étroite.
   $("appli").toggleAttribute("data-large", v === "planning" || v === "jour");
   $("segPlanning").hidden = v !== "planning";
   document.querySelectorAll("#segPlanning button").forEach((b) =>
     b.setAttribute("aria-selected", b.dataset.seg === sousPlanning));
 
   document.querySelectorAll("#socle button").forEach((b) => {
-    const on = b.dataset.vue === v || (v === "conv" && b.dataset.vue === "messages");
+    const on = b.dataset.vue === v;
     b.setAttribute("aria-current", on ? "page" : "false");
   });
 
@@ -5642,19 +3128,13 @@ function montrerVue(v, arg) {
   // se tairait mieux que de commenter une page qu'il ne décrit pas.
   $("sousTitre").hidden = !["jour", "planning"].includes(v);
   const t = $("titreProfil");
-  if (v === "jour" && vue && !canEdit) t.textContent = "Planning de " + vue.nom;
-  else if (v === "planning") t.textContent = TITRES[sousPlanning];
-  else if (v === "conv") t.textContent = titreConv || "Conversation";
-  else if (v === "personne") t.textContent = titreFiche || "Profil";
+  if (v === "planning") t.textContent = TITRES[sousPlanning];
   else t.textContent = def.titre;
 
   // Instantané : un défilement animé pendant que le contenu change laisse la
   // page à mi-chemin, et le panneau apparaît coupé par l'en-tête.
   scrollTo({ top: 0, behavior: "auto" });
   mesurerEnTete();
-  // Les liens de pied de page n'ont rien à faire au milieu d'une conversation.
-  const pied = document.querySelector(".souspied.dansappli");
-  if (pied) pied.hidden = v === "conv";
   try { sessionStorage.setItem("ciel.vue", location.hash); } catch {}
   peupler(v, arg);
 }
@@ -5664,14 +3144,7 @@ function peupler(v, arg) {
     if (sousPlanning === "cal") renderCal();
     if (sousPlanning === "dispo") renderDispo();
   }
-  if (v === "moi") { renderCapacites(); renderProfil(); renderProgramme(); renderCompte(); renderJoignable();
-                     renderAgenda(); chargerDemandesPlanning(); }
-  if (v === "contacts") { renderSocial(); chargerCommuns(); }
-  if (v === "fil") chargerFil();
-  if (v === "messages") chargerFils();
-  if (v === "conv") ouvrirConversation(arg);
-  if (v === "personne") ouvrirFiche(arg);
-  if (v === "nouveautes") ouvrirNouveautes();
+  if (v === "moi") { renderCapacites(); renderProgramme(); renderSauvegarde(); }
   if (v === "minuteur") { renderMinuteur(); if (minuteur) battre(); }
   if (v === "fiche") renderFiche();
   if (v === "jour") renderEtapesBloquees();
@@ -5694,9 +3167,6 @@ document.addEventListener("click", (e) => {
   if (barre.dataset.segs === "planning") return aller("planning", b.dataset.seg);
   const hote = barre.parentElement;
   hote.querySelectorAll(":scope > [data-vol]").forEach((z) => (z.hidden = z.dataset.vol !== b.dataset.seg));
-  if (b.dataset.seg === "classement") chargerClassement();
-  if (b.dataset.seg === "communs") chargerCommuns();
-  if (b.dataset.seg === "decouvrir") renderAnnuaire();
 });
 
 document.addEventListener("click", (e) => {
@@ -5715,13 +3185,6 @@ document.addEventListener("click", (e) => {
     else if (q === "pause") basculerPause();
     else if (q === "arreter") finirSeance();
     else if (q === "phase") phaseSuivante();
-    return;
-  }
-  const dm = e.target.closest("[data-dem]");
-  if (dm) {
-    const [q, id] = dm.dataset.dem.split(":");
-    if (q === "ics") exporterDemande(id);
-    else repondreDemande(id, q === "oui");
     return;
   }
   const a = e.target.closest("[data-aller]");
