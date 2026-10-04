@@ -16,275 +16,51 @@
 <a class="retour" href="/">← Revenir au planning</a>
 
 <div class="tete">
-  <h1>Politique de confidentialité</h1>
-  <p>Ce que Repère enregistre, pourquoi, pendant combien de temps, et comment
-     reprendre la main dessus.</p>
-  <div class="maj">Version 1 · en vigueur au 7 septembre 2026</div>
+  <h1>Confidentialité</h1>
+  <p>Ce que Repère enregistre, et où.</p>
+  <div class="maj">Version 2 · en vigueur au 4 octobre 2026</div>
 </div>
 
 <div class="bloc">
   <h2>En une phrase</h2>
-  <p>Repère enregistre votre adresse électronique, un nom affiché et le contenu de
-  votre planning. Il n'y a <b>ni publicité, ni mesure d'audience, ni traceur</b>, et
-  rien n'est revendu. Votre planning n'est visible que par vous, sauf si vous
-  décidez explicitement de le rendre public ou de le partager avec des personnes
-  précises.</p>
-</div>
+  <p>Repère n'envoie rien nulle part : votre planning reste dans votre navigateur,
+  et nulle part ailleurs.</p>
 
-<div class="bloc">
-  <h2>1. Qui est responsable du traitement</h2>
-  <p>Le responsable du traitement est l'éditeur de Repère : une personne physique
-  agissant <b>à titre non professionnel</b>, dont l'identité est conservée par
-  l'hébergeur au titre de l'article 6 III 2° de la loi pour la confiance dans
-  l'économie numérique, et communiquée sur réquisition de l'autorité judiciaire.</p>
-  <p>Le RGPD n'impose pas de publier l'état civil du responsable : il impose de
-  fournir un <b>moyen de le contacter</b> pour exercer ses droits. C'est l'objet de
-  l'adresse ci-dessous.</p>
-  <table>
-    <tr><th>Champ</th><th>Valeur</th></tr>
-    <tr><td>Responsable</td>
-        <td>Personne physique, éditeur non professionnel</td></tr>
-    <tr><td>Contact pour vos droits</td>
-        <td><span class="trou">[adresse de contact]</span></td></tr>
-    <tr><td>Autorité de contrôle</td>
-        <td>CNIL — <a href="https://www.cnil.fr/fr/plaintes" target="_blank"
-            rel="noopener">cnil.fr/fr/plaintes</a></td></tr>
-  </table>
-  <p>Aucun délégué à la protection des données n'est désigné : le traitement est de
-  petite échelle, ne porte ni sur des données sensibles ni sur un suivi systématique
-  à grande échelle, et n'est pas le fait d'un organisme public.</p>
-  <p class="petit">Ce régime suppose que le service reste gratuit et sans aucune
-  source de revenu. S'il devenait professionnel, l'identité complète du responsable
-  devrait être publiée ici.</p>
-</div>
+  <h2>Ce qui est enregistré</h2>
+  <p>Le contenu de votre planning — programme, étapes, heures posées, événements,
+  fiches, notes, réglages — est écrit dans le stockage local du navigateur
+  (<code>localStorage</code>). Les photos des fiches sont rangées dans sa base locale
+  (<code>IndexedDB</code>). Ces données ne sont lisibles que par ce site, dans ce
+  navigateur, sur cet appareil.</p>
 
-<div class="bloc">
-  <h2>2. Ce qui est enregistré, et pourquoi</h2>
-  <table>
-    <tr><th>Donnée</th><th>Pourquoi</th><th>Base légale</th></tr>
-    <tr><td>Adresse électronique</td>
-        <td>Identifier le compte, permettre la réinitialisation du mot de passe</td>
-        <td>Exécution du service (art. 6.1.b)</td></tr>
-    <tr><td>Mot de passe</td>
-        <td>Protéger l'accès. Il n'est jamais stocké en clair : seule une empreinte
-            bcrypt est conservée, et personne — pas même l'éditeur — ne peut le lire</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Pseudonyme et identifiant public</td>
-        <td>Vous nommer auprès des personnes qui consultent votre planning.
-            Un pseudonyme suffit : rien n'oblige à donner son état civil</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Vrai nom <i>(facultatif)</i></td>
-        <td>Être reconnu par les seules personnes que vous désignez. Conservé dans
-            une table à part et montré uniquement aux partages que vous cochez —
-            jamais public, même si votre planning l'est</td>
-        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
-    <tr><td>Contenu du planning</td>
-        <td>Étapes validées et leur date, événements (titre, horaires, lien),
-            plages de travail déclarées, notes que vous saisissez</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Journal des changements</td>
-        <td>Vous montrer, et montrer aux personnes autorisées, ce qui a bougé</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Liste des partages</td>
-        <td>Savoir qui a le droit de consulter un planning privé</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Adresse d'abonnement à la lettre</td>
-        <td>Envoyer le récapitulatif des changements</td>
-        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
-    <tr><td>Photo de profil <i>(facultative)</i></td>
-        <td>Vous reconnaître d'un coup d'œil. Elle accompagne le pseudonyme partout
-            où il s'affiche, et suit donc la visibilité de votre profil</td>
-        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
-    <tr><td>Publications, photos, commentaires</td>
-        <td>Le fil. Chaque publication porte la portée que vous lui donnez :
-            vos contacts, ou tout le monde</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Messages privés</td>
-        <td>Les conversations, et les propositions de moment qui les ouvrent</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Fuseau horaire</td>
-        <td>Afficher l'heure qu'il est chez vous à ceux qui consultent votre profil.
-            Proposé d'après votre navigateur, modifiable, jamais deviné autrement</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Région <i>(facultative)</i></td>
-        <td>Un texte libre que vous écrivez vous-même, affiché seulement si vous
-            cochez la case. Ce n'est pas une géolocalisation : le service ne demande
-            jamais votre position au navigateur</td>
-        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
-    <tr><td>Plages libres publiées</td>
-        <td>Répondre à « tu es libre quand ? » sans ouvrir le planning. Ces lignes
-            disent <b>quand</b>, jamais <b>quoi</b> : ni titre, ni matière, ni
-            événement. Elles suivent la visibilité de votre planning</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Heures de la semaine <i>(facultatif)</i></td>
-        <td>Le classement. Rien n'y figure tant que vous ne l'avez pas demandé,
-            et décocher la case vous en retire aussitôt</td>
-        <td>Consentement (art. 6.1.a), retirable à tout moment</td></tr>
-    <tr><td>Signalements</td>
-        <td>Traiter les contenus illicites. Un signalement contient le motif que vous
-            écrivez et l'objet visé ; il n'est pas visible par la personne signalée</td>
-        <td>Obligation légale (LCEN art. 6-I-2)</td></tr>
-    <tr><td>Blocages</td>
-        <td>Couper tout échange entre deux comptes</td>
-        <td>Exécution du service</td></tr>
-    <tr><td>Date d'acceptation des conditions</td>
-        <td>Prouver que le consentement a bien été recueilli</td>
-        <td>Obligation légale (art. 7.1)</td></tr>
-  </table>
-  <h3>Ce qui n'est pas collecté</h3>
-  <p>Ni adresse IP conservée, ni empreinte de navigateur, ni géolocalisation, ni
-  cookie publicitaire, ni mesure d'audience. Aucune donnée sensible au sens de
-  l'article 9 du RGPD n'est demandée.</p>
-  <p>Les photos déposées sont <b>redessinées par votre navigateur avant l'envoi</b> :
-  elles arrivent au serveur réduites, reconverties en JPEG, et débarrassées de leurs
-  métadonnées — dont la position GPS que les téléphones inscrivent dans les clichés.
-  Le serveur ne reçoit donc jamais ces informations.</p>
-</div>
+  <h2>Ce qui n'est pas enregistré</h2>
+  <p>Repère n'a ni compte, ni serveur applicatif, ni base de données. Aucun cookie,
+  aucune mesure d'audience, aucun script tiers. La politique de sécurité du site
+  interdit au navigateur de contacter un autre serveur que celui qui sert
+  l'application.</p>
+  <p>L'hébergeur du site (Vercel) reçoit, comme pour toute page web, les requêtes
+  techniques nécessaires à l'envoi des fichiers de l'application. Il ne reçoit pas
+  votre planning : celui-ci ne transite jamais par le réseau.</p>
 
-<div class="bloc">
-  <h2>3. Qui peut voir votre planning</h2>
-  <p>C'est vous qui décidez, et le réglage est immédiat.</p>
-  <ul>
-    <li><b>Privé</b> — c'est le réglage par défaut à l'inscription. Vous seul y avez
-    accès, plus les comptes que vous ajoutez nommément.</li>
-    <li><b>Personnes autorisées</b> — vous choisissez qui, une par une, et vous pouvez
-    retirer l'autorisation quand vous voulez. Elles voient votre planning en lecture
-    seule et ne peuvent rien y modifier.</li>
-    <li><b>Public</b> — n'importe qui, avec ou sans compte, peut consulter le planning
-    et voit votre nom affiché. Votre adresse électronique, elle, n'est jamais montrée.</li>
-  </ul>
-  <p>Ces règles ne sont pas seulement appliquées par l'interface : elles sont posées
-  au niveau de la base de données, ligne par ligne. Un planning privé n'est pas
-  seulement caché, il est inaccessible.</p>
-  <h3>Le réseau suit les mêmes règles</h3>
-  <p>Une publication réservée à vos contacts n'est lisible que par les comptes que
-  vous avez acceptés — la base refuse la ligne aux autres, l'affichage n'y est pour
-  rien. Une publication ouverte à tous depuis un profil privé reste invisible :
-  la visibilité du profil l'emporte toujours.</p>
-  <p>Vos <b>plages libres</b> sont publiées à part, dans une table qui ne contient
-  que des horaires. Quelqu'un qui a le droit de voir votre planning voit quand vous
-  êtes libre ; personne ne voit ce que vous y faites.</p>
-  <p><b>Bloquer</b> quelqu'un coupe tout dans les deux sens, immédiatement :
-  publications, commentaires, messages, plages libres, classement.</p>
+  <h2>Les sauvegardes</h2>
+  <p>Le bouton <b>Sauvegarder dans un fichier</b> crée un fichier sur votre appareil.
+  Il contient tout le planning, photos comprises, <b>en clair</b>. Ce que vous en
+  faites — le garder, l'envoyer, le copier ailleurs — ne dépend que de vous.</p>
 
-  <h3>Pseudonyme et vrai nom</h3>
-  <p>Le <b>pseudonyme</b> est ce que tout le monde voit. Le <b>vrai nom</b> est
-  facultatif, vit dans une table séparée, et n'est montré qu'aux personnes pour
-  lesquelles vous cochez explicitement ce droit. Retirer la coche le masque
-  immédiatement. Vous pouvez donc partager votre planning sans dire qui vous êtes.</p>
-</div>
+  <h2>Effacer</h2>
+  <p>Effacer les données du site dans les réglages du navigateur supprime tout,
+  définitivement. Aucune copie n'existe ailleurs, sauf les fichiers de sauvegarde
+  que vous auriez créés.</p>
 
-<div class="bloc">
-  <h2>4. Sous-traitants et hébergement</h2>
-  <table>
-    <tr><th>Prestataire</th><th>Rôle</th><th>Où</th></tr>
-    <tr><td>Supabase</td><td>Base de données et gestion des comptes</td>
-        <td>Union européenne — Paris (eu-west-3)</td></tr>
-    <tr><td>Vercel</td><td>Hébergement des pages</td>
-        <td>États-Unis, sous clauses contractuelles types</td></tr>
-    <tr><td>Resend</td><td>Envoi de la lettre d'information, si vous vous y abonnez</td>
-        <td>États-Unis, sous clauses contractuelles types</td></tr>
-  </table>
-  <p>Les polices de caractères sont servies depuis ce site, et non par un tiers :
-  aucune adresse IP de visiteur n'est transmise à Google ou à un autre fournisseur
-  de polices.</p>
-</div>
-
-<div class="bloc">
-  <h2>4 bis. Où vivent les photos</h2>
-  <p>Les images sont déposées chez le même hébergeant que la base, en Europe
-  (Paris), dans deux espaces séparés :</p>
-  <ul>
-    <li><b>Les photos de profil</b> sont servies par une adresse publique. C'est
-    volontaire : une vignette accompagne un pseudonyme, qui est déjà public. Ne mettez
-    pas en photo de profil ce que vous ne montreriez pas à un inconnu.</li>
-    <li><b>Les images de publication</b> ne sont accessibles par aucune adresse
-    permanente. Chaque affichage demande à la base une adresse signée, valable une
-    heure, et la base ne la délivre qu'aux personnes autorisées à voir la publication
-    qui porte l'image.</li>
-  </ul>
-</div>
-
-<div class="bloc">
-  <h2>5. Combien de temps</h2>
-  <table>
-    <tr><th>Donnée</th><th>Durée</th></tr>
-    <tr><td>Compte et planning</td><td>Tant que le compte existe. Supprimé immédiatement
-      et définitivement à la suppression du compte.</td></tr>
-    <tr><td>Journal des changements</td><td>Supprimé avec le compte.</td></tr>
-    <tr><td>Abonnement à la lettre</td><td>Jusqu'à la désinscription.</td></tr>
-    <tr><td>Liens d'invitation</td><td>30 jours, ou 25 utilisations.</td></tr>
-    <tr><td>Publications, photos, commentaires</td><td>Tant que vous ne les supprimez
-      pas. Supprimés avec le compte, fichiers compris.</td></tr>
-    <tr><td>Messages</td><td>Tant que la conversation existe. Supprimés avec le compte
-      de l'un ou l'autre des participants.</td></tr>
-    <tr><td>Plages libres publiées</td><td>Réécrites à chaque enregistrement du
-      planning ; seuls les quinze prochains jours sont conservés.</td></tr>
-    <tr><td>Heures de la semaine</td><td>Une ligne par personne, remplacée chaque
-      semaine. Décocher le classement l'en retire.</td></tr>
-    <tr><td>Signalements</td><td>Conservés le temps du traitement, puis un an, pour
-      pouvoir répondre d'une décision de retrait.</td></tr>
-  </table>
-  <p class="petit">Un signalement survit à la suppression du compte de son auteur,
-  mais il est alors anonymisé : l'identifiant de la personne qui l'a déposé est effacé.</p>
-</div>
-
-<div class="bloc">
-  <h2>6. Vos droits</h2>
-  <p>Le RGPD vous donne des droits sur vos données. Deux d'entre eux s'exercent
-  directement dans l'application, sans écrire à personne :</p>
-  <ul>
-    <li><b>Accès et rectification</b> — tout ce qui est enregistré est affiché et
-    modifiable dans <b>Moi</b>.</li>
-    <li><b>Effacement</b> — le bouton <b>Supprimer mon compte</b>, dans <b>Moi →
-    Compte</b>, efface immédiatement le compte, le planning, le journal, les partages,
-    les publications, les photos déposées, les messages et les plages publiées.
-    L'opération est définitive et sans copie de sauvegarde.</li>
-  </ul>
-  <p>Les autres droits — portabilité, limitation, opposition, retrait du consentement,
-  et le droit de définir des directives sur le sort de vos données après votre décès —
-  s'exercent auprès du responsable indiqué au point 1.</p>
-  <p>En cas de désaccord, vous pouvez saisir la
-  <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener">CNIL</a>.</p>
-</div>
-
-<div class="bloc">
-  <h2>7. Stockage dans votre navigateur</h2>
-  <p>Repère ne dépose <b>aucun cookie</b>. Il utilise le stockage local du navigateur
-  pour deux choses seulement : garder votre session ouverte entre deux visites, et
-  conserver une copie de votre planning pour qu'il reste consultable en cas de coupure
-  réseau. Ces deux usages sont strictement nécessaires au fonctionnement du service,
-  ce qui les dispense de bandeau de consentement. Vider les données du site les efface.</p>
-</div>
-
-<div class="bloc">
-  <h2>8. Sécurité</h2>
-  <ul>
-    <li>Tout passe en HTTPS.</li>
-    <li>Les mots de passe sont hachés avec bcrypt, jamais stockés en clair.</li>
-    <li>Les autorisations sont vérifiées par la base elle-même, à chaque requête.</li>
-    <li>La clé publique visible dans le navigateur ne donne aucun accès en écriture :
-    c'est son usage prévu, la protection repose sur les politiques de sécurité.</li>
-    <li>Le code de l'application est ouvert et vérifiable, et le détail des
-    protections est publié dans <code>SECURITE.md</code>.</li>
-    <li>Les en-têtes de sécurité du site — dont une politique de sécurité du
-    contenu stricte — empêchent l'exécution de tout script étranger.</li>
-  </ul>
-</div>
-
-<div class="bloc">
-  <h2>9. Modifications</h2>
-  <p>Toute évolution de ce document sera annoncée dans l'application, et une nouvelle
-  acceptation sera demandée si les changements touchent à vos droits ou à l'usage de
-  vos données.</p>
+  <h2>L'ancienne version</h2>
+  <p>Une version précédente de Repère fonctionnait avec des comptes, hébergés chez
+  Supabase. Ce service est arrêté ; les données qu'il contenait restent dans le
+  projet suspendu de l'éditeur, et ne sont plus lues par l'application.</p>
 </div>
 
 <div class="pied">
   <a href="/">Repère</a> · <a href="installer.html">Installer</a> ·
-  <a href="conditions.html">Conditions générales</a> ·
-  <a href="confidentialite.html">Confidentialité</a> ·
-  <a href="aide.html">Aide et mentions légales</a> ·
-  <a href="beta.html">bêta</a>
+  <a href="confidentialite.html">Confidentialité</a> · <a href="aide.html">Aide</a>
 </div>
 </div>
 <script type="module" src="pages.js"></script>

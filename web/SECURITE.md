@@ -5,105 +5,67 @@ relu et contesté : une défense qu'on ne peut pas vérifier n'en est pas une.
 
 ## Le principe
 
-**Le navigateur n'est jamais cru sur parole.** Il parle directement à Supabase avec
-une clé publique que n'importe qui peut lire dans le code source — c'est son usage
-prévu. Toute la protection tient dans les politiques de sécurité au niveau des
-lignes, évaluées par la base à chaque requête. Masquer un bouton ne protège rien ;
-seule la base décide.
+**Il n'y a plus de serveur à défendre.** Depuis le 4 octobre 2026, Repère n'a ni
+compte, ni base de données, ni route serveur : des fichiers statiques, et un
+planning qui vit dans le navigateur de la personne qui s'en sert. La surface
+d'attaque se réduit donc à trois choses :
 
-## Ce qui est en place
+1. **Ce que le navigateur reçoit du site** — protégé par les en-têtes HTTP et la CSP.
+2. **Ce qu'on lui fait charger** — un **fichier de sauvegarde**, seule entrée non
+   fiable qui reste : n'importe qui peut en fabriquer un et le faire passer pour le sien.
+3. **L'appareil lui-même** — hors de portée de l'application.
 
-### Cloisonnement des données
+## Le fichier de sauvegarde est une entrée hostile
 
-| Donnée | Qui peut la lire |
-|---|---|
-| Profil et planning **public** | tout le monde, avec ou sans compte |
-| Profil et planning **privé** | son propriétaire, et les comptes explicitement autorisés |
-| **Vrai nom** | son propriétaire, et les seuls partages portant `voit_nom_reel` |
-| Jetons d'invitation | personne — pas même leur créateur ; seule une fonction les consomme |
-| Adresses des abonnés | le propriétaire du profil, et le cron |
-| Mot de passe | personne : empreinte bcrypt, jamais stockée en clair |
-
-Le vrai nom vit dans sa propre table `ciel_identites`. Les politiques portent sur
-des **lignes**, pas sur des colonnes : le loger dans `ciel_profiles` l'aurait rendu
-lisible par quiconque peut lire le profil. Cette séparation n'est pas cosmétique.
-
-**Vérifié par bascule de rôle réelle**, pas par lecture du code : un visiteur
-anonyme et un tiers connecté lisent 0 ligne d'un planning privé ; un invité en lit
-1 et n'y écrit rien ; un invité sans droit au vrai nom lit 0 identité ; un invité
-ne peut pas s'auto-accorder ce droit. Le retrait prend effet immédiatement.
-
-### Surface d'API
-
-Une seule fonction est appelable sans être connecté : `nom_disponible()`, qui doit
-l'être puisqu'elle sert pendant l'inscription. Toutes les autres exigent une
-session et revérifient `auth.uid()` en interne.
-
-`prive.ciel_visible()` — le rouage interne des politiques — vit dans un schéma non
-exposé par PostgREST. Tant qu'il était dans `public`, il était appelable en
-`/rest/v1/rpc/` et permettait de sonder la visibilité d'un profil.
-
-> **Piège rencontré deux fois, à ne pas refaire.** Une fonction nouvellement créée
-> ou recréée repart avec `EXECUTE` ouvert. Et **`REVOKE ... FROM PUBLIC` ne suffit
-> pas** : Supabase accorde `EXECUTE` à `anon` *explicitement*, par privilège par
-> défaut sur le schéma `public`. Révoquer PUBLIC laisse cette concession intacte.
-> Il faut nommer `anon`.
->
-> Le remède est un bloc **rejouable**, à passer après chaque migration — il remet
-> la matrice exacte quelles que soient les fonctions créées entre-temps :
->
-> ```sql
-> do $$
-> declare f record; ouvertes text[] := array['nom_disponible'];
-> begin
->   for f in select p.oid::regprocedure sig, p.proname nom from pg_proc p
->            join pg_namespace n on n.oid = p.pronamespace
->            where n.nspname = 'public' and p.prosecdef
->   loop
->     execute format('revoke all on function %s from public, anon, authenticated', f.sig);
->     if f.nom = any(ouvertes) then
->       execute format('grant execute on function %s to anon, authenticated', f.sig);
->     elsif f.nom <> 'ciel_nouveau_compte' then
->       execute format('grant execute on function %s to authenticated', f.sig);
->     end if;
->   end loop;
-> end $$;
-> ```
->
-> Et `alter default privileges in schema public revoke execute on functions from
-> anon;` pour que la prochaine ne reparte pas ouverte.
-
-### Injection de code (XSS)
+Un fichier `repere-….json` peut venir d'ailleurs que de soi : reçu par message,
+téléchargé, modifié à la main. Tout ce qu'il contient est traité comme écrit par un
+attaquant.
 
 Trois barrières, chacune suffisante seule :
 
-1. **Assainissement à la frontière** — `assainirProgramme()` contraint tout ce qui
-   vient de la base avant le moindre gabarit HTML : identifiants sur
-   `[A-Za-z0-9._-]{1,48}`, couleurs prises dans une liste fermée, libellés bornés
-   en longueur et purgés des caractères de contrôle, heures et périodes ramenées
-   dans leurs bornes. C'est nécessaire parce qu'un propriétaire peut écrire ce
-   qu'il veut dans son propre planning — et que ce planning est **rendu chez les
-   gens qui le consultent**.
-2. **Échappement au point d'insertion** — `esc()` sur toute interpolation, y
-   compris dans les attributs. Deux failles avaient été trouvées ici et
-   reproduites avant correction : un `onload=` attaquant sortait de l'attribut
-   `style` via la couleur d'une matière, et un `javascript:` passait dans le lien
-   d'un événement.
-3. **`Content-Security-Policy: script-src 'self'`** — aucun script inline ne
-   s'exécute, aucune URL `javascript:` ne fonctionne, même si 1 et 2 échouent.
-   Vérifié : une injection de `<script>` est bloquée par le navigateur.
+1. **Assainissement au chargement** — `appliquerEtat()` ne garde que des formes
+   attendues : `assainirProgramme()` contraint le programme (identifiants sur
+   `[A-Za-z0-9._-]{1,48}`, couleurs prises dans une liste fermée, libellés bornés et
+   purgés des caractères de contrôle) ; `normaliserCapacites()` ne garde que des
+   plages au format `HH:MM` ; `normaliserRepos()` des entiers de 0 à 6 ;
+   `partJour` une date ISO et un nombre fini. Les photos importées doivent être des
+   `data:image/(jpeg|png|webp);base64` rangées sous une clé `idb:` — pas de SVG, qui
+   est un document et non une image.
+2. **Échappement au point d'insertion** — `esc()` sur toute interpolation, y compris
+   dans les attributs. Les liens saisis passent par `lienSur()`, qui n'accepte que
+   `http:` et `https:` après analyse par `URL` — pas par comparaison de chaîne, sinon
+   `JaVaScRiPt:` et `java\tscript:` passeraient.
+3. **`Content-Security-Policy`** — `script-src 'self'` : aucun script inline, aucun
+   gestionnaire `onerror=`, aucune URL `javascript:` ne s'exécute, même si 1 et 2
+   échouent. `connect-src 'self'` : même une injection réussie n'a nulle part où
+   envoyer quoi que ce soit.
 
-Les liens saisis passent par `lienSur()`, qui n'accepte que `http:` et `https:`
-après analyse par `URL` — pas par comparaison de chaîne, sinon `JaVaScRiPt:` et
-`java\tscript:` passeraient.
+**Vérifié, et une faille trouvée.** `xss_sauvegarde.py` charge un fichier qui place
+`"><b class=pwn>…<img class=pwn src=x>` dans **chaque** champ texte de l'état — titres,
+liens, identifiants, plages horaires, fiches, notes, journal, clés de photos — puis
+parcourt toutes les vues, et compte les nœuds injectés et les liens `javascript:`.
+Lancé une fois avec la CSP de production, une fois **sans** :
 
-### En-têtes HTTP
+| | avant correction | après |
+|---|---|---|
+| sans CSP | **4 nœuds injectés**, dans l'éditeur des heures de travail | aucun |
+| CSP de production | balises injectées, scripts bloqués | aucun |
+
+Cause : les plages de `capacites` étaient insérées telles quelles dans l'attribut
+`value` du champ de saisie. Tant que seul le propriétaire pouvait les écrire, elles
+ne traversaient aucune frontière de confiance ; le fichier de sauvegarde en a créé
+une. Corrigé aux deux niveaux — filtre `HH:MM` au chargement, `esc()` à l'insertion.
+
+Le rechargement **demande toujours confirmation** avant de remplacer le planning, et
+le dit : un fichier ne s'applique jamais sans geste explicite.
+
+## En-têtes HTTP
 
 Posés dans `vercel.json`, sur toutes les routes :
 
 | En-tête | Ce qu'il empêche |
 |---|---|
-| `Content-Security-Policy` | scripts injectés, `javascript:`, exfiltration vers un tiers |
+| `Content-Security-Policy` | scripts injectés, `javascript:`, envoi de données vers un tiers |
 | `Strict-Transport-Security` | rétrogradation vers HTTP, interception |
 | `X-Content-Type-Options: nosniff` | un fichier interprété comme du script |
 | `frame-ancestors 'none'` + `X-Frame-Options` | clickjacking |
@@ -111,569 +73,50 @@ Posés dans `vercel.json`, sur toutes les routes :
 | `Cross-Origin-Opener-Policy` | prise de contrôle de la fenêtre ouvrante |
 | `Permissions-Policy` | accès caméra, micro, position, capteurs |
 
-`connect-src` n'autorise que ce domaine et le projet Supabase : même en cas
-d'injection réussie, les données n'ont nulle part où partir.
-
-### Comptes et sessions
-
-- Mots de passe hachés en bcrypt par Supabase Auth, 8 caractères au minimum.
-- Jetons de session à durée limitée, renouvelés automatiquement, effacés à la
-  déconnexion.
-- Jetons d'invitation : 122 bits d'aléa, 30 jours, 25 usages, 20 liens actifs par
-  compte au plus. Ni devinables, ni moissonnables, ni infinis.
-- Limitation de débit sur l'authentification : assurée par Supabase.
-- Suppression de compte en cascade, sans copie résiduelle.
-
-### Vie privée
-
-Aucun cookie, aucune mesure d'audience, aucun traceur. Les polices sont servies
-depuis le domaine : les charger chez Google transmettait l'adresse IP de chaque
-visiteur à un tiers hors UE, sans base légale.
-
-## La couche sociale
-
-Toutes les règles ci-dessous sont appliquées par la base. L'interface les reflète ;
-elle ne les décide pas.
-
-### S'abonner, lire, proposer
-
-- **S'abonner** — `s_abonner()` lit `public` sur le profil visé et décide seule :
-  acceptation immédiate chez un compte public, mise en attente chez un compte privé.
-  Le navigateur ne choisit pas. Plafond de 50 demandes en attente par compte.
-- **Lire un planning privé** exige un abonnement à l'état `accepte`. Une demande en
-  attente ne donne rien — ni le planning, ni même la ligne du profil.
-- **Proposer un moment** — `proposer_creneau()` vérifie la joignabilité de l'hôte
-  avant d'insérer, exige un motif quand l'expéditeur n'a pas le droit d'écrire, et
-  plafonne à 2 propositions en attente dans ce cas (10 entre gens qui se parlent
-  déjà). Masquer le bouton n'aurait rien empêché : l'API est ouverte à qui sait
-  l'appeler.
-
-### Publications et commentaires
-
-`prive.lit_post(auteur, portee)` est la règle unique, appliquée par les politiques
-de `ciel_posts`, `ciel_commentaires` et `ciel_jaime` :
-
-- une publication **publique** suit la visibilité du profil — donc invisible si le
-  profil est privé, même marquée « tout le monde » ;
-- une publication **réservée** exige un abonnement accepté ;
-- un **blocage** coupe dans les deux sens, quelle que soit la portée.
-
-Commenter exige de pouvoir lire la publication commentée : la clause figure dans le
-`with check` de la politique, pas seulement dans l'affichage. L'auteur d'une
-publication peut supprimer les commentaires qui y figurent — il en répond.
-
-Un déclencheur `BEFORE INSERT OR UPDATE` refuse une publication signée d'un autre
-compte et une image qui ne vit pas dans le dossier de son auteur.
-
-### Messages : la règle du seul mot
-
-`envoyer_message()` refuse tout ce qui n'est pas :
-
-1. un message vers quelqu'un dont la joignabilité vous inclut, ou
-2. un message dans une conversation déjà **ouverte** — c'est-à-dire une conversation
-   où l'autre a répondu, ou dont il a accepté la proposition.
-
-Une conversation fermée n'accepte donc **rien**, sauf une proposition de moment, qui
-porte un motif. C'est le modèle du compte privé : on ne peut adresser qu'une chose à
-quelqu'un qui ne vous lit pas, et cette chose dit qui vous êtes. Trente messages par
-cinq minutes au maximum, tous destinataires confondus.
-
-Aucune politique `INSERT` n'existe sur `ciel_messages` : la seule écriture possible
-passe par les deux fonctions. Une politique `DELETE` permet d'effacer ce qu'on a
-écrit, jamais ce qu'on a reçu.
-
-### Fichiers
-
-Deux seaux, deux régimes.
-
-- `avatars` est **public** : une vignette accompagne un pseudonyme, qui l'est déjà.
-  C'est un choix, écrit dans la politique de confidentialité.
-- `photos` ne l'est pas. Aucune adresse permanente n'existe ; chaque affichage
-  réclame une adresse signée d'une heure, et la politique `SELECT` sur
-  `storage.objects` ne la délivre que si une publication lisible porte ce fichier.
-
-Le dépôt se fait en « upsert » : le service de stockage regarde d'abord si l'objet
-existe, puis insère ou remplace. Il manquait donc deux politiques — une lecture sur
-`avatars`, et une mise à jour sur les deux seaux. Sans elles, ce chemin échouait, et
-remplacer une photo déjà posée était de toute façon impossible.
-
-L'écriture est bornée au dossier `<uuid de l'utilisateur>/`, côté stockage comme côté
-base : le déclencheur de `ciel_profiles` refuse un `avatar` qui pointerait ailleurs,
-celui de `ciel_posts` en fait autant pour `image`. Sans lui, n'importe qui pourrait
-faire afficher le fichier d'un autre — ou une adresse étrangère, ce que la politique
-de sécurité du contenu interdit par ailleurs (`img-src` ne cite que ce domaine).
-
-Les images sont redessinées dans un canevas avant l'envoi : format normalisé,
-métadonnées EXIF perdues au passage — dont la position GPS. Ce n'est pas une mesure
-de sécurité du serveur, c'est une mesure de vie privée de l'utilisateur, et elle est
-plus efficace côté client qu'après coup.
-
-### Atteindre quelqu'un sans le déshabiller
-
-La politique de lecture de `ciel_profiles` masque **entièrement** un compte privé.
-C'est juste pour le planning, et c'était une impasse pour tout le reste : une
-personne qui vous suit n'apparaissait nulle part de cliquable, et un compte privé
-qu'on connaît par son nom restait injoignable à jamais — aucune façon de lui
-demander à le suivre.
-
-`carte_profil(identifiant)` rend la carte d'identité minimale — pseudonyme,
-identifiant, vignette, visibilité, joignabilité — plus l'état de la relation
-(`lien`, `me_suit`, `peut_ecrire`). Les champs personnels — présentation, fuseau,
-région — ne sortent **que** si le profil est public ou si l'abonnement est accepté.
-
-Ce qui borne l'exposition :
-
-- elle ne répond que sur un **identifiant exact**, jamais sur une liste ni un
-  préfixe : elle ne sert pas à parcourir les comptes privés ;
-- elle exige une session ;
-- un blocage la fait rendre zéro ligne, dans les deux sens.
-
-Ce qu'elle confirme — « cet identifiant est pris » — est déjà ce que révèle
-`nom_disponible`, appelable sans compte parce que l'inscription en dépend. Le
-gain de discrétion à s'en priver serait nul ; le coût était un réseau où personne
-ne peut se joindre.
-
-**Un piège de logique à trois valeurs y a vécu quelques minutes.** L'état de la
-relation était `null` faute d'abonnement, et `false or null` vaut `null` en SQL,
-pas `false` : la ligne entière disparaissait, y compris pour les comptes publics
-qu'on avait le droit de voir. Chaque test est désormais ramené explicitement à un
-booléen. C'est le genre de défaut qui ne lève aucune erreur et se lit comme une
-absence de données.
-
-### Le profil, écrit par son propriétaire
-
-La politique `profiles_maj` autorise à écrire n'importe quelle colonne de sa propre
-ligne. C'est trop large dès que des colonnes portent du sens : le déclencheur
-`prive.ciel_profil_valide()` dit ce qu'une valeur a le droit de valoir — forme de
-l'identifiant public, un changement par jour, avatar borné à son dossier, fuseau
-vérifié contre `pg_timezone_names`, joignabilité dans l'énumération, et
-`consentement_le` recopié depuis l'ancienne ligne pour qu'on ne puisse pas réécrire
-la preuve de son propre consentement.
-
-**L'adresse électronique ne sert plus à fabriquer l'identifiant public.** Elle le
-faisait : `gabriel.carb.pro@gmail.com` donnait `gabriel-carb-pro`, publié dans l'URL
-du profil, dans l'annuaire et sur chaque carte. C'était une fuite silencieuse, sans
-message d'erreur ni page à ouvrir — le genre qu'on ne voit qu'en lisant le
-déclencheur. L'identifiant vient désormais du pseudonyme choisi, et les comptes
-existants ont été renommés.
-
-### Surveiller quelqu'un sans le lui apprendre
-
-La case « me prévenir quand il est libre » écrit une ligne dans `ciel_veilles`
-(`qui`, `cible`). Deux questions se posaient.
-
-**Qui peut lire la ligne ?** Seul `qui`. La cible ne sait pas qu'on la surveille, et
-personne d'autre ne sait qui surveille qui : la politique de lecture est
-`qui = auth.uid()`, sans exception, et il n'existe aucune fonction qui compte les
-veilleurs d'un compte. C'était le choix à faire : dire à quelqu'un « trois personnes
-attendent que tu sois libre » transforme une commodité en pression.
-
-**Que donne la veille ?** Rien de plus que ce qui était déjà lisible. La veille ne
-lit pas les plages libres elle-même : elle sert de filtre au-dessus de
-`ciel_dispos`, dont les politiques décident déjà qui voit quoi. Surveiller un compte
-privé auquel on n'est pas abonné produit zéro ligne — vérifié par bascule de rôle,
-pas déduit du code. Une contrainte `qui <> cible` évite la veille sur soi-même, et la
-clé primaire `(qui, cible)` rend la case idempotente.
-
-`nouveautes()` réunit six sources sous l'identité de l'appelant, `marquer_nouveautes_vues()`
-ne touche qu'une colonne de sa propre ligne de profil. Les deux sont `security definer`,
-`search_path` figé, `REVOKE ... FROM PUBLIC, anon`.
-
-**Ce que la pastille compte.** Messages, demandes d'abonnement, moments proposés et
-leurs réponses — ce qui attend une réponse. Pas les publications ni les
-disponibilités, qui sont montrées sans être comptées. Une pastille qui ne s'éteint
-jamais cesse d'être lue, et une notification qu'on n'a plus envie d'ouvrir ne protège
-plus rien.
-
-### Faire sonner un téléphone
-
-Une notification poussée est un droit d'interrompre quelqu'un. Quatre décisions
-en découlent, et elles sont dans le code plutôt que dans les intentions.
-
-**Le contenu est chiffré de bout en bout, et pas par nous.** RFC 8291 : le
-message est chiffré avec une clé dérivée du secret d'authentification de
-l'abonnement et des deux clés publiques. Ni Google, ni Apple, ni Mozilla — qui
-transportent la poussée — ne peuvent lire ce qu'elle dit. Vérifié par un
-aller-retour complet, et par un secret d'authentification différent qui ne
-déchiffre rien.
-
-**Le serveur prouve son identité.** RFC 8292 : chaque envoi porte un jeton ES256
-signé par la clé privée, dont l'audience est l'origine du point d'envoi. Sans
-elle, personne ne peut pousser au nom de Repère. Elle vit dans les variables
-d'environnement, jamais dans le dépôt.
-
-**Qui a activé quoi ne regarde personne.** `ciel_push` ne se lit que par son
-propriétaire (`user_id = auth.uid()`), et rien ne permet de compter les appareils
-d'un autre. L'expéditeur (`a_pousser`, `marquer_pousse`, `oublier_appareil`) est
-retiré à `anon` et à `authenticated` : seul le rôle de service l'atteint.
-Éprouvé par bascule de rôle — les trois refusent un compte connecté, et abonner
-le téléphone d'un autre est rejeté.
-
-**La veille ne donne toujours accès à rien de neuf.** La règle de visibilité
-existait sous une forme qui lisait `auth.uid()` ; l'expéditeur n'en a pas. Plutôt
-que de réécrire la règle une seconde fois — deux copies d'une règle de sécurité
-finissent toujours par diverger — elle a été sortie en
-`prive.ciel_visible_pour(cible, spectateur)`, dont l'ancienne forme est devenu un
-appel. Cinq vérifications confirment que les deux disent la même chose et que le
-compte privé sans lien reste invisible.
-
-**Les deux routes serveur refusent quand leur protection manque.** Elles
-laissaient passer si `CRON_SECRET` n'était pas posée — `if (secret && ...)`. Tant
-qu'une autre variable manquait, elles répondaient 503 et l'oubli restait
-invisible ; le jour où tout le reste est configuré, n'importe qui aurait pu
-déclencher les envois. Elles échouent désormais fermées.
-
-**Le secret qui déclenche l'envoi ne traîne nulle part.** L'envoi est déclenché
-par `pg_cron`, toutes les quinze minutes. `cron.job` est lisible depuis le tableau
-de bord : le secret y figurerait en clair si la tâche le portait. Il vit donc dans
-`vault.secrets`, et la fonction planifiée va l'y chercher. Vérifié : il n'apparaît
-dans aucune commande de `cron.job`, et ni le coffre, ni `cron.job`, ni la fonction
-de déclenchement ne sont atteignables depuis un compte connecté.
-
-Une dernière contrainte, imposée par les navigateurs et qu'on assume :
-`userVisibleOnly` oblige à afficher quelque chose à chaque poussée. Une poussée
-silencieuse servirait à pister ; le navigateur la refuse, et c'est bien.
-
-### Aller chercher une adresse que quelqu'un d'autre a écrite
-
-Importer un agenda demande au serveur de joindre une adresse fournie par
-l'utilisateur. C'est le manuel de la **falsification de requête côté serveur** :
-sans garde, on offre à n'importe qui un client HTTP à l'intérieur du réseau de
-l'hébergeur — y compris le service de métadonnées du nuage, sur `169.254.169.254`,
-qui rend des jetons d'accès.
-
-Quatre verrous, dans `api/_ics.js` :
-
-1. **Le protocole** — `http` et `https` seulement ; `file:`, `gopher:` et le reste
-   sont refusés. `webcal:` est traduit en `https`. Une adresse portant des
-   identifiants est rejetée.
-2. **L'adresse résolue, pas seulement écrite** — un nom de domaine public peut
-   pointer vers `127.0.0.1`. On résout, et on juge chaque adresse obtenue.
-3. **Toutes les formes privées** — bouclage, `10/8`, `172.16/12`, `192.168/16`,
-   lien-local, espace partagé des opérateurs, multidiffusion, et leurs équivalents
-   IPv6. Y compris l'**IPv4 déguisée en IPv6** : `::ffff:127.0.0.1` s'écrit aussi
-   `::ffff:7f00:1`, forme que Node produit en normalisant, et c'est exactement par
-   là que le premier jet passait. Vingt adresses interdites sont éprouvées, et une
-   IPv6 publique doit passer — le garde n'est pas un refus général.
-4. **Les redirections suivies à la main** — laisser `fetch` les suivre
-   contournerait tout ce qui précède, puisqu'on ne verrait jamais l'arrivée.
-   Trois sauts au plus, chacun re-contrôlé.
-
-S'y ajoutent une borne de 2 Mo appliquée au flux (l'en-tête `content-length` peut
-mentir), un délai de 12 s, et une session vérifiée auprès de Supabase avant tout :
-on ne prête pas un client HTTP à des inconnus.
-
-**Ce qui est rapatrié.** Un titre, un début, une fin, un lieu. Ni participants, ni
-organisateur, ni description : importer un agenda ne doit pas importer un carnet
-d'adresses.
-
-**Ce qui n'est pas demandé.** Aucun identifiant de connexion, jamais. Un cookie de
-session Pronote donne accès aux notes, aux absences, à la messagerie et à
-l'identité de quelqu'un — souvent d'un mineur. Le collecter, même avec l'accord de
-la personne, ferait de l'éditeur le gardien d'un accès qu'il ne peut pas protéger,
-sans base légale et contre les conditions du service. L'adresse ICS ne donne que
-l'agenda ; elle reste un secret, et n'est donc pas conservée.
-
-### Une demande, et le mot de passe qu'elle exige
-
-Une demande s'adresse par identifiant unique, et la fonction ne rend jamais l'uuid
-de la cible : connaître un `ID12345678` permet d'écrire à quelqu'un, pas d'apprendre
-qui est derrière. Une seule demande en attente à la fois vers la même personne —
-sans quoi l'envoi devient un moyen d'inonder une boîte. Un blocage la rend
-indiscernable d'un identifiant inexistant.
-
-Le mot de passe est redemandé avant l'envoi, et vérifié **sans remplacer la
-session** : re-prouver son identité ne doit pas déconnecter-reconnecter. Onze
-vérifications par bascule de rôle : un tiers ne voit aucune demande, ne peut pas
-répondre à la place du destinataire, et rien ne part sans compte.
-
-### Un identifiant qu'on ne choisit pas
-
-`ID12345678`, tiré à l'inscription. Le pseudonyme et le `@slug` se changent ; cet
-identifiant-là, non. Il sert à désigner quelqu'un sans ambiguïté — deux comptes
-peuvent porter le même pseudonyme demain, jamais le même identifiant.
-
-L'immuabilité ne tient pas à l'interface, qui n'expose aucun champ, mais au
-déclencheur : `new.uid := old.uid` à chaque écriture, comme pour la date de
-consentement. Éprouvé par bascule de rôle — un `update` depuis son propre compte
-laisse la valeur intacte, et réutiliser l'identifiant d'un autre est rejeté par la
-contrainte d'unicité. La forme est imposée en base (`^ID[0-9]{8}$`), pas seulement
-à la génération.
-
-### Ce que le réseau oblige
-
-Héberger des publications, des images et des conversations fait de l'éditeur un
-**hébergeur** au sens de l'article 6-I-2 de la LCEN. Il n'a pas d'obligation
-générale de surveillance, mais il doit retirer promptement un contenu manifestement
-illicite qui lui est signalé, et conserver de quoi identifier les auteurs.
-
-En pratique : un bouton **Signaler** sur chaque publication et chaque profil, une
-table `ciel_signalements` qu'aucune politique de lecture ne sert (elle se consulte
-depuis la console, pas depuis l'API), un **blocage** réciproque à la main de chacun,
-et une adresse de contact à publier — ce dernier point n'est plus reportable
-maintenant que des tiers déposent du contenu.
-
-**Ce que cela change par rapport à la version précédente.** La messagerie libre avait
-été écartée ici même, au motif qu'elle transférait à une personne physique non
-professionnelle la charge de modérer des conversations privées. Cette charge est
-réelle et elle demeure ; le service l'assume désormais, à la demande de l'éditeur,
-avec les contreparties ci-dessus. Le point à retenir : les messages ne sont **pas**
-chiffrés de bout en bout — le serveur y a techniquement accès, et les conditions le
-disent.
-
-Éprouvé par bascule de rôle réelle : 8 vérifications sur la règle du seul mot,
-9 sur la portée des publications et le blocage, 8 sur les garde-fous du profil,
-en plus des 14 de la couche d'abonnement. Un visiteur sans compte lit les
-publications publiques des profils publics, et rien d'autre.
+La CSP ne nomme plus aucun domaine extérieur : `default-src 'self'`,
+`connect-src 'self'`, `img-src 'self' data: blob:`. Le projet Supabase en a été retiré
+en même temps que le code qui lui parlait.
+
+## Les photos
+
+`photos.js` redessine chaque image dans un canevas avant de la ranger : seuls les
+pixels sont recopiés, et les métadonnées — position GPS, appareil, heure exacte —
+tombent. Le SVG est refusé à l'entrée. Les photos restent dans IndexedDB, sur
+l'appareil.
 
 ## Ce qui n'est pas défendu
 
 Le dire est plus utile que de prétendre le contraire.
 
-- **Un lien d'invitation transmis à la mauvaise personne.** Le lien ne vérifie pas
-  qui l'ouvre : c'est sa nature. Le contre-pouvoir est le retrait, immédiat.
-- **Un compte dont le mot de passe fuit ailleurs.** Si quelqu'un réutilise un mot
-  de passe compromis, rien ici ne le sait — sauf à activer la vérification contre
-  HaveIBeenPwned (voir plus bas).
-- **Un propriétaire malveillant envers ses propres invités.** Il peut écrire ce
-  qu'il veut dans son planning ; les trois barrières XSS sont précisément là pour
-  que cela reste sans effet.
-- **Une inondation de faux comptes.** Rien n'empêche aujourd'hui un robot de créer
-  des comptes en masse. Un CAPTCHA règle la question (voir plus bas).
-- **Une perte de la base.** Sans sauvegarde, une erreur ou un incident efface les
-  plannings de tout le monde. C'est le point le plus sérieux de cette liste.
-- **Un contenu illicite entre son dépôt et son signalement.** Personne ne relit les
-  publications avant qu'elles ne s'affichent, et la loi ne l'exige pas. La défense
-  est le signalement, le blocage, et le fait qu'une publication ne dépasse jamais
-  le cercle que son auteur a choisi.
-- **Un contenu déjà vu.** Bloquer ou supprimer arrête la diffusion ; cela ne
-  reprend pas ce qui a été lu ou enregistré par ceux qui y avaient accès.
-- **Une image envoyée à qui de droit puis rediffusée.** L'adresse signée expire au
-  bout d'une heure, mais le fichier téléchargé, lui, ne s'efface pas.
-- **Le contenu des messages, vis-à-vis de l'éditeur.** Ils ne sont pas chiffrés de
-  bout en bout ; l'accès au serveur donne accès aux messages. Les conditions le
-  disent, plutôt que de laisser croire l'inverse.
+- **L'appareil.** Quiconque ouvre le navigateur ouvre le planning : il n'y a pas de
+  mot de passe, puisqu'il n'y a pas de compte. Le verrouillage du téléphone est la
+  seule porte.
+- **Le fichier de sauvegarde, une fois créé.** Il est **en clair**, photos comprises.
+  Le chiffrer avec un mot de passe serait possible (Web Crypto, AES-GCM, clé dérivée
+  par PBKDF2), mais un mot de passe oublié rendrait la sauvegarde inutilisable : ce
+  n'est pas fait, et la page de confidentialité le dit.
+- **Un script du même domaine.** `localStorage` est lisible par tout script servi
+  depuis le site. La CSP empêche d'en charger d'ailleurs ; un dépôt compromis, lui,
+  passerait.
+- **La perte.** Effacer les données du site efface le planning. Le seul remède est la
+  sauvegarde dans un fichier ; l'écran *Sauvegarde* rappelle sa date et la signale
+  en rouge au-delà d'une semaine.
 
-## Anonymat de l'éditeur
+## L'ancienne version
 
-Repère est édité **à titre non professionnel** : gratuit, sans publicité, sans
-abonnement, sans aucune source de revenu. L'article 6 III 2° de la LCEN permet
-alors de ne pas publier son identité — il suffit de l'avoir communiquée à
-l'hébergeur, qui la conserve et ne la révèle qu'à l'autorité judiciaire.
-
-Concrètement, les mentions légales publient l'identité des hébergeurs (Vercel et
-Supabase) et **une adresse de contact**, rien de plus : ni état civil, ni adresse
-postale, ni téléphone. Le RGPD n'en demande pas davantage — il exige un moyen de
-contact pour exercer ses droits, pas une identité publique.
-
-Ce régime tombe dès que le service devient professionnel : un paiement, une
-publicité, un revenu quelconque, et l'identité complète doit être publiée.
-
-Pour rester protégé : une **adresse dédiée** plutôt qu'une adresse personnelle,
-et rien qui ressemble à une activité commerciale.
-
-## À faire avant d'ouvrir au groupe
-
-| Action | Où | Coût |
-|---|---|---|
-| Activer la vérification des mots de passe compromis | Supabase → Authentication → Password | gratuit |
-| Activer un CAPTCHA à l'inscription (hCaptcha ou Turnstile) | Supabase → Authentication → Bot protection | gratuit |
-| Renseigner l'URL du site dans les redirections | Supabase → Authentication → URL Configuration | gratuit |
-| **Publier l'adresse de contact** — devenu obligatoire avec le contenu déposé par des tiers | `aide.html`, `confidentialite.html` | gratuit |
-| **Sauvegardes de la base** | Supabase Pro | ~25 $/mois |
-| Adresse de contact publiée | `aide.html`, `confidentialite.html` | gratuit |
-| Pare-feu applicatif et mode anti-attaque | Vercel Pro | ~20 $/mois |
-
-Les quatre premières lignes sont des cases à cocher et couvrent l'essentiel du
-risque courant. La sauvegarde est la seule dépense que je recommande vraiment :
-tout le reste se répare, des données perdues non.
+Jusqu'au 4 octobre 2026, Repère avait des comptes, un réseau social, des messages et
+des notifications, sur Supabase. Les audits de cette époque — politiques d'accès au
+niveau des lignes, fonctions `SECURITY DEFINER`, `public` par défaut, demandes qui
+recopiaient un planning chez autrui, trois failles XSS stockées — sont dans
+l'historique Git de ce fichier, avant ce commit. Le projet Supabase est en pause ;
+ses données y restent, et l'application ne les lit plus.
 
 ## Comment vérifier soi-même
 
 ```sh
 # Les en-têtes réellement servis
-curl -sI https://pilote-ciel.vercel.app | grep -iE 'content-security|strict-transport|x-frame|referrer'
+curl -sI https://<domaine>/ | grep -i -E 'content-security|strict-transport|x-frame'
 
-# Ce qu'un visiteur anonyme peut lire
-curl -s "https://hnmeefndnckqkdjjbgwe.supabase.co/rest/v1/ciel_identites?select=*" \
-  -H "apikey: sb_publishable_ciLHalsy_YvWIUbEbCnN2g_TZfT4aPU"     # doit renvoyer []
+# Aucune requête sortante : ouvrir les outils de développement, onglet Réseau,
+# utiliser l'application — rien ne doit partir ailleurs que vers le domaine du site.
 ```
-
-Dans Supabase, `get_advisors` liste les écarts après chaque changement de schéma.
-Il a trouvé les deux erreurs de droits décrites plus haut : le passer après toute
-migration n'est pas facultatif.
-
-## Journal des audits
-
-**11 septembre 2026 — audit complet, et ce qu'il n'a pas trouvé.** Passage au
-crible de tout ce qui a été ajouté cette semaine. Deux affirmations que j'avais
-faites de tête se sont révélées fausses en les vérifiant : il n'y a **aucun
-doublon** dans le journal (c'étaient deux étapes distinctes, tronquées à
-l'affichage), et **aucune fonction morte** (`publier` et `verifier` sont passées
-en gestionnaires, pas appelées par leur nom).
-
-Ce qui a été trouvé, en revanche :
-
-- **L'état repart en entier à chaque enregistrement de fiche.** 36 Ko mesurés avec
-  380 séances et trois fiches ; extrapolé aux 121 étapes, ~220 Ko renvoyés une
-  seconde après chaque pause de frappe. Corrigé : on n'enregistre plus si le texte
-  n'a pas changé, et le délai passe à 2,5 s. La vraie correction — sortir les
-  fiches dans leur propre table — reste à faire.
-- **Six clés étrangères sans index**, dont `ciel_demandes.de`. Sans effet à sept
-  comptes ; à noter pour plus tard.
-- **Le journal ne se purge jamais en base** : 89 lignes en cinq jours, et chaque
-  coche en écrit une.
-- **Une collision de classe CSS** : `.etiq` existait déjà en capitales mono, et le
-  libellé d'une case à cocher s'affichait en criant. Même piège que `.bulle` la
-  semaine dernière — réutiliser un nom de classe dans une feuille unique.
-
-Éprouvé, et bon : une demande hostile portant `<img src=x onerror=…>` dans son
-titre, sa source, son message et ses événements produit **cinq occurrences, cinq
-échappées**, aucun élément portant l'attribut, aucun script exécuté — avant comme
-après acceptation. C'est le seul chemin où la donnée d'un autre utilisateur entre
-dans le DOM. Toutes les tables ont RLS activée et au moins une politique.
-
-Mesures, sur un compte chargé de six mois : premier rendu utile **347 ms**, 3 460
-nœuds, 262 SVG. Acceptable, et c'est aussi la mesure chiffrée d'une densité qui
-augmente plus vite que l'usage.
-
-**11 septembre 2026 — une régression que j'ai posée, et qui a tenu deux jours.**
-En refactorisant `prive.ciel_visible`, j'ai révoqué `EXECUTE` dessus « par
-cohérence » avec les fonctions exposées par l'API. Erreur de raisonnement :
-celle-ci n'est pas appelée par l'API, elle est appelée **par les politiques RLS**,
-qui s'évaluent sous le rôle de celui qui interroge. Sans le droit, un visiteur sans
-compte ne pouvait plus lire un planning public — « permission denied for function
-ciel_visible ». La consultation libre était cassée depuis le 10 au soir.
-
-Ses sœurs du même schéma — `bloque`, `fil_de`, `lit_post`, `peut_ecrire` — sont
-restées au réglage par défaut, et c'est le bon : le schéma `prive` n'est pas exposé
-par PostgREST, donc personne ne peut les appeler de l'extérieur. C'est le contre-
-exemple que j'aurais dû regarder avant de révoquer. `ciel_visible_pour` reste
-réservée, elle : elle n'est appelée que depuis des fonctions `security definer`,
-qui s'exécutent sous leur propriétaire.
-
-Ce qui a permis de passer à côté : mes contrôles externes vérifiaient que les
-routes réservées **refusent**, jamais que les routes ouvertes **acceptent**. Une
-protection qui se referme trop est aussi un défaut, et elle ne déclenche aucune
-alarme. Les contrôles vérifient désormais les deux sens.
-
-**11 septembre 2026 — le minuteur, et ce qu'il mesure.** L'application savait ce
-qu'on valide, jamais ce que ça coûte : une étape de six heures finie en trois et
-une finie en dix se ressemblaient exactement. Les séances enregistrent désormais
-le temps réel, d'où le facteur de réalité — temps passé sur temps indicatif — qui
-nourrit le planificateur et la prévision.
-
-Rien de tout cela ne sort du compte : les séances vivent dans l'état personnel,
-comme le reste, sans nouvelle table ni nouvelle surface d'API. Le minuteur lui-même
-ne quitte pas le navigateur.
-
-Trois défauts trouvés en chemin. Le panneau était réécrit en entier chaque seconde,
-ce qui détruisait le focus et la case sous le doigt — seule l'horloge bouge
-maintenant. La vue était peuplée depuis le rafraîchissement des nouveautés au lieu
-du routeur, donc le minuteur n'apparaissait pas. Et la prévision annonçait « 14 juil.
-2036, 3331 jours de trop » : arithmétiquement juste, humainement inutile. Au-delà de
-dix-huit mois on écrit « au-delà » et on donne le rythme hebdomadaire à tenir, qui
-est le seul chiffre sur lequel on peut agir.
-
-**10 septembre 2026 — notifications poussées.** Web Push écrit à la main, sans
-dépendance : VAPID (RFC 8292) et chiffrement `aes128gcm` (RFC 8291) avec
-`node:crypto`. Onze vérifications sur la cryptographie — aller-retour du contenu,
-message lié à un seul abonnement, sel et clé éphémère tirés à chaque envoi,
-signature de 64 octets en `r‖s` et non en DER, audience réduite à l'origine du
-point d'envoi. Dix-huit de plus sur l'expéditeur et l'interrupteur, dont un faux
-service de poussée qui déchiffre réellement ce qu'il reçoit.
-
-Deux points de conception valent d'être écrits. Le contenu poussé ne passe jamais
-en clair chez le transporteur, ce qui n'était pas acquis : c'est la RFC qui
-l'impose, pas nous, et l'implémenter à la main était la seule façon d'en être sûr.
-Et `prive.ciel_visible` a été refactorisée pour que la règle de visibilité n'existe
-qu'à un seul endroit, l'expéditeur n'ayant pas d'`auth.uid()` — avec le `REVOKE`
-qui suit chaque `CREATE OR REPLACE`, piège désormais rencontré trois fois.
-
-Un défaut trouvé et corrigé au passage : ouvrir deux fois le panneau lançait deux
-vérifications en parallèle, qui concluaient toutes deux « appareil absent de la
-base » et l'enregistraient chacune.
-
-**10 septembre 2026 — audit du modèle d'heures, quatre défauts.** Relecture de ce qui
-venait d'être livré. Aucun n'ouvrait de faille ; tous mentaient sur des chiffres, ce
-qui dans un planning revient au même.
-
-1. **Les heures du jour n'apparaissaient sur la courbe que le lendemain.** Une séance
-   était horodatée à 23 h 59 de sa journée, donc postérieure à maintenant : la courbe
-   les ignorait pendant que la légende, elle, les comptait déjà. Les deux se
-   contredisaient à l'écran.
-2. **Changer de programme détruisait des heures.** Le chargement supprimait les
-   entrées d'étapes absentes du programme courant. Partir du modèle CNED, essayer une
-   trame, revenir : le travail était perdu. Elles sont désormais conservées — inertes,
-   puisque tous les comptes parcourent les étapes du programme, jamais la table brute.
-3. **On pouvait dater du travail dans le futur.** Cocher une tranche de demain
-   l'enregistrait au lendemain ; la courbe s'arrête à aujourd'hui, le total non.
-4. **Et la case d'un jour à venir se décochait toute seule** au redessin, son état se
-   lisant sur le jour affiché. Un jour à venir n'a plus de case du tout : on n'a pas
-   encore fait le travail de demain.
-
-Trois vérifications de bout en bout ajoutées, une par défaut vérifiable. Contrôles
-externes repassés : douze RPC réservées à 401, écriture anonyme refusée sur les six
-tables sensibles, aucun secret dans le dépôt ni dans son historique. `get_advisors`
-ne signale rien de neuf — la protection contre les mots de passe compromis reste la
-case à cocher de l'éditeur.
-
-**10 septembre 2026 — validation à la tranche, et un scan de contrôle.** Cocher une
-tranche d'une heure dans la journée validait l'étape entière : sur une étape de six
-heures, l'application créditait six heures pour une de travail. L'avance, la courbe
-et le rythme étaient faux d'autant, et le planificateur replanifiait des heures déjà
-faites. Le modèle passe de « faite ou non » à des heures posées par jour (`avance`),
-migré sans perte depuis l'ancien. Onze vérifications de bout en bout, les treize
-suites existantes repassées au vert.
-
-Scan de contrôle du CNED le même jour, avec une session fournie par Gabriel, sans
-ouvrir aucune page d'activité — la règle qui interdit `/mod/assign/` (espace de dépôt
-de devoirs) est appliquée dans le code du scan, avant la requête. Le premier passage,
-qui ne lisait que l'état de cours Moodle, ne voyait aucune durée et m'a fait conclure
-à tort que les volumes du référentiel étaient inventés. Les durées sont dans le texte
-rendu des sections, pas dans l'état : au second passage, les vingt volumes du
-référentiel se retrouvent un à un. La leçon vaut d'être notée — une source qui semble
-muette est d'abord une source mal interrogée, et j'avais écrit la conclusion avant de
-l'avoir cherchée.
-
-**9 septembre 2026 — centre de nouveautés et veilles.** Trois migrations, cinq
-vérifications par bascule de rôle : rien n'attend sur un compte neuf ; une demande
-d'abonnement reçue remonte bien comme telle ; une veille posée sur un compte dont on
-ne voit pas les plages libres rend zéro ligne ; marquer comme vu n'éteint pas ce qui
-attend encore une réponse. Les conseillers Supabase ne signalent rien de nouveau :
-`nouveautes` et `marquer_nouveautes_vues` n'apparaissent que dans la liste attendue
-des fonctions réservées aux comptes connectés. Vérifié depuis l'extérieur : 401 sans
-session sur les deux.
-
-**8 septembre 2026 — réseau social, et une fuite fermée.** L'identifiant public d'un
-profil était fabriqué à partir de la partie gauche de l'adresse électronique. Il
-apparaît dans l'URL du profil, dans l'annuaire et sur chaque carte : l'adresse de
-chacun était donc à moitié publiée, sans que rien ne le signale. Le déclencheur a été
-réécrit pour partir du pseudonyme choisi, et les comptes existants renommés.
-
-Ajouté dans le même mouvement : publications, commentaires, mentions « j'aime »,
-photos, conversations, signalement, blocage, classement volontaire, fuseau horaire,
-région facultative et plages libres publiées. Vingt-cinq vérifications par bascule de
-rôle, toutes passées. Deux fonctions du schéma `prive` avaient un `search_path`
-mobile, signalées par les conseillers Supabase et corrigées. Reste ouvert, chez
-l'hébergeur : la vérification des mots de passe compromis.
-
-**7 septembre 2026 — couche sociale.** Six fonctions nouvellement créées se sont
-retrouvées appelables sans session : le `REVOKE ... FROM PUBLIC` que je croyais
-suffisant ne retire pas la concession explicite d'`anon`. Aucune n'était
-exploitable — chacune vérifie `auth.uid()` — mais la défense en profondeur veut
-qu'`anon` ne puisse pas les appeler du tout. Corrigé par le bloc rejouable
-ci-dessus, et vérifié depuis l'extérieur : 401 sur toutes, sauf
-`nom_disponible`.
-
-**7 septembre 2026 — audit global.** Deux injections trouvées et refermées (lien
-`javascript:` d'un événement, sortie d'attribut par la couleur d'une matière).
-Deux erreurs de droits corrigées après passage des conseillers Supabase. Un bug
-silencieux trouvé au passage : la copie locale sérialisait la *fonction* `etat`
-au lieu de son résultat, et stockait la chaîne `"undefined"` — la sauvegarde de
-secours annoncée dans la politique de confidentialité n'avait jamais fonctionné.
-Réparée et branchée en repli quand la base ne répond pas.
-
-Restent sans emploi après nettoyage : aucune fonction, aucun export, aucun
-identifiant orphelin. Un seul champ manque encore dans les mentions légales :
-l'adresse de contact.
